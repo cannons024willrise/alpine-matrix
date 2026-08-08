@@ -1,39 +1,35 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Protocol Night — prototype</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Protocol Night — night-only sandbox</title>
 <style>
   html,body{margin:0;padding:0;overflow:hidden;background:#000;font-family:'Courier New',ui-monospace,monospace;}
-  canvas{display:block;image-rendering:pixelated;}
-  #hud{position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;color:#b8e3c9;text-shadow:0 0 4px #000,0 0 8px #000;}
-  #stats{position:absolute;top:10px;left:12px;font-size:13px;line-height:1.55;letter-spacing:0.5px;}
-  #stats .bar{display:inline-block;width:80px;height:6px;background:rgba(255,255,255,0.12);vertical-align:middle;margin-left:6px;position:relative;top:-1px;}
+  canvas{display:block;image-rendering:pixelated;cursor:default;}
+  #hud{position:fixed;inset:0;pointer-events:none;color:#c9f2d5;text-shadow:0 0 4px #000,0 0 8px #000;}
+  #stats{position:absolute;top:10px;left:12px;font-size:13px;line-height:1.55;letter-spacing:.2px;max-width:320px;}
+  #stats .bar{display:inline-block;width:88px;height:6px;background:rgba(255,255,255,.12);vertical-align:middle;margin-left:6px;position:relative;top:-1px;overflow:hidden;}
   #stats .fill{height:100%;background:#7CFC9A;}
   #stats .fill.low{background:#e2554a;}
-  #topright{position:absolute;top:10px;right:12px;font-size:12px;text-align:right;line-height:1.5;}
-  #daynight{display:inline-block;animation:flicker 3.2s infinite;}
-  @keyframes flicker{
-    0%,100%{opacity:1;} 42%{opacity:1;} 43%{opacity:.72;} 44%{opacity:1;}
-    71%{opacity:1;} 72%{opacity:.8;} 73%{opacity:1;}
-  }
-  #controls{position:absolute;bottom:10px;left:12px;font-size:11px;opacity:0.72;line-height:1.5;}
-  #newworld{position:absolute;bottom:10px;right:12px;font-size:11px;opacity:0.6;pointer-events:auto;cursor:pointer;background:none;border:1px solid rgba(184,227,201,0.35);color:#b8e3c9;font-family:inherit;padding:4px 8px;}
-  #newworld:hover{opacity:1;border-color:#b8e3c9;}
-  #popups{position:absolute;top:0;left:0;}
-  #loadout,#death{position:fixed;inset:0;background:rgba(0,0,0,0.82);display:flex;align-items:center;justify-content:center;flex-direction:column;color:#b8e3c9;font-family:'Courier New',monospace;pointer-events:auto;text-align:center;}
-  #loadout h1,#death h1{font-weight:normal;letter-spacing:3px;font-size:22px;margin-bottom:6px;color:#e8f5ec;}
-  #loadout p.sub,#death p.sub{opacity:0.65;font-size:12px;margin-bottom:28px;}
-  .opt{border:1px solid rgba(184,227,201,0.4);padding:14px 22px;margin:6px 0;width:340px;cursor:pointer;text-align:left;background:rgba(184,227,201,0.03);}
-  .opt:hover{background:rgba(184,227,201,0.1);border-color:#b8e3c9;}
-  .opt .glyphs{font-size:20px;margin-right:10px;}
-  .opt .name{font-size:14px;}
-  .opt .desc{font-size:11px;opacity:0.6;margin-top:4px;}
-  #death button{margin-top:18px;border:1px solid #b8e3c9;background:none;color:#b8e3c9;font-family:inherit;padding:8px 20px;font-size:13px;cursor:pointer;}
-  #death button:hover{background:rgba(184,227,201,0.12);}
-  #intro{position:fixed;top:16px;left:50%;transform:translateX(-50%);color:#b8e3c9;background:rgba(0,0,0,0.55);border:1px solid rgba(184,227,201,0.3);padding:10px 16px;font-size:11px;line-height:1.6;max-width:420px;text-align:center;pointer-events:auto;}
-  #intro b{color:#e8f5ec;}
+  #topright{position:absolute;top:10px;right:12px;font-size:12px;text-align:right;line-height:1.5;opacity:.95;}
+  #controls{position:absolute;bottom:10px;left:12px;font-size:11px;opacity:.72;line-height:1.5;max-width:70vw;}
+  #newworld,#craftBtn{position:absolute;bottom:10px;right:12px;font-size:11px;opacity:.72;pointer-events:auto;cursor:pointer;background:none;border:1px solid rgba(201,242,213,.35);color:#c9f2d5;font-family:inherit;padding:4px 8px;}
+  #craftBtn{right:94px;}
+  #newworld:hover,#craftBtn:hover{opacity:1;border-color:#c9f2d5;}
+  #intro{position:fixed;top:16px;left:50%;transform:translateX(-50%);color:#c9f2d5;background:rgba(0,0,0,.55);border:1px solid rgba(201,242,213,.3);padding:10px 16px;font-size:11px;line-height:1.6;max-width:420px;text-align:center;pointer-events:auto;}
+  #intro b{color:#eef8f0;}
   #intro.hide{display:none;}
+  #crafting{position:fixed;right:12px;bottom:44px;width:300px;max-height:52vh;overflow:auto;background:rgba(0,0,0,.88);border:1px solid rgba(201,242,213,.28);padding:10px 10px 8px;display:none;pointer-events:auto;}
+  #crafting h2{margin:0 0 8px;font-weight:normal;font-size:14px;letter-spacing:2px;color:#eef8f0;}
+  #crafting .sub{font-size:11px;opacity:.65;margin-bottom:10px;}
+  .recipe{border:1px solid rgba(201,242,213,.2);padding:8px;margin:7px 0;background:rgba(201,242,213,.03);cursor:pointer;}
+  .recipe:hover{background:rgba(201,242,213,.08);border-color:rgba(201,242,213,.35);}
+  .recipe .name{font-size:13px;color:#eef8f0;}
+  .recipe .desc{font-size:11px;opacity:.7;margin-top:3px;}
+  .recipe .cost{font-size:11px;opacity:.85;margin-top:4px;}
+  .recipe.disabled{opacity:.45;cursor:not-allowed;}
+  #targetInfo{margin-top:8px;font-size:11px;opacity:.85;line-height:1.45;border-top:1px solid rgba(201,242,213,.14);padding-top:8px;}
 </style>
 </head>
 <body>
@@ -41,49 +37,35 @@
 <div id="hud">
   <div id="stats"></div>
   <div id="topright"></div>
-  <div id="controls">WASD/arrows move & bump-attack &nbsp;·&nbsp; E interact/chop/mine/drink/enter &nbsp;·&nbsp; B build wall &nbsp;·&nbsp; TAB target &nbsp;·&nbsp; F fire ranged &nbsp;·&nbsp; ESC exit structure</div>
+  <div id="controls">WASD/arrows move · mouse aims the arrow · click targets an entity/block · E interact/harvest · F attack target · C crafting · ESC closes menus</div>
+  <button id="craftBtn">craft</button>
   <button id="newworld">↺ new world</button>
-  <div id="popups"></div>
+  <div id="crafting">
+    <h2>CRAFTING</h2>
+    <div class="sub">No structures. No sunlight. Only bad decisions and resource loops.</div>
+    <div id="recipeList"></div>
+    <div id="targetInfo">Target: none</div>
+  </div>
 </div>
 <div id="intro">
-  <b>PROTOCOL NIGHT</b> — prototype build.<br>
-  A seeded, chunk-based, top-down world. Darkness is real — carry light with you.<br>
-  <span style="opacity:0.6">(click anywhere to dismiss)</span>
-</div>
-<div id="loadout" style="display:none">
-  <h1>CHOOSE YOUR START</h1>
-  <p class="sub">protocol night — alpine matrix</p>
-  <div class="opt" data-choice="mobility">
-    <span class="glyphs">🐎🗡️</span><span class="name">Horse + Iron Sword</span>
-    <div class="desc">Exploration-focused. Faster movement, weaker combat.</div>
-  </div>
-  <div class="opt" data-choice="defense">
-    <span class="glyphs">🛡️🗡️</span><span class="name">Iron Sword + Armor + Shield</span>
-    <div class="desc">Defensive melee. Reduced incoming damage, standard speed.</div>
-  </div>
-  <div class="opt" data-choice="ranged">
-    <span class="glyphs">🔫</span><span class="name">Flintlock + Ammunition</span>
-    <div class="desc">Powerful ranged shots, limited ammo. Weak in melee, dangerous up close.</div>
-  </div>
-</div>
-<div id="death" style="display:none">
-  <h1>YOU DIED</h1>
-  <p class="sub">the world remembers what you built</p>
-  <button id="respawnBtn">respawn</button>
+  <b>PROTOCOL NIGHT</b> — night-only sandbox.<br>
+  Click targets, harvest pines and pebbles, then craft tools from what you scrape together in the dark.<br>
+  <span style="opacity:.6">(click anywhere to dismiss)</span>
 </div>
 <script>
-(function(){
+(() => {
 "use strict";
 
-/* ---------- deterministic seeded noise ---------- */
+/* ---------- helpers ---------- */
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+const lerp = (a,b,t) => a + (b-a) * t;
+const smooth = t => t*t*(3-2*t);
 function hash2D(x,y,seed){
   let h = (x*374761393 + y*668265263 + seed*2147483647) | 0;
-  h = (h ^ (h>>>13))*1274126177 | 0;
-  h = h ^ (h>>>16);
+  h = (h ^ (h>>>13)) * 1274126177 | 0;
+  h ^= h>>>16;
   return ((h>>>0) % 1000000) / 1000000;
 }
-function lerp(a,b,t){return a+(b-a)*t;}
-function smooth(t){return t*t*(3-2*t);}
 function noise2D(x,y,seed){
   const x0=Math.floor(x), y0=Math.floor(y), x1=x0+1, y1=y0+1;
   const sx=smooth(x-x0), sy=smooth(y-y0);
@@ -91,77 +73,47 @@ function noise2D(x,y,seed){
   const n01=hash2D(x0,y1,seed), n11=hash2D(x1,y1,seed);
   return lerp(lerp(n00,n10,sx), lerp(n01,n11,sx), sy);
 }
-function fbm(x,y,seed,octaves){
-  let total=0,freq=1,amp=1,maxAmp=0;
+function fbm(x,y,seed,octaves=4){
+  let total=0, freq=1, amp=1, maxAmp=0;
   for(let i=0;i<octaves;i++){
-    total += noise2D(x*freq*0.045, y*freq*0.045, seed+i*911)*amp;
-    maxAmp += amp; amp*=0.5; freq*=2;
+    total += noise2D(x*freq*0.05, y*freq*0.05, seed + i*911) * amp;
+    maxAmp += amp; amp *= 0.5; freq *= 2;
   }
-  return total/maxAmp;
+  return total / maxAmp;
 }
-function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
 
-/* ---------- world seed ---------- */
+/* ---------- world data ---------- */
 let SEED = Math.floor(Math.random()*1e9);
+const CHUNK = 16;
+const chunkCache = new Map();
+const overrides = new Map(); // key => object|null
+const groundPalette = ['#09100e','#0b1310','#0d1613','#111915'];
 
-/* ---------- biome + object generation (pure fn of x,y) ---------- */
-const BIOME = {WATER:'water',SAND:'sand',GRASS:'grass',PLAINS:'plains',FOREST:'forest',MOUNTAIN:'mountain',PEAK:'peak'};
-const BIOME_COLOR = {
-  water:'#173c63', sand:'#c9ad6e', grass:'#2b5e34', plains:'#4f6b34',
-  forest:'#1f4426', mountain:'#57544c', peak:'#d8d6cf'
+const OBJECTS = {
+  pine: { glyph: '🌲', solid: false, harvest: {wood: 2, fiber: 1} },
+  pebble: { glyph: '🪨', solid: false, harvest: {stone: 1} },
 };
-const BIOME_GLYPH = { water:'', sand:'', grass:'', plains:'', forest:'', mountain:'', peak:'' };
 
 function biomeAt(x,y){
-  const e = fbm(x,y,SEED,4);
-  const m = fbm(x,y,SEED+5000,4);
-  if(e<0.30) return BIOME.WATER;
-  if(e<0.35) return BIOME.SAND;
-  if(e>0.80) return BIOME.PEAK;
-  if(e>0.66) return BIOME.MOUNTAIN;
-  if(m>0.60) return BIOME.FOREST;
-  if(m<0.34) return BIOME.PLAINS;
-  return BIOME.GRASS;
+  // One biome: night.
+  // Tiny variation is only visual, not structural.
+  return fbm(x,y,SEED+17,3);
 }
-function isWalkableBiome(b){ return b!==BIOME.WATER && b!==BIOME.MOUNTAIN && b!==BIOME.PEAK; }
-
-function isHouseTile(x,y,biome){
-  if(biome!==BIOME.GRASS && biome!==BIOME.PLAINS) return false;
-  const REGION=26;
-  const rx=Math.floor(x/REGION), ry=Math.floor(y/REGION);
-  if(hash2D(rx,ry,SEED+7777)>0.24) return false;
-  const cx = rx*REGION + Math.floor(hash2D(rx,ry,SEED+111)*REGION);
-  const cy = ry*REGION + Math.floor(hash2D(rx,ry,SEED+222)*REGION);
-  const dx=x-cx, dy=y-cy, dist=Math.sqrt(dx*dx+dy*dy);
-  if(dist>3.4 || dist<0.9) return false;
-  return hash2D(x,y,SEED+333) < 0.38;
-}
-function isMineEntrance(x,y,biome){
-  if(biome!==BIOME.MOUNTAIN) return false;
-  return hash2D(x,y,SEED+4444) < 0.012;
-}
-function baseObjectAt(x,y,biome){
-  const h = hash2D(x,y,SEED+555);
-  if(biome===BIOME.FOREST && h<0.26) return 'tree';
-  if(biome===BIOME.MOUNTAIN && h<0.16) return 'rock';
-  if(biome===BIOME.PLAINS && h<0.02) return 'rock';
-  if((biome===BIOME.GRASS||biome===BIOME.PLAINS||biome===BIOME.FOREST) && h>0.9945) return 'apple';
+function objectAt(x,y){
+  const r = hash2D(x,y,SEED+555);
+  const n = biomeAt(x,y);
+  if(r < 0.055 + n*0.015) return 'pine';
+  if(r > 0.972 - n*0.01) return 'pebble';
   return null;
 }
-
-const CHUNK=16;
-const chunkCache = new Map();
 function generateChunk(cx,cy){
   const grid=[];
-  for(let ly=0;ly<CHUNK;ly++){
+  for(let ly=0; ly<CHUNK; ly++){
     const row=[];
-    for(let lx=0;lx<CHUNK;lx++){
-      const x=cx*CHUNK+lx, y=cy*CHUNK+ly;
-      const biome=biomeAt(x,y);
-      let obj=baseObjectAt(x,y,biome);
-      if(isHouseTile(x,y,biome)) obj='house';
-      if(isMineEntrance(x,y,biome)) obj='mine';
-      row.push({biome,object:obj});
+    for(let lx=0; lx<CHUNK; lx++){
+      const x=cx*CHUNK + lx, y=cy*CHUNK + ly;
+      row.push({ ground: biomeAt(x,y), object: objectAt(x,y) });
     }
     grid.push(row);
   }
@@ -169,623 +121,639 @@ function generateChunk(cx,cy){
 }
 function getBaseTile(x,y){
   const cx=Math.floor(x/CHUNK), cy=Math.floor(y/CHUNK);
-  const key=cx+','+cy;
-  let chunk=chunkCache.get(key);
-  if(!chunk){ chunk=generateChunk(cx,cy); chunkCache.set(key,chunk); }
+  const key = cx + ',' + cy;
+  let chunk = chunkCache.get(key);
+  if(!chunk){ chunk = generateChunk(cx,cy); chunkCache.set(key, chunk); }
   const lx=((x%CHUNK)+CHUNK)%CHUNK, ly=((y%CHUNK)+CHUNK)%CHUNK;
   return chunk[ly][lx];
 }
-/* player modifications persist in overrides, layered atop procedural base */
-const overrides = new Map();
 function getTile(x,y){
   const key=x+','+y;
   const base=getBaseTile(x,y);
-  if(overrides.has(key)) return {biome:base.biome, object:overrides.get(key)};
+  if(overrides.has(key)) return { ground: base.ground, object: overrides.get(key) };
   return base;
 }
 function setOverride(x,y,obj){ overrides.set(x+','+y, obj); }
 
-/* ---------- interiors (houses & mines) ---------- */
-const interiorCache = new Map();
-function generateInterior(worldX,worldY,type){
-  const key=type+':'+worldX+','+worldY;
-  if(interiorCache.has(key)) return interiorCache.get(key);
-  const w = type==='mine' ? 9 : (6+Math.floor(hash2D(worldX,worldY,SEED+81)*3));
-  const h = type==='mine' ? 7 : (5+Math.floor(hash2D(worldX,worldY,SEED+82)*2));
-  const grid=[];
-  for(let y=0;y<h;y++){
-    const row=[];
-    for(let x=0;x<w;x++){
-      const border = (x===0||y===0||x===w-1||y===h-1);
-      let t = border ? 'wall' : 'floor';
-      let obj=null;
-      if(border && x===Math.floor(w/2) && y===h-1) t='door';
-      if(t==='floor'){
-        const r=hash2D(worldX*3+x, worldY*3+y, SEED+909);
-        if(type==='mine'){
-          if(r<0.10) obj='ore';
-          else if(r<0.13) t='wall'; // stray rock pillar
-        } else {
-          if(r<0.05) obj='candle';
-          else if(r<0.07) obj='crate';
-        }
-      }
-      row.push({t,obj});
-    }
-    grid.push(row);
-  }
-  // guarantee a light source
-  let hasLight=false;
-  for(const row of grid) for(const c of row) if(c.obj==='candle') hasLight=true;
-  if(!hasLight && type!=='mine') grid[Math.floor(h/2)][Math.floor(w/2)].obj='candle';
-  const data={grid,w,h,type};
-  interiorCache.set(key,data);
-  return data;
-}
-
 /* ---------- entities ---------- */
-let entityId=1;
-const entities=[];
+let entityId = 1;
+const entities = [];
 function spawnEntity(type,x,y){
-  entities.push({
-    id:entityId++, type, x, y, visX:x, visY:y,
-    hp: type==='wolf'?55:(type==='zombie'?45:20),
-    maxHp: type==='wolf'?55:(type==='zombie'?45:20),
-    tickCd: Math.random()*400, lastAttack:0, alive:true
-  });
+  const stats = type==='wolf' ? {hp:55, speed:1} : {hp:45, speed:1};
+  entities.push({ id:entityId++, type, x, y, visX:x, visY:y, hp:stats.hp, maxHp:stats.hp, alive:true, tick:0, lastAttack:0 });
+}
+function occupantAt(x,y,excludeId=-1){
+  return entities.find(e => e.alive && e.id !== excludeId && e.x===x && e.y===y) || null;
 }
 function findSpawnSpot(cx,cy,minR,maxR){
-  for(let tries=0;tries<24;tries++){
-    const ang=Math.random()*Math.PI*2, r=minR+Math.random()*(maxR-minR);
-    const x=Math.round(cx+Math.cos(ang)*r), y=Math.round(cy+Math.sin(ang)*r);
-    const t=getTile(x,y);
-    if(isWalkableBiome(t.biome) && !t.object) return {x,y};
+  for(let tries=0; tries<24; tries++){
+    const ang = Math.random()*Math.PI*2;
+    const r = minR + Math.random()*(maxR-minR);
+    const x = Math.round(cx + Math.cos(ang)*r);
+    const y = Math.round(cy + Math.sin(ang)*r);
+    if(!occupantAt(x,y)) return {x,y};
   }
   return null;
 }
-function occupantAt(x,y,excludeId){
-  for(const e of entities) if(e.alive && e.x===x && e.y===y && e.id!==excludeId) return e;
-  return null;
-}
-function initialPopulate(px,py){
-  for(let i=0;i<16;i++){ const s=findSpawnSpot(px,py,10,26); if(s) spawnEntity('zombie',s.x,s.y); }
-  for(let i=0;i<5;i++){ const s=findSpawnSpot(px,py,10,26); if(s && (getTile(s.x,s.y).biome===BIOME.FOREST||getTile(s.x,s.y).biome===BIOME.MOUNTAIN)) spawnEntity('wolf',s.x,s.y); }
-  for(let i=0;i<7;i++){ const s=findSpawnSpot(px,py,6,22); if(s && (getTile(s.x,s.y).biome===BIOME.GRASS||getTile(s.x,s.y).biome===BIOME.PLAINS)) spawnEntity('sheep',s.x,s.y); }
-}
 
-/* ---------- popups (floating damage text) ---------- */
-const floatPopups=[]; // {x,y (world tile),text,life,color}
-function addPopup(x,y,text,color){ floatPopups.push({x,y,text,life:900,maxLife:900,color:color||'#fff'}); }
-
-/* ---------- game state ---------- */
+/* ---------- player / state ---------- */
 const state = {
-  mode:'world', // 'world' | 'interior'
-  player:{
-    x:0,y:0,visX:0,visY:0, facing:'down',
-    hp:100,maxHp:100, food:80,water:80,
-    wood:0, stone:0, ammo:0,
-    weapon:'fists', armor:0, moveSpeed:150,
-    moveCooldown:0, attackCooldown:0, fireCooldown:0,
-    targetId:null, alive:true, meleeDmg:10
-  },
-  interior:null, // {originX,originY,type,data}
-  ix:0, iy:0, ivisX:0, ivisY:0,
-  time: Math.random(),
+  time:0,
   camera:{x:0,y:0},
+  mode:'world',
   input:{dir:null, keys:{}},
-  lastSpawnCheck:0,
-  ready:false
+  mouse:{x:0,y:0, wx:0, wy:0},
+  target:null, // {kind:'entity'|'block', ...}
+  player:{
+    x:0,y:0, visX:0, visY:0, facing:0,
+    hp:100,maxHp:100, food:80, water:80,
+    wood:0, stone:0, fiber:0,
+    weapon:'hands',
+    moveSpeed:130,
+    moveCd:0, attackCd:0,
+    alive:true
+  },
+  ready:false,
+  lastSpawn:0,
+  showCraft:false,
 };
-const CYCLE_MS = 210000;
+const SAVE_KEY = 'protocolNight_nightOnly_v2';
+const CYCLE_MS = 999999999; // effectively permanent night
 
-function findGoodStart(){
-  for(let r=0;r<400;r++){
-    const x=Math.floor((Math.random()-0.5)*40), y=Math.floor((Math.random()-0.5)*40);
-    const t=getTile(x,y);
-    if(isWalkableBiome(t.biome) && !t.object) return {x,y};
-  }
-  return {x:0,y:0};
+/* ---------- crafting ---------- */
+const recipes = [
+  { id:'torch', name:'Torch', desc:'Helps you see farther in the dark.', cost:{wood:2, fiber:1}, make:()=>grantItem('torch',1) },
+  { id:'spear', name:'Spear', desc:'A simple reach weapon.', cost:{wood:3, stone:1}, make:()=>equipWeapon('spear') },
+  { id:'axe', name:'Stone Axe', desc:'Faster pine harvesting.', cost:{wood:2, stone:3}, make:()=>equipWeapon('axe') },
+  { id:'knife', name:'Bone Knife', desc:'Cheap melee backup.', cost:{wood:1, stone:1, fiber:1}, make:()=>equipWeapon('knife') },
+  { id:'bandage', name:'Bandage', desc:'Restores some health.', cost:{fiber:3}, make:()=>{ state.player.hp = clamp(state.player.hp + 20, 0, state.player.maxHp); addPopup(state.player.x, state.player.y, '+hp', '#bfffd0'); } },
+];
+function canCraft(recipe){
+  const p = state.player;
+  return Object.entries(recipe.cost).every(([k,v]) => (p[k]||0) >= v);
+}
+function spendCost(cost){
+  const p = state.player;
+  for(const [k,v] of Object.entries(cost)) p[k] -= v;
+}
+function equipWeapon(name){ state.player.weapon = name; }
+function grantItem(item, amount){
+  if(item === 'torch') state.player.torch = (state.player.torch||0) + amount;
+}
+function craft(recipeId){
+  const recipe = recipes.find(r => r.id===recipeId);
+  if(!recipe || !canCraft(recipe)) return;
+  spendCost(recipe.cost);
+  recipe.make();
+  renderCrafting();
+  saveGame();
 }
 
-/* ---------- persistence ---------- */
-const SAVE_KEY='protocolNight_save_v1';
+/* ---------- save/load ---------- */
 function saveGame(){
   try{
-    const ov=[]; overrides.forEach((v,k)=>ov.push([k,v]));
-    const payload={
+    const payload = {
       seed:SEED,
-      overrides:ov,
+      overrides:[...overrides.entries()],
       player:state.player,
-      mode:'world' // always resume in overworld for simplicity
+      entities:entities.map(e=>({id:e.id,type:e.type,x:e.x,y:e.y,visX:e.visX,visY:e.visY,hp:e.hp,maxHp:e.maxHp,alive:e.alive})),
+      entityId,
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
-  }catch(e){}
+  } catch(e){}
 }
 function loadGame(){
   try{
-    const raw=localStorage.getItem(SAVE_KEY);
+    const raw = localStorage.getItem(SAVE_KEY);
     if(!raw) return false;
-    const payload=JSON.parse(raw);
-    SEED=payload.seed;
+    const payload = JSON.parse(raw);
+    SEED = payload.seed ?? SEED;
     overrides.clear();
-    (payload.overrides||[]).forEach(([k,v])=>overrides.set(k,v));
-    Object.assign(state.player, payload.player);
-    state.player.visX=state.player.x; state.player.visY=state.player.y;
+    (payload.overrides || []).forEach(([k,v]) => overrides.set(k,v));
+    Object.assign(state.player, payload.player || {});
+    state.player.visX = state.player.x;
+    state.player.visY = state.player.y;
+    entities.length = 0;
+    (payload.entities || []).forEach(e => entities.push(e));
+    entityId = payload.entityId || (entities.reduce((m,e)=>Math.max(m,e.id),0)+1);
     return true;
-  }catch(e){ return false; }
+  } catch(e){ return false; }
 }
-function clearSave(){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} }
+function clearSave(){ try{ localStorage.removeItem(SAVE_KEY); } catch(e){} }
 
-/* ---------- canvas setup ---------- */
-const canvas=document.getElementById('game');
-const ctx=canvas.getContext('2d');
-let TILE=44;
-function resize(){ canvas.width=window.innerWidth; canvas.height=window.innerHeight; }
-window.addEventListener('resize',resize); resize();
+/* ---------- canvas ---------- */
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const TILE = 44;
+function resize(){ canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize);
+resize();
 
-/* ---------- input ---------- */
-const DIRKEYS={KeyW:'up',ArrowUp:'up',KeyS:'down',ArrowDown:'down',KeyA:'left',ArrowLeft:'left',KeyD:'right',ArrowRight:'right'};
-const heldDirs=new Set();
-window.addEventListener('keydown',(e)=>{
+/* ---------- popups / effects ---------- */
+const floatPopups = [];
+const tracers = [];
+function addPopup(x,y,text,color){ floatPopups.push({x,y,text,color,life:900,maxLife:900}); }
+function drawPopups(camX,camY){
+  for(const pu of floatPopups){
+    const s = worldToScreen(pu.x, pu.y, camX, camY);
+    const t = 1 - pu.life/pu.maxLife;
+    ctx.globalAlpha = pu.life/pu.maxLife;
+    ctx.fillStyle = pu.color || '#fff';
+    ctx.font = "12px 'Courier New',monospace";
+    ctx.textAlign = 'center';
+    ctx.fillText(pu.text, s.x + TILE/2, s.y + TILE/2 - 10 - t*16);
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* ---------- spawning / start ---------- */
+function findGoodStart(){
+  for(let i=0; i<200; i++){
+    const x = Math.floor((Math.random()-0.5) * 42);
+    const y = Math.floor((Math.random()-0.5) * 42);
+    if(!getTile(x,y).object) return {x,y};
+  }
+  return {x:0,y:0};
+}
+function initialPopulate(px,py){
+  for(let i=0;i<12;i++){ const s=findSpawnSpot(px,py,12,26); if(s) spawnEntity('zombie', s.x, s.y); }
+  for(let i=0;i<4;i++){ const s=findSpawnSpot(px,py,14,28); if(s) spawnEntity('wolf', s.x, s.y); }
+}
+function beginWorld(){
+  const start = findGoodStart();
+  if(state.player.x===0 && state.player.y===0 && entities.length===0){
+    state.player.x = start.x;
+    state.player.y = start.y;
+  }
+  state.player.visX = state.player.x;
+  state.player.visY = state.player.y;
+  state.camera.x = state.player.x;
+  state.camera.y = state.player.y;
+  if(entities.length===0) initialPopulate(state.player.x, state.player.y);
+  state.ready = true;
+  requestAnimationFrame(loop);
+}
+
+/* ---------- mouse / input ---------- */
+const DIRKEYS = {KeyW:'up',ArrowUp:'up',KeyS:'down',ArrowDown:'down',KeyA:'left',ArrowLeft:'left',KeyD:'right',ArrowRight:'right'};
+const heldDirs = new Set();
+window.addEventListener('keydown', e => {
   document.getElementById('intro').classList.add('hide');
-  if(DIRKEYS[e.code]){ heldDirs.add(DIRKEYS[e.code]); state.input.dir=DIRKEYS[e.code]; e.preventDefault(); }
+  if(DIRKEYS[e.code]){ heldDirs.add(DIRKEYS[e.code]); state.input.dir = DIRKEYS[e.code]; e.preventDefault(); }
   if(e.code==='KeyE') doInteract();
-  if(e.code==='KeyB') doBuild();
-  if(e.code==='KeyF') doFire();
-  if(e.code==='Tab'){ cycleTarget(); e.preventDefault(); }
-  if(e.code==='Escape' && state.mode==='interior') exitInterior();
+  if(e.code==='KeyF') doAttack();
+  if(e.code==='KeyC'){ toggleCrafting(); }
+  if(e.code==='Escape'){ closeMenus(); }
 });
-window.addEventListener('keyup',(e)=>{
+window.addEventListener('keyup', e => {
   if(DIRKEYS[e.code]){
     heldDirs.delete(DIRKEYS[e.code]);
     state.input.dir = heldDirs.size ? [...heldDirs].pop() : null;
   }
 });
-document.addEventListener('click',()=>document.getElementById('intro').classList.add('hide'));
+canvas.addEventListener('click', e => {
+  // Deliberately do NOT request pointer lock. The normal cursor remains visible.
+  if(document.pointerLockElement) document.exitPointerLock();
+}, {capture:true});
 
-/* ---------- loadout ---------- */
-document.querySelectorAll('.opt').forEach(el=>{
-  el.addEventListener('click',()=>chooseLoadout(el.getAttribute('data-choice')));
+window.addEventListener('mousemove', e => {
+  state.mouse.x = e.clientX;
+  state.mouse.y = e.clientY;
+  const p = state.player;
+  const ps = worldToScreen(p.visX, p.visY, state.camera.x, state.camera.y);
+  const dx = e.clientX - (ps.x + TILE/2);
+  const dy = e.clientY - (ps.y + TILE/2);
+  state.mouse.wx = p.x + dx / TILE;
+  state.mouse.wy = p.y + dy / TILE;
+  if(Math.hypot(dx,dy) > 2) p.facing = Math.atan2(dy, dx);
 });
-function chooseLoadout(choice){
-  const p=state.player;
-  if(choice==='mobility'){ p.weapon='sword'; p.moveSpeed=105; p.meleeDmg=25; }
-  else if(choice==='defense'){ p.weapon='sword'; p.armor=0.3; p.meleeDmg=25; }
-  else if(choice==='ranged'){ p.weapon='flintlock'; p.ammo=12; p.meleeDmg=8; }
-  document.getElementById('loadout').style.display='none';
-  beginWorld();
-}
-function beginWorld(){
-  const start=findGoodStart();
-  if(state.player.x===0 && state.player.y===0 && !overrides.size){
-    state.player.x=start.x; state.player.y=start.y;
-  }
-  state.player.visX=state.player.x; state.player.visY=state.player.y;
-  state.camera.x=state.player.x; state.camera.y=state.player.y;
-  initialPopulate(state.player.x,state.player.y);
-  state.ready=true;
-  requestAnimationFrame(loop);
-}
+canvas.addEventListener('click', e => {
+  document.getElementById('intro').classList.add('hide');
+  if(e.target !== canvas) return;
+  const pick = pickTargetFromMouse(e.clientX, e.clientY);
+  state.target = pick;
+  updateTargetInfo();
+});
+window.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('click', () => document.getElementById('intro').classList.add('hide'));
 
-document.getElementById('respawnBtn').addEventListener('click',()=>{
-  const p=state.player;
-  p.hp=p.maxHp; p.food=60; p.water=60; p.alive=true;
-  const start=findGoodStart();
-  p.x=start.x; p.y=start.y; p.visX=p.x; p.visY=p.y;
-  state.mode='world';
-  document.getElementById('death').style.display='none';
-});
-document.getElementById('newworld').addEventListener('click',()=>{
-  clearSave();
-  location.reload();
-});
+/* ---------- target picking ---------- */
+function screenToWorld(sx,sy){
+  const camX = state.camera.x;
+  const camY = state.camera.y;
+  return {
+    x: Math.floor(camX + (sx - canvas.width/2) / TILE),
+    y: Math.floor(camY + (sy - canvas.height/2) / TILE),
+  };
+}
+function pickTargetFromMouse(sx,sy){
+  const w = screenToWorld(sx,sy);
+  const hitEntity = entities.find(e => e.alive && e.x===w.x && e.y===w.y);
+  if(hitEntity) return { kind:'entity', id:hitEntity.id, name:hitEntity.type, x:hitEntity.x, y:hitEntity.y };
+  const tile = getTile(w.x,w.y);
+  if(tile.object) return { kind:'block', x:w.x, y:w.y, object:tile.object };
+  return { kind:'block', x:w.x, y:w.y, object:null };
+}
+function currentTargetEntity(){
+  if(!state.target || state.target.kind!=='entity') return null;
+  return entities.find(e => e.id===state.target.id && e.alive) || null;
+}
+function updateTargetInfo(){
+  const el = document.getElementById('targetInfo');
+  if(!state.target) { el.innerHTML = 'Target: none'; return; }
+  if(state.target.kind==='entity') el.innerHTML = `Target: ${state.target.name} @ (${state.target.x}, ${state.target.y})`;
+  else if(state.target.object) el.innerHTML = `Target: ${state.target.object} @ (${state.target.x}, ${state.target.y})`;
+  else el.innerHTML = `Target: empty block @ (${state.target.x}, ${state.target.y})`;
+}
 
 /* ---------- interaction ---------- */
-function facingOffset(){
-  switch(state.player.facing){
-    case 'up':return{dx:0,dy:-1}; case 'down':return{dx:0,dy:1};
-    case 'left':return{dx:-1,dy:0}; default:return{dx:1,dy:0};
-  }
+function facingVector(){
+  const a = state.player.facing;
+  return {dx:Math.cos(a), dy:Math.sin(a)};
 }
+function near(a,b,range=1.5){ return Math.hypot(a.x-b.x, a.y-b.y) <= range; }
 function doInteract(){
   if(!state.ready || !state.player.alive) return;
-  const p=state.player;
-  if(state.mode==='world'){
-    const {dx,dy}=facingOffset();
-    const fx=Math.round(p.x)+dx, fy=Math.round(p.y)+dy;
-    const t=getTile(fx,fy);
-    if(t.object==='tree'){ setOverride(fx,fy,null); p.wood+=2+Math.floor(Math.random()*2); addPopup(fx,fy,'+wood','#9fd694'); }
-    else if(t.object==='rock'){ setOverride(fx,fy,null); p.stone+=2+Math.floor(Math.random()*2); addPopup(fx,fy,'+stone','#c9c2b0'); }
-    else if(t.object==='apple'){ setOverride(fx,fy,null); p.food=clamp(p.food+15,0,100); addPopup(fx,fy,'+food','#e8d97a'); }
-    else if(t.object==='house'){ enterInterior(fx,fy,'house'); }
-    else if(t.object==='mine'){ enterInterior(fx,fy,'mine'); }
-    else if(t.biome===BIOME.WATER){ p.water=clamp(p.water+25,0,100); addPopup(p.x,p.y,'+water','#7cc4e0'); }
-    else {
-      const here=getTile(Math.round(p.x),Math.round(p.y));
-      if(here.object==='house') enterInterior(Math.round(p.x),Math.round(p.y),'house');
-      else if(here.object==='mine') enterInterior(Math.round(p.x),Math.round(p.y),'mine');
-    }
-  } else {
-    const {dx,dy}=facingOffset();
-    const fx=Math.round(state.ix)+dx, fy=Math.round(state.iy)+dy;
-    const cell=state.interior.data.grid[fy] && state.interior.data.grid[fy][fx];
-    if(cell && cell.t==='door'){ exitInterior(); return; }
-    if(cell && cell.obj==='ore'){ cell.obj=null; p.stone+=3; addPopup(fx,fy,'+stone','#c9c2b0'); }
+  const p = state.player;
+  const tgt = state.target;
+  if(!tgt){
+    const w = screenToWorld(state.mouse.x, state.mouse.y);
+    state.target = pickTargetFromMouse(state.mouse.x, state.mouse.y);
+    updateTargetInfo();
+    return;
+  }
+  if(tgt.kind==='entity'){
+    const e = currentTargetEntity();
+    if(e && near(p,e,1.8)) attackEntity(e, 8);
+    return;
+  }
+  if(tgt.kind==='block' && tgt.object){
+    harvestBlock(tgt.x, tgt.y);
+    return;
+  }
+  // If target is empty, use mouse block as a soft retarget.
+  state.target = pickTargetFromMouse(state.mouse.x, state.mouse.y);
+  updateTargetInfo();
+}
+function doAttack(){
+  if(!state.ready || !state.player.alive) return;
+  const p = state.player;
+  if(p.attackCd > 0) return;
+  const tgt = currentTargetEntity();
+  if(tgt && near(p,tgt,1.8)){
+    const dmg = p.weapon==='axe' ? 18 : p.weapon==='spear' ? 22 : p.weapon==='knife' ? 14 : 8;
+    attackEntity(tgt, dmg);
+    p.attackCd = 300;
+    return;
+  }
+  if(state.target && state.target.kind==='block' && state.target.object){
+    harvestBlock(state.target.x, state.target.y);
+    p.attackCd = 250;
   }
 }
-function doBuild(){
-  if(!state.ready || !state.player.alive || state.mode!=='world') return;
-  const p=state.player;
-  if(p.wood<5){ addPopup(p.x,p.y,'need wood','#e2554a'); return; }
-  const {dx,dy}=facingOffset();
-  const fx=Math.round(p.x)+dx, fy=Math.round(p.y)+dy;
-  const t=getTile(fx,fy);
-  if(!t.object && isWalkableBiome(t.biome)){
-    setOverride(fx,fy,'wall'); p.wood-=5; addPopup(fx,fy,'built','#9fd694');
+function harvestBlock(x,y){
+  const p = state.player;
+  const tile = getTile(x,y);
+  if(!tile.object) return;
+  const obj = OBJECTS[tile.object];
+  if(!obj) return;
+  // walk anywhere: no adjacency/collision gates. Dark sandbox, not a geometry lecture.
+  if(tile.object==='pine'){
+    const woodGain = p.weapon==='axe' ? 4 : 2;
+    p.wood += woodGain;
+    p.fiber += 1;
+    addPopup(x,y,'+wood','#bfffd0');
+  } else if(tile.object==='pebble'){
+    p.stone += 1;
+    addPopup(x,y,'+stone','#d8d0b5');
   }
-}
-function enterInterior(wx,wy,type){
-  const data=generateInterior(wx,wy,type);
-  state.interior={originX:wx,originY:wy,type};
-  state.interior.data=data;
-  state.mode='interior';
-  const doorX=Math.floor(data.w/2), doorY=data.h-2;
-  state.ix=doorX; state.iy=doorY; state.ivisX=doorX; state.ivisY=doorY;
-}
-function exitInterior(){
-  state.mode='world';
-  state.player.x=state.interior.originX; state.player.y=state.interior.originY+0;
-  const t=getTile(state.player.x, state.player.y+1);
-  if(isWalkableBiome(t.biome) && !t.object) state.player.y+=1;
-  state.player.visX=state.player.x; state.player.visY=state.player.y;
-}
-
-/* ---------- targeting / combat ---------- */
-function visibleHostiles(range){
-  const p=state.player;
-  return entities.filter(e=>e.alive && e.type!=='sheep' &&
-    Math.hypot(e.x-p.x,e.y-p.y)<=range).sort((a,b)=>
-    Math.hypot(a.x-p.x,a.y-p.y)-Math.hypot(b.x-p.x,b.y-p.y));
-}
-function cycleTarget(){
-  if(state.mode!=='world') return;
-  const list=visibleHostiles(6.5);
-  if(!list.length){ state.player.targetId=null; return; }
-  const curIdx=list.findIndex(e=>e.id===state.player.targetId);
-  state.player.targetId = list[(curIdx+1)%list.length].id;
-}
-function currentTarget(){
-  const p=state.player;
-  let t = entities.find(e=>e.id===p.targetId && e.alive);
-  if(t && Math.hypot(t.x-p.x,t.y-p.y)<=6.5) return t;
-  const list=visibleHostiles(6.5);
-  return list[0]||null;
-}
-const tracers=[]; // {x1,y1,x2,y2,life}
-function doFire(){
-  const p=state.player;
-  if(!state.ready || !p.alive || state.mode!=='world') return;
-  if(p.weapon!=='flintlock'){ return; }
-  if(p.fireCooldown>0 || p.ammo<=0) return;
-  const t=currentTarget();
-  if(!t) return;
-  p.ammo--; p.fireCooldown=780;
-  t.hp-=60;
-  tracers.push({x1:p.x,y1:p.y,x2:t.x,y2:t.y,life:150,maxLife:150});
-  addPopup(t.x,t.y,'-60',' #ffdca8');
-  if(t.hp<=0) killEntity(t);
-}
-function killEntity(e){
-  e.alive=false;
-  if(e.type==='sheep'){ state.player.food=clamp(state.player.food+20,0,100); addPopup(e.x,e.y,'+food','#e8d97a'); }
-  const idx=entities.indexOf(e); if(idx>=0) entities.splice(idx,1);
+  setOverride(x,y,null);
+  if(state.target && state.target.kind==='block' && state.target.x===x && state.target.y===y){
+    state.target = {kind:'block', x, y, object:null};
+    updateTargetInfo();
+  }
 }
 function attackEntity(e,dmg){
-  e.hp-=dmg;
+  e.hp -= dmg;
   addPopup(e.x,e.y,'-'+dmg,'#ff9a8a');
-  if(e.hp<=0) killEntity(e);
+  if(e.hp <= 0) killEntity(e);
 }
-function damagePlayer(dmg){
-  const p=state.player;
-  const applied=Math.round(dmg*(1-p.armor));
-  p.hp=clamp(p.hp-applied,0,p.maxHp);
-  addPopup(p.x,p.y,'-'+applied,'#ff5a5a');
-  if(p.hp<=0 && p.alive){ p.alive=false; document.getElementById('death').style.display='flex'; }
+function killEntity(e){
+  e.alive = false;
+  const idx = entities.indexOf(e);
+  if(idx >= 0) entities.splice(idx,1);
+  if(state.target && state.target.kind==='entity' && state.target.id===e.id){
+    state.target = null;
+    updateTargetInfo();
+  }
 }
 
 /* ---------- movement ---------- */
-function attemptMoveWorld(dir,dt){
-  const p=state.player;
-  const d = dir==='up'?{dx:0,dy:-1}:dir==='down'?{dx:0,dy:1}:dir==='left'?{dx:-1,dy:0}:{dx:1,dy:0};
-  p.facing=dir;
-  const nx=Math.round(p.x)+d.dx, ny=Math.round(p.y)+d.dy;
-  const occ=occupantAt(nx,ny,-1);
-  if(occ){
-    if(p.attackCooldown<=0){
-      attackEntity(occ, p.meleeDmg);
-      p.attackCooldown=380;
-      p.moveCooldown=p.moveSpeed*0.7;
-    }
-    return;
-  }
-  const t=getTile(nx,ny);
-  if(t.object==='house'){ enterInterior(nx,ny,'house'); p.moveCooldown=p.moveSpeed; return; }
-  if(t.object==='mine'){ enterInterior(nx,ny,'mine'); p.moveCooldown=p.moveSpeed; return; }
-  if(!isWalkableBiome(t.biome) || t.object){ p.moveCooldown=p.moveSpeed*0.5; return; }
-  p.x=nx; p.y=ny; p.moveCooldown=p.moveSpeed;
-}
-function attemptMoveInterior(dir){
-  const d = dir==='up'?{dx:0,dy:-1}:dir==='down'?{dx:0,dy:1}:dir==='left'?{dx:-1,dy:0}:{dx:1,dy:0};
-  state.player.facing=dir;
-  const grid=state.interior.data.grid;
-  const nx=Math.round(state.ix)+d.dx, ny=Math.round(state.iy)+d.dy;
-  const cell=grid[ny] && grid[ny][nx];
-  if(!cell || cell.t==='wall') { state.player.moveCooldown=state.player.moveSpeed*0.5; return; }
-  if(cell.t==='door'){ exitInterior(); state.player.moveCooldown=state.player.moveSpeed; return; }
-  state.ix=nx; state.iy=ny; state.player.moveCooldown=state.player.moveSpeed;
+function attemptMove(dir){
+  const p = state.player;
+  const d = dir==='up' ? {dx:0,dy:-1} : dir==='down' ? {dx:0,dy:1} : dir==='left' ? {dx:-1,dy:0} : {dx:1,dy:0};
+  p.facing = Math.atan2(d.dy, d.dx);
+  p.x += d.dx;
+  p.y += d.dy;
 }
 
-/* ---------- entity AI ---------- */
+/* ---------- AI ---------- */
 function stepEntityToward(e,tx,ty){
-  const dx=tx-e.x, dy=ty-e.y;
-  let sx=0,sy=0;
-  if(Math.abs(dx)>Math.abs(dy)) sx=Math.sign(dx); else if(dy!==0) sy=Math.sign(dy); else if(dx!==0) sx=Math.sign(dx);
-  if(sx===0 && sy===0) return;
-  let nx=e.x+sx, ny=e.y+sy;
-  let t=getTile(nx,ny);
-  if(!isWalkableBiome(t.biome) || t.object || occupantAt(nx,ny,e.id)){
-    // try the other axis instead
-    nx = sx!==0 ? e.x : e.x+Math.sign(dx);
-    ny = sx!==0 ? e.y+Math.sign(dy) : e.y;
-    t=getTile(nx,ny);
-    if(!isWalkableBiome(t.biome) || t.object || occupantAt(nx,ny,e.id)) return;
+  const dx = Math.sign(tx - e.x);
+  const dy = Math.sign(ty - e.y);
+  const choices = Math.abs(tx-e.x) > Math.abs(ty-e.y) ? [[dx,0],[0,dy]] : [[0,dy],[dx,0]];
+  for(const [sx,sy] of choices){
+    if(!sx && !sy) continue;
+    const nx=e.x+sx, ny=e.y+sy;
+    if(!occupantAt(nx,ny,e.id)){ e.x=nx; e.y=ny; return; }
   }
-  e.x=nx; e.y=ny;
 }
 function stepEntityRandom(e){
   const dirs=[[0,-1],[0,1],[-1,0],[1,0]];
-  const [dx,dy]=dirs[Math.floor(Math.random()*4)];
-  const nx=e.x+dx, ny=e.y+dy, t=getTile(nx,ny);
-  if(isWalkableBiome(t.biome) && !t.object && !occupantAt(nx,ny,e.id)){ e.x=nx; e.y=ny; }
+  const [dx,dy] = dirs[Math.floor(Math.random()*dirs.length)];
+  const nx=e.x+dx, ny=e.y+dy;
+  if(!occupantAt(nx,ny,e.id)){ e.x=nx; e.y=ny; }
 }
 function updateEntities(dt){
-  const p=state.player;
+  const p = state.player;
   for(const e of entities){
-    e.visX += (e.x-e.visX)*Math.min(1,dt*0.012);
-    e.visY += (e.y-e.visY)*Math.min(1,dt*0.012);
-    e.tickCd -= dt;
-    if(e.tickCd>0) continue;
+    e.visX += (e.x-e.visX) * Math.min(1, dt*0.012);
+    e.visY += (e.y-e.visY) * Math.min(1, dt*0.012);
+    e.tick -= dt;
+    if(e.tick > 0) continue;
     if(e.type==='zombie'){
-      e.tickCd=560+Math.random()*140;
-      const d=Math.hypot(e.x-p.x,e.y-p.y);
-      if(d<=1.05 && state.mode==='world' && p.alive){
-        if(performance.now()-e.lastAttack>1000){ damagePlayer(6+Math.floor(Math.random()*5)); e.lastAttack=performance.now(); }
-      } else if(d<=6.5 && state.mode==='world'){ stepEntityToward(e,p.x,p.y); }
-      else if(Math.random()<0.3) stepEntityRandom(e);
+      e.tick = 560 + Math.random()*120;
+      const d = dist(e,p);
+      if(d <= 1.1 && p.alive){
+        if(performance.now() - e.lastAttack > 900){ damagePlayer(7 + Math.floor(Math.random()*5)); e.lastAttack = performance.now(); }
+      } else if(d <= 7){
+        stepEntityToward(e,p.x,p.y);
+      } else if(Math.random() < 0.35){
+        stepEntityRandom(e);
+      }
     } else if(e.type==='wolf'){
-      e.tickCd=380+Math.random()*100;
-      const d=Math.hypot(e.x-p.x,e.y-p.y);
-      if(d<=1.05 && state.mode==='world' && p.alive){
-        if(performance.now()-e.lastAttack>900){ damagePlayer(9+Math.floor(Math.random()*6)); e.lastAttack=performance.now(); }
-      } else if(d<=8 && state.mode==='world'){ stepEntityToward(e,p.x,p.y); }
-      else if(Math.random()<0.35) stepEntityRandom(e);
-    } else if(e.type==='sheep'){
-      e.tickCd=700+Math.random()*200;
-      let threat=null,best=999;
-      const cands=[p,...entities.filter(x=>x.type!=='sheep')];
-      for(const c of cands){ const d=Math.hypot(e.x-c.x,e.y-c.y); if(d<best){best=d;threat=c;} }
-      if(threat && best<3){ stepEntityToward(e, e.x+(e.x-threat.x), e.y+(e.y-threat.y)); }
-      else if(Math.random()<0.4) stepEntityRandom(e);
+      e.tick = 420 + Math.random()*120;
+      const d = dist(e,p);
+      if(d <= 1.1 && p.alive){
+        if(performance.now() - e.lastAttack > 850){ damagePlayer(10 + Math.floor(Math.random()*7)); e.lastAttack = performance.now(); }
+      } else if(d <= 9){
+        stepEntityToward(e,p.x,p.y);
+      } else if(Math.random() < 0.4){
+        stepEntityRandom(e);
+      }
     }
   }
-  // despawn far, respawn near
-  for(let i=entities.length-1;i>=0;i--){
-    if(Math.hypot(entities[i].x-p.x,entities[i].y-p.y)>42){ entities.splice(i,1); }
+  // keep it local, but not absurdly immortal.
+  for(let i=entities.length-1; i>=0; i--){
+    if(Math.hypot(entities[i].x-p.x, entities[i].y-p.y) > 42) entities.splice(i,1);
   }
-  state.lastSpawnCheck -= dt;
-  if(state.lastSpawnCheck<=0){
-    const isDark = dayFactor()<0.35;
-    state.lastSpawnCheck = isDark?2600:5200;
-    const zc=entities.filter(e=>e.type==='zombie').length;
-    const wc=entities.filter(e=>e.type==='wolf').length;
-    const sc=entities.filter(e=>e.type==='sheep').length;
-    if(zc<26 && state.mode==='world'){ const s=findSpawnSpot(p.x,p.y,13,20); if(s) spawnEntity('zombie',s.x,s.y); }
-    if(wc<8 && Math.random()<0.5 && state.mode==='world'){ const s=findSpawnSpot(p.x,p.y,13,22); if(s && (getTile(s.x,s.y).biome===BIOME.FOREST||getTile(s.x,s.y).biome===BIOME.MOUNTAIN)) spawnEntity('wolf',s.x,s.y); }
-    if(sc<10 && Math.random()<0.5 && state.mode==='world'){ const s=findSpawnSpot(p.x,p.y,10,20); if(s && (getTile(s.x,s.y).biome===BIOME.GRASS||getTile(s.x,s.y).biome===BIOME.PLAINS)) spawnEntity('sheep',s.x,s.y); }
+  state.lastSpawn -= dt;
+  if(state.lastSpawn <= 0){
+    state.lastSpawn = 3500;
+    if(entities.filter(e=>e.type==='zombie').length < 18){ const s=findSpawnSpot(p.x,p.y,10,20); if(s) spawnEntity('zombie', s.x, s.y); }
+    if(entities.filter(e=>e.type==='wolf').length < 6 && Math.random()<0.5){ const s=findSpawnSpot(p.x,p.y,12,22); if(s) spawnEntity('wolf', s.x, s.y); }
   }
 }
 
-/* ---------- day/night ---------- */
-function dayFactor(){ return (Math.sin(state.time*2*Math.PI - Math.PI/2)+1)/2; }
-
-/* ---------- survival tick ---------- */
-let lastFoodTick=0, lastWaterTick=0;
-function updateSurvival(dt,now){
-  const p=state.player;
+/* ---------- damage / survival ---------- */
+function damagePlayer(dmg){
+  const p = state.player;
+  p.hp = clamp(p.hp - dmg, 0, p.maxHp);
+  addPopup(p.x,p.y,'-'+dmg,'#ff5a5a');
+  if(p.hp <= 0 && p.alive){
+    p.alive = false;
+  }
+}
+let lastFoodTick = 0, lastWaterTick = 0;
+function updateSurvival(now){
+  const p = state.player;
   if(!p.alive) return;
-  if(now-lastFoodTick>21000){ p.food=clamp(p.food-1,0,100); lastFoodTick=now; }
-  if(now-lastWaterTick>15000){ p.water=clamp(p.water-1,0,100); lastWaterTick=now; }
-  if(p.food<=0 || p.water<=0){ if(Math.random()<0.02) damagePlayer(2); }
-  else if(p.food>60 && p.water>60 && p.hp<p.maxHp && Math.random()<0.01){ p.hp=clamp(p.hp+1,0,p.maxHp); }
-}
-
-/* ---------- main update ---------- */
-let lastT=performance.now();
-function update(now){
-  const dt=Math.min(50, now-lastT); lastT=now;
-  if(!state.player.alive){ return; }
-  state.time += dt/CYCLE_MS; if(state.time>1) state.time-=1;
-
-  const p=state.player;
-  if(p.moveCooldown>0) p.moveCooldown-=dt;
-  if(p.attackCooldown>0) p.attackCooldown-=dt;
-  if(p.fireCooldown>0) p.fireCooldown-=dt;
-
-  if(state.input.dir){
-    p.facing=state.input.dir;
-    if(p.moveCooldown<=0){
-      if(state.mode==='world') attemptMoveWorld(state.input.dir,dt);
-      else attemptMoveInterior(state.input.dir);
-    }
-  }
-  if(state.mode==='world'){
-    p.visX += (p.x-p.visX)*Math.min(1,dt*0.02);
-    p.visY += (p.y-p.visY)*Math.min(1,dt*0.02);
-    state.camera.x += (p.x-state.camera.x)*Math.min(1,dt*0.006);
-    state.camera.y += (p.y-state.camera.y)*Math.min(1,dt*0.006);
-    updateEntities(dt);
-  } else {
-    state.ivisX += (state.ix-state.ivisX)*Math.min(1,dt*0.02);
-    state.ivisY += (state.iy-state.ivisY)*Math.min(1,dt*0.02);
-  }
-  updateSurvival(dt,now);
-  for(let i=floatPopups.length-1;i>=0;i--){ floatPopups[i].life-=dt; if(floatPopups[i].life<=0) floatPopups.splice(i,1); }
-  for(let i=tracers.length-1;i>=0;i--){ tracers[i].life-=dt; if(tracers[i].life<=0) tracers.splice(i,1); }
+  if(now - lastFoodTick > 22000){ p.food = clamp(p.food - 1, 0, 100); lastFoodTick = now; }
+  if(now - lastWaterTick > 16000){ p.water = clamp(p.water - 1, 0, 100); lastWaterTick = now; }
+  if(p.food<=0 || p.water<=0){ if(Math.random()<0.02) damagePlayer(1); }
+  else if(p.food>50 && p.water>50 && p.hp<p.maxHp && Math.random()<0.01){ p.hp = clamp(p.hp + 1, 0, p.maxHp); }
 }
 
 /* ---------- rendering ---------- */
 function worldToScreen(wx,wy,camX,camY){
   return { x: canvas.width/2 + (wx-camX)*TILE, y: canvas.height/2 + (wy-camY)*TILE };
 }
-function drawGlyph(ch,sx,sy,size){
+const ENT_GLYPH = { zombie:'🧟', wolf:'🐺' };
+const OBJ_GLYPH = { pine:'🌲', pebble:'🪨' };
+function drawGlyph(ch,sx,sy,size=TILE*0.72){
   if(!ch) return;
-  ctx.font = (size||TILE*0.72)+"px 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif";
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(ch, sx+TILE/2, sy+TILE/2+1);
+  ctx.font = `${size}px 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif`;
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.fillText(ch, sx + TILE/2, sy + TILE/2 + 1);
 }
-const OBJ_GLYPH={tree:'🌲',rock:'🪨',apple:'🍎',house:'🏠',mine:'⛏️',wall:'🧱'};
-const ENT_GLYPH={zombie:'🧟',wolf:'🐺',sheep:'🐑'};
-
+function drawNightFog(){
+  const g = ctx.createLinearGradient(0,0,0,canvas.height);
+  g.addColorStop(0,'rgba(0,0,0,.16)');
+  g.addColorStop(.6,'rgba(0,0,0,.22)');
+  g.addColorStop(1,'rgba(0,0,0,.32)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+}
+function drawStars(){
+  ctx.fillStyle='rgba(255,255,255,.36)';
+  for(let i=0;i<60;i++){
+    const x = (i*173 + Math.floor(state.time*100)) % canvas.width;
+    const y = (i*97 + 23) % Math.max(1, Math.floor(canvas.height*0.42));
+    if((i%3)===0) ctx.fillRect(x,y,1,1);
+  }
+}
 function renderWorld(){
-  const cols=Math.ceil(canvas.width/TILE)+3, rows=Math.ceil(canvas.height/TILE)+3;
-  const camX=state.camera.x, camY=state.camera.y;
-  const startX=Math.floor(camX-cols/2), startY=Math.floor(camY-rows/2);
-  ctx.fillStyle='#0a0f0c'; ctx.fillRect(0,0,canvas.width,canvas.height);
-  for(let ty=startY;ty<startY+rows;ty++){
-    for(let tx=startX;tx<startX+cols;tx++){
-      const t=getTile(tx,ty);
-      const s=worldToScreen(tx,ty,camX,camY);
-      ctx.fillStyle=BIOME_COLOR[t.biome];
+  const camX = state.camera.x, camY = state.camera.y;
+  const cols = Math.ceil(canvas.width / TILE) + 3;
+  const rows = Math.ceil(canvas.height / TILE) + 3;
+  const startX = Math.floor(camX - cols/2);
+  const startY = Math.floor(camY - rows/2);
+  ctx.fillStyle = '#050806';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  drawStars();
+  for(let ty=startY; ty<startY+rows; ty++){
+    for(let tx=startX; tx<startX+cols; tx++){
+      const t = getTile(tx,ty);
+      const s = worldToScreen(tx,ty,camX,camY);
+      const shade = groundPalette[(tx*13 + ty*7 + Math.floor(t.ground*4)) & 3];
+      ctx.fillStyle = shade;
       ctx.fillRect(s.x,s.y,TILE+1,TILE+1);
-      if(t.object) drawGlyph(OBJ_GLYPH[t.object],s.x,s.y);
+      // subtle texture, because blank rectangles are depressingly honest.
+      if(((tx+ty) & 3) === 0){
+        ctx.fillStyle='rgba(255,255,255,.018)';
+        ctx.fillRect(s.x+4,s.y+5,2,2);
+      }
+      if(t.object) drawGlyph(OBJ_GLYPH[t.object], s.x, s.y, TILE*0.68);
     }
   }
   // entities
   for(const e of entities){
-    const s=worldToScreen(e.visX,e.visY,camX,camY);
-    drawGlyph(ENT_GLYPH[e.type],s.x,s.y);
-    if(e.hp<e.maxHp){
-      ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(s.x+6,s.y+2,TILE-12,4);
-      ctx.fillStyle='#e2554a'; ctx.fillRect(s.x+6,s.y+2,(TILE-12)*(e.hp/e.maxHp),4);
+    const s = worldToScreen(e.visX, e.visY, camX, camY);
+    drawGlyph(ENT_GLYPH[e.type], s.x, s.y);
+    if(e.hp < e.maxHp){
+      ctx.fillStyle='rgba(0,0,0,.5)';
+      ctx.fillRect(s.x+6, s.y+2, TILE-12, 4);
+      ctx.fillStyle='#e2554a';
+      ctx.fillRect(s.x+6, s.y+2, (TILE-12) * (e.hp/e.maxHp), 4);
     }
   }
-  // player
-  const ps=worldToScreen(state.player.visX,state.player.visY,camX,camY);
-  drawGlyph(state.player.weapon==='flintlock'?'🤠':'🧑',ps.x,ps.y);
-  drawFacingWedge(ps.x+TILE/2,ps.y+TILE/2);
   // target marker
-  const tgt=currentTarget();
-  if(tgt && state.mode==='world'){
-    const ts=worldToScreen(tgt.visX,tgt.visY,camX,camY);
-    ctx.strokeStyle='rgba(255,220,168,0.85)'; ctx.lineWidth=2;
-    ctx.strokeRect(ts.x+3,ts.y+3,TILE-6,TILE-6);
+  if(state.target){
+    let tx=state.target.x, ty=state.target.y;
+    const s = worldToScreen(tx,ty,camX,camY);
+    ctx.strokeStyle='rgba(255,220,168,.92)';
+    ctx.lineWidth=2;
+    ctx.strokeRect(s.x+3,s.y+3,TILE-6,TILE-6);
   }
+  // player
+  const p = state.player;
+  const ps = worldToScreen(p.visX, p.visY, camX, camY);
+  drawGlyph('🧑', ps.x, ps.y, TILE*0.72);
+  drawFacingArrow(ps.x + TILE/2, ps.y + TILE/2, p.facing);
   // tracers
   for(const tr of tracers){
     const a=worldToScreen(tr.x1,tr.y1,camX,camY), b=worldToScreen(tr.x2,tr.y2,camX,camY);
-    ctx.strokeStyle=`rgba(255,220,168,${tr.life/tr.maxLife})`; ctx.lineWidth=2;
-    ctx.beginPath(); ctx.moveTo(a.x+TILE/2,a.y+TILE/2); ctx.lineTo(b.x+TILE/2,b.y+TILE/2); ctx.stroke();
+    ctx.strokeStyle = `rgba(255,220,168,${tr.life/tr.maxLife})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(a.x+TILE/2,a.y+TILE/2);
+    ctx.lineTo(b.x+TILE/2,b.y+TILE/2);
+    ctx.stroke();
   }
   drawPopups(camX,camY);
+  drawNightFog();
 }
-function renderInterior(){
-  const data=state.interior.data;
-  ctx.fillStyle='#050505'; ctx.fillRect(0,0,canvas.width,canvas.height);
-  const camX=state.ivisX, camY=state.ivisY;
-  const floorColor = data.type==='mine' ? '#2a241f' : '#3a2c1f';
-  const wallColor = data.type==='mine' ? '#171310' : '#1c140c';
-  for(let y=0;y<data.h;y++){
-    for(let x=0;x<data.w;x++){
-      const cell=data.grid[y][x];
-      const s=worldToScreen(x,y,camX,camY);
-      ctx.fillStyle = cell.t==='wall' ? wallColor : (cell.t==='door' ? '#4a3a20' : floorColor);
-      ctx.fillRect(s.x,s.y,TILE+1,TILE+1);
-      if(cell.t==='wall') drawGlyph('🧱',s.x,s.y);
-      else if(cell.t==='door') drawGlyph('🚪',s.x,s.y);
-      else if(cell.obj==='candle') drawGlyph('🕯️',s.x,s.y);
-      else if(cell.obj==='crate') drawGlyph('🧺',s.x,s.y);
-      else if(cell.obj==='ore') drawGlyph('💎',s.x,s.y);
-    }
-  }
-  const ps=worldToScreen(state.ivisX,state.ivisY,camX,camY);
-  drawGlyph(state.player.weapon==='flintlock'?'🤠':'🧑',ps.x,ps.y);
-  drawFacingWedge(ps.x+TILE/2,ps.y+TILE/2);
-  drawPopups(camX,camY);
-}
-function drawFacingWedge(cx,cy){
-  const dir=state.player.facing;
-  const off = dir==='up'?[0,-1]:dir==='down'?[0,1]:dir==='left'?[-1,0]:[1,0];
-  ctx.fillStyle='rgba(255,255,255,0.55)';
+function drawFacingArrow(cx,cy,a){
+  const len = TILE * 0.62;
+  const tipX = cx + Math.cos(a) * len;
+  const tipY = cy + Math.sin(a) * len;
+  const backX = cx + Math.cos(a + Math.PI) * (TILE*0.18);
+  const backY = cy + Math.sin(a + Math.PI) * (TILE*0.18);
+  const px = Math.cos(a + Math.PI/2) * 7;
+  const py = Math.sin(a + Math.PI/2) * 7;
+  ctx.fillStyle='rgba(255,255,255,.72)';
   ctx.beginPath();
-  const bx=cx+off[0]*TILE*0.42, by=cy+off[1]*TILE*0.42;
-  const px=off[1]*6, py=-off[0]*6;
-  ctx.moveTo(bx+px,by+py); ctx.lineTo(bx-px,by-py); ctx.lineTo(cx+off[0]*TILE*0.56,cy+off[1]*TILE*0.56);
-  ctx.closePath(); ctx.fill();
-}
-function drawPopups(camX,camY){
-  for(const pu of floatPopups){
-    const s=worldToScreen(pu.x,pu.y,camX,camY);
-    const t=1-pu.life/pu.maxLife;
-    ctx.globalAlpha=pu.life/pu.maxLife;
-    ctx.fillStyle=pu.color;
-    ctx.font="12px 'Courier New',monospace"; ctx.textAlign='center';
-    ctx.fillText(pu.text, s.x+TILE/2, s.y+TILE/2-10-t*16);
-    ctx.globalAlpha=1;
-  }
-}
-
-
-
-/* ---------- HUD ---------- */
-function bar(val,max){
-  const pct=clamp(val/max,0,1)*100;
-  const low = val/max<0.28 ? ' low':'';
-  return `<span class="bar"><span class="fill${low}" style="width:${pct}%"></span></span>`;
+  ctx.moveTo(tipX, tipY);
+  ctx.lineTo(backX + px, backY + py);
+  ctx.lineTo(backX - px, backY - py);
+  ctx.closePath();
+  ctx.fill();
 }
 function renderHUD(){
-  const p=state.player;
-  const statsEl=document.getElementById('stats');
-  statsEl.innerHTML =
+  const p = state.player;
+  const stats = document.getElementById('stats');
+  const bar = (v,max) => {
+    const pct = clamp(v/max, 0, 1) * 100;
+    const low = v/max < 0.28 ? ' low' : '';
+    return `<span class="bar"><span class="fill${low}" style="width:${pct}%"></span></span>`;
+  };
+  stats.innerHTML =
     `❤ HP ${Math.round(p.hp)}/${p.maxHp}${bar(p.hp,p.maxHp)}<br>`+
     `🍞 Food ${Math.round(p.food)}${bar(p.food,100)}<br>`+
     `💧 Water ${Math.round(p.water)}${bar(p.water,100)}<br>`+
-    `🪵 ${p.wood} &nbsp; 🪨 ${p.stone}`+
-    (p.weapon==='flintlock' ? ` &nbsp; 🔫 ${p.ammo}`:'')+
-    `<br>weapon: ${p.weapon}${p.armor?' · armor':''}`;
-  const day=dayFactor();
-  const label = day>0.55 ? '☀ day' : (day>0.28 ? '◐ dusk' : '🌙 night');
+    `🪵 ${p.wood} &nbsp; 🪨 ${p.stone} &nbsp; 🧵 ${p.fiber}<br>`+
+    `weapon: ${p.weapon}${p.torch ? ` &nbsp; 🔦 ${p.torch}` : ''}`;
   document.getElementById('topright').innerHTML =
-    `<span id="daynight">${label}</span><br>${state.mode==='interior'?('inside · '+state.interior.type):'protocol night'}`;
+    `<span>🌙 night only</span><br>${state.target ? (state.target.kind==='entity' ? 'target: '+state.target.name : 'target: '+(state.target.object || 'empty block')) : 'target: none'}`;
+  renderCrafting();
+}
+function renderCrafting(){
+  const panel = document.getElementById('crafting');
+  panel.style.display = state.showCraft ? 'block' : 'none';
+  const list = document.getElementById('recipeList');
+  list.innerHTML = recipes.map(r => {
+    const ok = canCraft(r);
+    const cost = Object.entries(r.cost).map(([k,v]) => `${k} ${v}`).join(' · ');
+    return `<div class="recipe ${ok ? '' : 'disabled'}" data-craft="${r.id}">
+      <div class="name">${r.name}</div>
+      <div class="desc">${r.desc}</div>
+      <div class="cost">cost: ${cost}</div>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.recipe').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.getAttribute('data-craft');
+      craft(id);
+    });
+  });
+}
+function toggleCrafting(){
+  state.showCraft = !state.showCraft;
+  renderCrafting();
+}
+function closeMenus(){
+  state.showCraft = false;
+  renderCrafting();
 }
 
-/* ---------- loop ---------- */
+/* ---------- main loop ---------- */
+let lastT = performance.now();
+function update(now){
+  const dt = Math.min(50, now - lastT); lastT = now;
+  if(!state.player.alive) return;
+  state.time += dt / CYCLE_MS; // almost constant. night, because apparently the moon pays rent.
+  const p = state.player;
+  if(p.moveCd > 0) p.moveCd -= dt;
+  if(p.attackCd > 0) p.attackCd -= dt;
+
+  if(state.input.dir && p.moveCd <= 0){
+    attemptMove(state.input.dir);
+    p.moveCd = p.moveSpeed;
+  }
+  p.visX += (p.x - p.visX) * Math.min(1, dt*0.02);
+  p.visY += (p.y - p.visY) * Math.min(1, dt*0.02);
+  state.camera.x += (p.x - state.camera.x) * Math.min(1, dt*0.006);
+  state.camera.y += (p.y - state.camera.y) * Math.min(1, dt*0.006);
+
+  updateEntities(dt);
+  updateSurvival(now);
+
+  for(let i=floatPopups.length-1;i>=0;i--){ if((floatPopups[i].life -= dt) <= 0) floatPopups.splice(i,1); }
+  for(let i=tracers.length-1;i>=0;i--){ if((tracers[i].life -= dt) <= 0) tracers.splice(i,1); }
+  updateTargetInfo();
+}
 function loop(now){
   update(now);
-  if(state.mode==='world') renderWorld(); else renderInterior();
+  renderWorld();
   renderHUD();
-  if(performance.now()%4000<20) saveGame();
+  if(now - lastSaveTime > 5000){ saveGame(); lastSaveTime = now; }
   requestAnimationFrame(loop);
 }
+let lastSaveTime = performance.now();
 
-/* ---------- boot ---------- */
+/* ---------- boot & UI ---------- */
+document.getElementById('craftBtn').addEventListener('click', toggleCrafting);
+document.getElementById('newworld').addEventListener('click', () => { clearSave(); location.reload(); });
+
+// soft respawn behavior
+function makeRespawn(){
+  const p = state.player;
+  p.hp = p.maxHp; p.food = 70; p.water = 70; p.alive = true;
+  const s = findGoodStart();
+  p.x = s.x; p.y = s.y; p.visX = p.x; p.visY = p.y;
+  state.camera.x = p.x; state.camera.y = p.y;
+  state.target = null;
+  updateTargetInfo();
+}
+window.addEventListener('blur', saveGame);
+
 (function boot(){
   const hadSave = loadGame();
-  if(hadSave){
-    document.getElementById('loadout').style.display='none';
-    beginWorld();
-  } else {
-    document.getElementById('loadout').style.display='flex';
+  if(!hadSave){
+    const s = findGoodStart();
+    state.player.x = s.x;
+    state.player.y = s.y;
+    state.player.visX = s.x;
+    state.player.visY = s.y;
+    initialPopulate(s.x, s.y);
   }
+  state.camera.x = state.player.x;
+  state.camera.y = state.player.y;
+  state.ready = true;
+  renderCrafting();
+  updateTargetInfo();
+  requestAnimationFrame(loop);
 })();
 
 })();
