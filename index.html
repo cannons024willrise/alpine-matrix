@@ -145,13 +145,17 @@ function spawnEntity(type,x,y){
 function occupantAt(x,y,excludeId=-1){
   return entities.find(e => e.alive && e.id !== excludeId && e.x===x && e.y===y) || null;
 }
+function isEntityBlocked(x,y,excludeId=-1){
+  const tile = getTile(x,y);
+  return !!tile.object || !!occupantAt(x,y,excludeId);
+}
 function findSpawnSpot(cx,cy,minR,maxR){
   for(let tries=0; tries<24; tries++){
     const ang = Math.random()*Math.PI*2;
     const r = minR + Math.random()*(maxR-minR);
     const x = Math.round(cx + Math.cos(ang)*r);
     const y = Math.round(cy + Math.sin(ang)*r);
-    if(!occupantAt(x,y)) return {x,y};
+    if(!isEntityBlocked(x,y)) return {x,y};
   }
   return null;
 }
@@ -465,14 +469,14 @@ function stepEntityToward(e,tx,ty){
   for(const [sx,sy] of choices){
     if(!sx && !sy) continue;
     const nx=e.x+sx, ny=e.y+sy;
-    if(!occupantAt(nx,ny,e.id)){ e.x=nx; e.y=ny; return; }
+    if(!isEntityBlocked(nx,ny,e.id)){ e.x=nx; e.y=ny; return; }
   }
 }
 function stepEntityRandom(e){
   const dirs=[[0,-1],[0,1],[-1,0],[1,0]];
   const [dx,dy] = dirs[Math.floor(Math.random()*dirs.length)];
   const nx=e.x+dx, ny=e.y+dy;
-  if(!occupantAt(nx,ny,e.id)){ e.x=nx; e.y=ny; }
+  if(!isEntityBlocked(nx,ny,e.id)){ e.x=nx; e.y=ny; }
 }
 function updateEntities(dt){
   const p = state.player;
@@ -505,7 +509,7 @@ function updateEntities(dt){
   }
   // keep it local, but not absurdly immortal.
   for(let i=entities.length-1; i>=0; i--){
-    if(Math.hypot(entities[i].x-p.x, entities[i].y-p.y) > 42) entities.splice(i,1);
+    if(Math.hypot(entities[i].x-p.x, entities[i].y-p.y) > 96) entities.splice(i,1);
   }
   state.lastSpawn -= dt;
   if(state.lastSpawn <= 0){
