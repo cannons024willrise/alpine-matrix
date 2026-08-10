@@ -58,18 +58,80 @@ function getTile(x, y) {
   return { type: n > 0.5 ? 'grass' : 'dirt' };
 }
 
+// ZOMBIE SPRITE GENERATION
+// Minimalist monotone silhouette, matching the player's style — flat green,
+// no gradients/shading. Shambling gait (asymmetric legs, wider arm swing,
+// body tilt) is what reads as "zombie", not color detail.
+function buildZombieSVG(phase, moving) {
+  const shuffle = moving ? Math.sin(phase * Math.PI * 2) : 0;
+  const legSwing = shuffle * 18;
+  const armSwing = shuffle * 35;
+  const tilt = shuffle * 8;
+  const armDrop = moving ? 8 : 4;
+  const C = '#4fae5e';
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="-64 -64 128 128">
+    <ellipse cx="0" cy="32" rx="18" ry="6" fill="rgba(0,0,0,0.25)"/>
+
+    <g transform="rotate(${legSwing * 0.7} -6 6)">
+      <rect x="-10" y="6" width="8" height="28" rx="4" fill="${C}"/>
+    </g>
+    <g transform="rotate(${-legSwing * 1.2} 6 6)">
+      <rect x="2" y="4" width="8" height="30" rx="4" fill="${C}"/>
+    </g>
+
+    <g transform="rotate(${armSwing * 1.1} -16 ${-armDrop}) skewX(${shuffle * 6})">
+      <rect x="-20" y="${-12 - armDrop}" width="7" height="28" rx="3.5" fill="${C}"/>
+    </g>
+
+    <g transform="rotate(${tilt})">
+      <rect x="-13" y="-18" width="26" height="36" rx="10" fill="${C}"/>
+    </g>
+
+    <g transform="rotate(${-armSwing * 0.9} 16 ${-armDrop + 2}) skewX(${-shuffle * 4})">
+      <rect x="13" y="${-10 - armDrop}" width="7" height="26" rx="3.5" fill="${C}"/>
+    </g>
+
+    <g transform="rotate(${tilt * 0.6})">
+      <circle cx="0" cy="-28" r="13" fill="${C}"/>
+    </g>
+  </svg>`;
+}
+
+const ZOMBIE_FRAME_COUNT = 8;
+const zombieFrames = [];
+for (let i = 0; i < ZOMBIE_FRAME_COUNT; i++) {
+  const svg = buildZombieSVG(i / ZOMBIE_FRAME_COUNT, true);
+  const img = new Image();
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  zombieFrames.push(img);
+}
+const zombieIdleFrame = new Image();
+zombieIdleFrame.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(buildZombieSVG(0, false));
+
+function currentZombieSprite(e) {
+  if (!e.vx && !e.vy) return zombieIdleFrame;
+  const idx = Math.floor(e.animPhase * ZOMBIE_FRAME_COUNT) % ZOMBIE_FRAME_COUNT;
+  return zombieFrames[idx];
+}
+
 // ENTITIES
 const entities = [];
 let nextId = 0;
 
 function createEntity(type, x, y) {
-  entities.push({
+  const entity = {
     id: nextId++,
     type,
     x, y,
     vx: 0, vy: 0,
-    hp: type === 'zombie' ? 30 : 100
-  });
+    hp: type === 'zombie' ? 30 : 100,
+    animPhase: 0
+  };
+  if (type === 'zombie') {
+    entity.colorSeed = Math.random();
+  }
+  entities.push(entity);
 }
 
 // PLAYER
@@ -183,6 +245,13 @@ function update(dt) {
       
       e.x += e.vx;
       e.y += e.vy;
+      
+      // animate zombie
+      if (e.vx !== 0 || e.vy !== 0) {
+        e.animPhase = (e.animPhase + dt * 0.04) % 1;
+      } else {
+        e.animPhase = 0;
+      }
     }
   }
 }
@@ -226,9 +295,15 @@ function render() {
         ctx.globalAlpha = 1;
       }
       
-      // zombie body (red if aware, darker if not)
-      ctx.fillStyle = e.aware ? '#f00' : '#600';
-      ctx.fillRect(sx + 4, sy + 4, TILE - 8, TILE - 8);
+      // animated zombie sprite
+      const zombieSprite = currentZombieSprite(e);
+      const spriteSize = TILE * 1.7;
+      if (zombieSprite.complete && zombieSprite.naturalWidth > 0) {
+        ctx.drawImage(zombieSprite, sx + TILE/2 - spriteSize/2, sy + TILE/2 - spriteSize/2, spriteSize, spriteSize);
+      } else {
+        ctx.fillStyle = e.aware ? '#f00' : '#600';
+        ctx.fillRect(sx + 4, sy + 4, TILE - 8, TILE - 8);
+      }
     }
   }
   
