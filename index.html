@@ -53,9 +53,23 @@ function noise(x, y, seed) {
 }
 
 const SEED = Math.random() * 1e9;
+const tileCache = new Map();
+const staticGrass = { type: 'grass' };
+const staticDirt = { type: 'dirt' };
+
 function getTile(x, y) {
-  const n = noise(x*0.05, y*0.05, SEED);
-  return { type: n > 0.5 ? 'grass' : 'dirt' };
+  const key = `${x},${y}`;
+  let tile = tileCache.get(key);
+  
+  if (!tile) {
+    const n = noise(x*0.05, y*0.05, SEED);
+    tile = n > 0.5 ? staticGrass : staticDirt;
+    
+    // Prevent memory leaks if the player explores endlessly
+    if (tileCache.size > 10000) tileCache.clear();
+    tileCache.set(key, tile);
+  }
+  return tile;
 }
 
 // ZOMBIE SPRITE GENERATION
@@ -272,8 +286,9 @@ function render() {
   for (let ty = startY; ty < startY + rows; ty++) {
     for (let tx = startX; tx < startX + cols; tx++) {
       const tile = getTile(tx, ty);
-      const sx = (tx - cx + cols/2) * TILE;
-      const sy = (ty - cy + rows/2) * TILE;
+      // Math.floor prevents expensive sub-pixel rendering
+      const sx = Math.floor((tx - cx + cols/2) * TILE);
+      const sy = Math.floor((ty - cy + rows/2) * TILE);
       ctx.fillStyle = tile.type === 'grass' ? '#2a5a2a' : '#1a3a1a';
       ctx.fillRect(sx, sy, TILE, TILE);
     }
@@ -281,8 +296,8 @@ function render() {
   
   // entities
   for (const e of entities) {
-    const sx = (e.x - cx + cols/2) * TILE;
-    const sy = (e.y - cy + rows/2) * TILE;
+    const sx = Math.floor((e.x - cx + cols/2) * TILE);
+    const sy = Math.floor((e.y - cy + rows/2) * TILE);
     
     if (e.type === 'zombie') {
       // detection range circle
@@ -299,7 +314,9 @@ function render() {
       const zombieSprite = currentZombieSprite(e);
       const spriteSize = TILE * 1.7;
       if (zombieSprite.complete && zombieSprite.naturalWidth > 0) {
-        ctx.drawImage(zombieSprite, sx + TILE/2 - spriteSize/2, sy + TILE/2 - spriteSize/2, spriteSize, spriteSize);
+        const dx = Math.floor(sx + TILE/2 - spriteSize/2);
+        const dy = Math.floor(sy + TILE/2 - spriteSize/2);
+        ctx.drawImage(zombieSprite, dx, dy, spriteSize, spriteSize);
       } else {
         ctx.fillStyle = e.aware ? '#f00' : '#600';
         ctx.fillRect(sx + 4, sy + 4, TILE - 8, TILE - 8);
@@ -308,12 +325,14 @@ function render() {
   }
   
   // player
-  const px = (player.x - cx + cols/2) * TILE;
-  const py = (player.y - cy + rows/2) * TILE;
+  const px = Math.floor((player.x - cx + cols/2) * TILE);
+  const py = Math.floor((player.y - cy + rows/2) * TILE);
   const sprite = currentPlayerSprite();
   const spriteSize = TILE * 1.7;
   if (sprite.complete && sprite.naturalWidth > 0) {
-    ctx.drawImage(sprite, px + TILE/2 - spriteSize/2, py + TILE/2 - spriteSize/2, spriteSize, spriteSize);
+    const dx = Math.floor(px + TILE/2 - spriteSize/2);
+    const dy = Math.floor(py + TILE/2 - spriteSize/2);
+    ctx.drawImage(sprite, dx, dy, spriteSize, spriteSize);
   } else {
     ctx.fillStyle = '#0f0';
     ctx.fillRect(px + 6, py + 6, TILE - 12, TILE - 12);
@@ -325,8 +344,8 @@ function render() {
   ctx.fillRect(0, 0, W, H);
   
   // player light source
-  const playerScreenX = W / 2;
-  const playerScreenY = H / 2;
+  const playerScreenX = Math.floor(W / 2);
+  const playerScreenY = Math.floor(H / 2);
   const lightRadius = TILE * 12;
   const lightGrad = ctx.createRadialGradient(playerScreenX, playerScreenY, TILE * 2, playerScreenX, playerScreenY, lightRadius);
   lightGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
