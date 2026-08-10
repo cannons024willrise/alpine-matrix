@@ -292,17 +292,34 @@ function render() {
       const sy = Math.floor((ty - cy + rows/2) * TILE);
       
       if (tile.type === 'grass') {
-        // True grass animation (wind/wave effect) replacing the sub-pixel glitch
-        const wave = Math.sin((tx * 0.4) + (ty * 0.4) + time) * 10;
-        const r = Math.floor(42 + wave); // base #2a is 42
-        const g = Math.floor(90 + wave); // base #5a is 90
-        const b = Math.floor(42 + wave); // base #2a is 42
+        // Base ground color wave
+        const wave = Math.sin((tx * 0.4) + (ty * 0.4) + time);
+        const r = Math.floor(42 + wave * 10);
+        const g = Math.floor(90 + wave * 10);
+        const b = Math.floor(42 + wave * 10);
         ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        ctx.fillRect(sx, sy, TILE, TILE);
+        
+        // Draw individual swaying grass blades per tile
+        const sway = wave * 3; // -3 to +3 pixels of horizontal movement
+        ctx.fillStyle = '#4fae5e'; // Brighter green for the grass blades
+        
+        // Blade 1 (Left)
+        ctx.fillRect(sx + 6, sy + 20, 2, 8); // Static base
+        ctx.fillRect(sx + 6 + Math.floor(sway), sy + 16, 2, 4); // Swaying tip
+        
+        // Blade 2 (Right)
+        ctx.fillRect(sx + 20, sy + 12, 2, 12); // Static base
+        ctx.fillRect(sx + 20 + Math.floor(sway * 1.5), sy + 8, 2, 4); // Swaying tip
+        
+        // Blade 3 (Center)
+        ctx.fillRect(sx + 14, sy + 24, 2, 6); // Static base
+        ctx.fillRect(sx + 14 + Math.floor(sway * 0.8), sy + 20, 2, 4); // Swaying tip
+        
       } else {
         ctx.fillStyle = '#1a3a1a';
+        ctx.fillRect(sx, sy, TILE, TILE);
       }
-      
-      ctx.fillRect(sx, sy, TILE, TILE);
     }
   }
   
