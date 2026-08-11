@@ -160,18 +160,20 @@ const player = {
 };
 
 // ANIMATED SVG PLAYER SPRITE
-// Minimalist monotone top-down humanoid silhouette: shadow, legs, torso, arms, head.
-// Limb rotation is driven by `phase` (0..1 walk cycle). Sprite always faces
-// forward (no rotation) — only limbs animate.
+// Enhanced walk cycle with dynamic leg extensions, arm swing, torso tilt, and head counter-sway.
 function buildPlayerSVG(phase, moving) {
-  const swing = moving ? Math.sin(phase * Math.PI * 2) : 0;
-  const legAngle = swing * 22;
-  const armAngle = -swing * 26;
-  const bob = moving ? Math.abs(Math.sin(phase * Math.PI * 2)) * 2 : 0;
+  const cycle = phase * Math.PI * 2;
+  const swing = moving ? Math.sin(cycle) : 0;
+  
+  const legAngle = swing * 28;
+  const armAngle = -swing * 32;
+  const bob = moving ? Math.abs(Math.sin(cycle * 2)) * 3.5 : 0;
+  const bodyTilt = moving ? swing * 4 : 0;
+  const headSway = moving ? -swing * 3 : 0;
   const C = '#e8f5ec';
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="-64 -64 128 128">
-    <ellipse cx="0" cy="32" rx="20" ry="7" fill="rgba(0,0,0,0.35)"/>
+    <ellipse cx="${swing * 2}" cy="32" rx="${20 - Math.abs(swing) * 2}" ry="7" fill="rgba(0,0,0,0.35)"/>
 
     <g transform="rotate(${legAngle} -6 6) translate(0 ${-bob})">
       <rect x="-11" y="4" width="9" height="27" rx="4.5" fill="${C}"/>
@@ -184,13 +186,17 @@ function buildPlayerSVG(phase, moving) {
       <rect x="-19" y="-10" width="8" height="25" rx="4" fill="${C}"/>
     </g>
 
-    <rect x="-14" y="${-19 - bob}" width="28" height="34" rx="11" fill="${C}"/>
+    <g transform="rotate(${bodyTilt} 0 0) translate(0 ${-bob})">
+      <rect x="-14" y="-19" width="28" height="34" rx="11" fill="${C}"/>
+    </g>
 
     <g transform="rotate(${armAngle} 15 -4) translate(0 ${-bob})">
       <rect x="11" y="-10" width="8" height="25" rx="4" fill="${C}"/>
     </g>
 
-    <circle cx="0" cy="${-29 - bob}" r="12.5" fill="${C}"/>
+    <g transform="rotate(${headSway} 0 ${-29 - bob}) translate(0 ${-bob})">
+      <circle cx="0" cy="-29" r="12.5" fill="${C}"/>
+    </g>
   </svg>`;
 }
 
