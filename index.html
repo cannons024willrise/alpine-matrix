@@ -118,58 +118,69 @@ for (let i = 0; i <= PALETTE_STEPS; i++) {
 }
 
 // PINE TREE DRAWING
-// Two-tone per tier (light side / shadow side, split along the global light
-// direction) plus a ground shadow, so trees read as lit objects rather than
-// flat cutouts.
+// More realistic conical evergreen with dense foliage and proper lighting
 const TIER_COLORS = [
-  { dark: '#122a14', light: '#204a24' }, // bottom, largest tier
-  { dark: '#173a1b', light: '#2a5c2e' },
-  { dark: '#1e4a22', light: '#357a3a' }  // top, smallest tier, catches the most light
+  { dark: '#0a2810', light: '#1e5a2a' }, // bottom, largest tier, very dark
+  { dark: '#0f3215', light: '#2a6a35' },
+  { dark: '#1a4020', light: '#357a45' },
+  { dark: '#2a5030', light: '#4a8a55' }  // top, smallest tier, brightest
 ];
 
 function drawPineTree(ctx, screenX, screenY, seedVal) {
-  const scale = 0.8 + hash(seedVal, 1, 10) * 0.5;
-  const trunkW = Math.max(2, Math.floor(4 * scale));
-  const trunkH = Math.floor(12 * scale);
+  const scale = 0.9 + hash(seedVal, 1, 10) * 0.5;
+  const trunkW = Math.max(2, Math.floor(2.5 * scale));
+  const trunkH = Math.floor(24 * scale);
 
   // Ground shadow, cast away from the light source
-  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.beginPath();
-  ctx.ellipse(screenX - LIGHT_DX * 6, screenY + 2, 13 * scale, 5 * scale, 0, 0, Math.PI * 2);
+  ctx.ellipse(screenX - LIGHT_DX * 8, screenY + 2, 18 * scale, 8 * scale, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Trunk, two-tone for a rounded look
+  // Trunk with realistic two-tone shading
   const trunkX = Math.floor(screenX - trunkW / 2);
-  const trunkSplit = Math.max(1, Math.floor(trunkW * 0.55));
-  ctx.fillStyle = '#3a2410';
-  ctx.fillRect(trunkX, Math.floor(screenY - trunkH), trunkSplit, trunkH);
-  ctx.fillStyle = '#20140a';
-  ctx.fillRect(trunkX + trunkSplit, Math.floor(screenY - trunkH), trunkW - trunkSplit, trunkH);
+  const trunkTop = Math.floor(screenY - trunkH);
+  
+  const trunkLit = Math.max(1, Math.floor(trunkW * 0.55));
+  ctx.fillStyle = '#5a4a2a';
+  ctx.fillRect(trunkX, trunkTop, trunkLit, trunkH);
+  ctx.fillStyle = '#1a0e08';
+  ctx.fillRect(trunkX + trunkLit, trunkTop, trunkW - trunkLit, trunkH);
 
-  // Foliage layers (irregular tiered pixelated pine shape, shaded per side)
-  const tiers = 3;
-  let currentY = screenY - trunkH + 2;
-  const steps = 4;
+  // Foliage: 8 tiers for tall, thin cone shape
+  const tiers = 8;
+  let currentY = screenY - trunkH + 8;
+  const steps = 6;
 
   for (let t = 0; t < tiers; t++) {
-    const tierWidth = Math.floor((28 - t * 7) * scale);
-    const tierHeight = Math.floor((12 - t * 2) * scale);
+    // Narrower base, tapering to point - creates slender cone
+    const tierWidth = Math.floor((32 - t * 4.5) * scale);
+    const tierHeight = Math.floor((11 - t * 0.5) * scale);
     const stepH = Math.max(1, Math.floor(tierHeight / steps));
-    const { dark, light } = TIER_COLORS[t];
+    const { dark, light } = TIER_COLORS[Math.min(t, 3)];
 
     for (let s = 0; s < steps; s++) {
+      // Smooth taper within each tier
       const stepW = Math.floor(tierWidth * (1 - (s / steps) * 0.75));
-      const jitter = Math.floor((hash(seedVal, t + 1, s + 1) - 0.5) * 3);
+      const jitter = Math.floor((hash(seedVal, t * 10 + s, t) - 0.5) * 3);
       const rx = Math.floor(screenX - stepW / 2) + jitter;
       const ry = Math.floor(currentY - (s + 1) * stepH);
 
+      // Lit and shadow sides with better contrast
       const lightW = Math.max(1, Math.floor(stepW * 0.55));
       ctx.fillStyle = light;
       ctx.fillRect(rx, ry, lightW, stepH);
       ctx.fillStyle = dark;
-      ctx.fillRect(rx + lightW, ry, Math.max(0, stepW - lightW), stepH);
+      ctx.fillRect(rx + lightW, ry, Math.max(1, stepW - lightW), stepH);
+      
+      // Add subtle edge detail on the dark side
+      if (stepW > 6) {
+        ctx.fillStyle = 'rgba(0,0,0,0.15)';
+        ctx.fillRect(rx + stepW - 1, ry, 1, stepH);
+      }
     }
-    currentY -= Math.floor(tierHeight * 0.55);
+    // Greater overlap between tiers for denser look
+    currentY -= Math.floor(tierHeight * 0.5);
   }
 }
 
@@ -437,29 +448,29 @@ function render() {
       const shadeIdx = Math.min(PALETTE_STEPS, Math.floor(tile.shade * PALETTE_STEPS));
 
       if (tile.type === 'grass') {
-        // Mottled ground color instead of one flat tone
+        // Mottled ground color
         ctx.fillStyle = GRASS_PALETTE[shadeIdx];
         ctx.fillRect(sx, sy, TILE, TILE);
 
-        // Irregular, non-tile locked, pixelated grass blades (animated swaying tips)
-        const bladeCount = Math.floor(hash(tx, ty, 1) * 4) + 3;
-        for (let i = 0; i < bladeCount; i++) {
-          const bx = Math.floor(sx + hash(tx, ty, i * 4 + 2) * (TILE - 4));
-          const by = Math.floor(sy + hash(tx, ty, i * 4 + 3) * (TILE - 8));
-          const bw = 2;
-          const bh = Math.floor(hash(tx, ty, i * 4 + 4) * 6) + 4;
-          const shade = hash(tx, ty, i * 4 + 5);
-
-          const sway = Math.round(Math.sin(time * 1.5 + tx * 0.8 + ty * 0.8 + i) * 2);
-
-          ctx.fillStyle = shade > 0.5 ? '#5bc46a' : '#2f6a38';
-          // Blade base (static)
-          ctx.fillRect(bx, by + 2, bw, bh - 2);
-          // Blade tip (swaying)
-          ctx.fillRect(bx + sway, by, bw, 2);
+        // Visible grass animation with bent tips
+        const baseSway = Math.sin(time + tx * 0.3 + ty * 0.3) * 3;
+        const grassCount = Math.floor(hash(tx, ty, 1) * 6) + 6;
+        for (let i = 0; i < grassCount; i++) {
+          const grassX = Math.floor(sx + hash(tx, ty, i * 2 + 101) * (TILE - 2));
+          const grassY = Math.floor(sy + hash(tx, ty, i * 2 + 102) * (TILE - 8) + 4);
+          const offsetSway = (i % 3) - 1;
+          const tipBend = Math.floor(baseSway + offsetSway * 1);
+          
+          ctx.fillStyle = hash(tx, ty, i * 2 + 103) > 0.5 ? '#5bc46a' : '#3a7a42';
+          
+          // Blade base (straight, rooted at bottom)
+          ctx.fillRect(grassX, grassY + 2, 2, 3);
+          
+          // Blade tip (bent with sway, points upward)
+          ctx.fillRect(grassX + tipBend, grassY - 2, 2, 2);
         }
 
-        // Occasional tiny flower speckle for detail
+        // Occasional flower detail
         if (hash(tx, ty, 777) > 0.94) {
           const fx = Math.floor(sx + hash(tx, ty, 778) * (TILE - 4) + 2);
           const fy = Math.floor(sy + hash(tx, ty, 779) * (TILE - 4) + 2);
