@@ -277,52 +277,35 @@ function render() {
   
   const cx = player.x;
   const cy = player.y;
-  const cols = Math.ceil(W / TILE) + 2;
-  const rows = Math.ceil(H / TILE) + 2;
-  const startX = Math.floor(cx - cols/2);
-  const startY = Math.floor(cy - rows/2);
   
-  // terrain
-  const time = Date.now() * 0.003;
-  for (let ty = startY; ty < startY + rows; ty++) {
-    for (let tx = startX; tx < startX + cols; tx++) {
-      const tile = getTile(tx, ty);
-      // Math.floor prevents expensive sub-pixel rendering
-      const sx = Math.floor((tx - cx + cols/2) * TILE);
-      const sy = Math.floor((ty - cy + rows/2) * TILE);
-      
-      if (tile.type === 'grass') {
-        // Base ground color wave
-        const wave = Math.sin((tx * 0.4) + (ty * 0.4) + time);
-        const r = Math.floor(42 + wave * 10);
-        const g = Math.floor(90 + wave * 10);
-        const b = Math.floor(42 + wave * 10);
-        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-        ctx.fillRect(sx, sy, TILE, TILE);
-        
-        // Draw individual swaying grass blades per tile
-        const sway = wave * 3; // -3 to +3 pixels of horizontal movement
-        ctx.fillStyle = '#4fae5e'; // Brighter green for the grass blades
-        
-        // Blade 1 (Left)
-        ctx.fillRect(sx + 6, sy + 20, 2, 8); // Static base
-        ctx.fillRect(sx + 6 + Math.floor(sway), sy + 16, 2, 4); // Swaying tip
-        
-        // Blade 2 (Right)
-        ctx.fillRect(sx + 20, sy + 12, 2, 12); // Static base
-        ctx.fillRect(sx + 20 + Math.floor(sway * 1.5), sy + 8, 2, 4); // Swaying tip
-        
-        // Blade 3 (Center)
-        ctx.fillRect(sx + 14, sy + 24, 2, 6); // Static base
-        ctx.fillRect(sx + 14 + Math.floor(sway * 0.8), sy + 20, 2, 4); // Swaying tip
-        
+  // pixelated, continuous ground rendering (non-tile locked, static, unlit)
+  const PIXEL_SIZE = 8;
+  for (let sy = 0; sy < H; sy += PIXEL_SIZE) {
+    for (let sx = 0; sx < W; sx += PIXEL_SIZE) {
+      const wx = cx + (sx - W / 2) / TILE;
+      const wy = cy + (sy - H / 2) / TILE;
+
+      const n = noise(wx * 0.08, wy * 0.08, SEED);
+      const h = hash(Math.floor(wx * 4), Math.floor(wy * 4), SEED);
+
+      if (n > 0.45) {
+        if (h > 0.75) {
+          ctx.fillStyle = '#4fae5e';
+        } else if (h > 0.4) {
+          ctx.fillStyle = '#2d6a37';
+        } else {
+          ctx.fillStyle = '#1e4825';
+        }
       } else {
-        ctx.fillStyle = '#1a3a1a';
-        ctx.fillRect(sx, sy, TILE, TILE);
+        ctx.fillStyle = h > 0.5 ? '#1a3a1a' : '#122b12';
       }
+      ctx.fillRect(sx, sy, PIXEL_SIZE, PIXEL_SIZE);
     }
   }
   
+  const cols = Math.ceil(W / TILE) + 2;
+  const rows = Math.ceil(H / TILE) + 2;
+
   // entities
   for (const e of entities) {
     const sx = Math.floor((e.x - cx + cols/2) * TILE);
@@ -366,24 +349,6 @@ function render() {
     ctx.fillStyle = '#0f0';
     ctx.fillRect(px + 6, py + 6, TILE - 12, TILE - 12);
   }
-  
-  // LIGHTING
-  // dark overlay
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-  ctx.fillRect(0, 0, W, H);
-  
-  // player light source
-  const playerScreenX = Math.floor(W / 2);
-  const playerScreenY = Math.floor(H / 2);
-  const lightRadius = TILE * 12;
-  const lightGrad = ctx.createRadialGradient(playerScreenX, playerScreenY, TILE * 2, playerScreenX, playerScreenY, lightRadius);
-  lightGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
-  lightGrad.addColorStop(1, 'rgba(0, 0, 0, 1)');
-  
-  ctx.globalCompositeOperation = 'destination-out';
-  ctx.fillStyle = lightGrad;
-  ctx.fillRect(playerScreenX - lightRadius, playerScreenY - lightRadius, lightRadius * 2, lightRadius * 2);
-  ctx.globalCompositeOperation = 'source-over';
 }
 
 // HUD
