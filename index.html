@@ -277,35 +277,42 @@ function render() {
   
   const cx = player.x;
   const cy = player.y;
+  const cols = Math.ceil(W / TILE) + 2;
+  const rows = Math.ceil(H / TILE) + 2;
+  const startX = Math.floor(cx - cols/2);
+  const startY = Math.floor(cy - rows/2);
   
-  // pixelated, continuous ground rendering (non-tile locked, static, unlit)
-  const PIXEL_SIZE = 8;
-  for (let sy = 0; sy < H; sy += PIXEL_SIZE) {
-    for (let sx = 0; sx < W; sx += PIXEL_SIZE) {
-      const wx = cx + (sx - W / 2) / TILE;
-      const wy = cy + (sy - H / 2) / TILE;
-
-      const n = noise(wx * 0.08, wy * 0.08, SEED);
-      const h = hash(Math.floor(wx * 4), Math.floor(wy * 4), SEED);
-
-      if (n > 0.45) {
-        if (h > 0.75) {
-          ctx.fillStyle = '#4fae5e';
-        } else if (h > 0.4) {
-          ctx.fillStyle = '#2d6a37';
-        } else {
-          ctx.fillStyle = '#1e4825';
+  // terrain
+  for (let ty = startY; ty < startY + rows; ty++) {
+    for (let tx = startX; tx < startX + cols; tx++) {
+      const tile = getTile(tx, ty);
+      // Math.floor prevents expensive sub-pixel rendering
+      const sx = Math.floor((tx - cx + cols/2) * TILE);
+      const sy = Math.floor((ty - cy + rows/2) * TILE);
+      
+      if (tile.type === 'grass') {
+        // Flat, static base ground color (no flashing color wave)
+        ctx.fillStyle = '#2a5a2a';
+        ctx.fillRect(sx, sy, TILE, TILE);
+        
+        // Irregular, non-tile locked, pixelated grass blades (static, no dynamic swaying)
+        const bladeCount = Math.floor(hash(tx, ty, 1) * 4) + 3;
+        for (let i = 0; i < bladeCount; i++) {
+          const bx = Math.floor(sx + hash(tx, ty, i * 4 + 2) * (TILE - 4));
+          const by = Math.floor(sy + hash(tx, ty, i * 4 + 3) * (TILE - 8));
+          const bw = 2;
+          const bh = Math.floor(hash(tx, ty, i * 4 + 4) * 6) + 4;
+          const shade = hash(tx, ty, i * 4 + 5);
+          ctx.fillStyle = shade > 0.5 ? '#4fae5e' : '#3b8e48';
+          ctx.fillRect(bx, by, bw, bh);
         }
       } else {
-        ctx.fillStyle = h > 0.5 ? '#1a3a1a' : '#122b12';
+        ctx.fillStyle = '#1a3a1a';
+        ctx.fillRect(sx, sy, TILE, TILE);
       }
-      ctx.fillRect(sx, sy, PIXEL_SIZE, PIXEL_SIZE);
     }
   }
   
-  const cols = Math.ceil(W / TILE) + 2;
-  const rows = Math.ceil(H / TILE) + 2;
-
   // entities
   for (const e of entities) {
     const sx = Math.floor((e.x - cx + cols/2) * TILE);
