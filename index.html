@@ -281,6 +281,7 @@ function render() {
   const rows = Math.ceil(H / TILE) + 2;
   const startX = Math.floor(cx - cols/2);
   const startY = Math.floor(cy - rows/2);
+  const time = Date.now() * 0.003;
   
   // terrain
   for (let ty = startY; ty < startY + rows; ty++) {
@@ -295,7 +296,7 @@ function render() {
         ctx.fillStyle = '#2a5a2a';
         ctx.fillRect(sx, sy, TILE, TILE);
         
-        // Irregular, non-tile locked, pixelated grass blades (static, no dynamic swaying)
+        // Irregular, non-tile locked, pixelated grass blades (animated swaying tips)
         const bladeCount = Math.floor(hash(tx, ty, 1) * 4) + 3;
         for (let i = 0; i < bladeCount; i++) {
           const bx = Math.floor(sx + hash(tx, ty, i * 4 + 2) * (TILE - 4));
@@ -303,8 +304,14 @@ function render() {
           const bw = 2;
           const bh = Math.floor(hash(tx, ty, i * 4 + 4) * 6) + 4;
           const shade = hash(tx, ty, i * 4 + 5);
+          
+          const sway = Math.round(Math.sin(time * 1.5 + tx * 0.8 + ty * 0.8 + i) * 2);
+
           ctx.fillStyle = shade > 0.5 ? '#4fae5e' : '#3b8e48';
-          ctx.fillRect(bx, by, bw, bh);
+          // Blade base (static)
+          ctx.fillRect(bx, by + 2, bw, bh - 2);
+          // Blade tip (swaying)
+          ctx.fillRect(bx + sway, by, bw, 2);
         }
       } else {
         ctx.fillStyle = '#1a3a1a';
