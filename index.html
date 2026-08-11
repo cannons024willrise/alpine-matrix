@@ -72,6 +72,40 @@ function getTile(x, y) {
   return tile;
 }
 
+// PINE TREE DRAWING
+function drawPineTree(ctx, screenX, screenY, seedVal) {
+  const scale = 0.8 + hash(seedVal, 1, 10) * 0.5;
+  const trunkW = Math.max(2, Math.floor(4 * scale));
+  const trunkH = Math.floor(12 * scale);
+  
+  // Trunk
+  ctx.fillStyle = '#2b180b';
+  ctx.fillRect(Math.floor(screenX - trunkW / 2), Math.floor(screenY - trunkH), trunkW, trunkH);
+  
+  // Foliage layers (irregular tiered pixelated pine shape)
+  const tiers = 3;
+  let currentY = screenY - trunkH + 2;
+  
+  const colors = ['#153318', '#1e4722', '#2a5e2f'];
+  
+  for (let t = 0; t < tiers; t++) {
+    const tierWidth = Math.floor((28 - t * 7) * scale);
+    const tierHeight = Math.floor((12 - t * 2) * scale);
+    ctx.fillStyle = colors[t];
+    
+    const steps = 4;
+    const stepH = Math.max(1, Math.floor(tierHeight / steps));
+    for (let s = 0; s < steps; s++) {
+      const stepW = Math.floor(tierWidth * (1 - (s / steps) * 0.75));
+      const jitter = Math.floor((hash(seedVal, t + 1, s + 1) - 0.5) * 3);
+      const rx = Math.floor(screenX - stepW / 2) + jitter;
+      const ry = Math.floor(currentY - (s + 1) * stepH);
+      ctx.fillRect(rx, ry, stepW, stepH);
+    }
+    currentY -= Math.floor(tierHeight * 0.55);
+  }
+}
+
 // ZOMBIE SPRITE GENERATION
 // Minimalist monotone silhouette, matching the player's style — flat green,
 // no gradients/shading. Shambling gait (asymmetric legs, wider arm swing,
@@ -283,13 +317,13 @@ function render() {
   
   const cx = player.x;
   const cy = player.y;
-  const cols = Math.ceil(W / TILE) + 2;
-  const rows = Math.ceil(H / TILE) + 2;
+  const cols = Math.ceil(W / TILE) + 4;
+  const rows = Math.ceil(H / TILE) + 4;
   const startX = Math.floor(cx - cols/2);
   const startY = Math.floor(cy - rows/2);
   const time = Date.now() * 0.003;
   
-  // terrain
+  // terrain pass
   for (let ty = startY; ty < startY + rows; ty++) {
     for (let tx = startX; tx < startX + cols; tx++) {
       const tile = getTile(tx, ty);
@@ -326,48 +360,89 @@ function render() {
     }
   }
   
-  // entities
+  // Y-Sorted Objects Pass (Pine Trees, Zombies, Player)
+  const drawObjects = [];
+
+  // Irregularly placed pine trees using noise and non-grid offsets
+  for (let ty = startY - 2; ty < startY + rows + 2; ty++) {
+    for (let tx = startX - 2; tx < startX + cols + 2; tx++) {
+      const treeDensity = noise(tx * 0.12, ty * 0.12, SEED + 500);
+      if (treeDensity > 0.62) {
+        const offsetX = (hash(tx, ty, 801) - 0.5) * TILE * 1.2;
+        const offsetY = (hash(tx, ty, 802) - 0.5) * TILE * 1.2;
+        const worldX = tx + 0.5 + offsetX / TILE;
+        const worldY = ty + 0.5 + offsetY / TILE;
+        
+        const sx = Math.floor((worldX - cx + cols/2) * TILE);
+        const sy = Math.floor((worldY - cy + rows/2) * TILE);
+        const seedVal = Math.floor(hash(tx, ty, 999) * 100000);
+        
+        drawObjects.push({
+          type: 'tree',
+          y: worldY,
+          render: () => drawPineTree(ctx, sx, sy, seedVal)
+        });
+      }
+    }
+  }
+
+  // Entities
   for (const e of entities) {
     const sx = Math.floor((e.x - cx + cols/2) * TILE);
     const sy = Math.floor((e.y - cy + rows/2) * TILE);
     
     if (e.type === 'zombie') {
-      // detection range circle
-      if (e.aware) {
-        ctx.strokeStyle = '#f00';
-        ctx.globalAlpha = 0.3;
-        ctx.beginPath();
-        ctx.arc(sx + TILE/2, sy + TILE/2, 10 * TILE, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-      }
-      
-      // animated zombie sprite
-      const zombieSprite = currentZombieSprite(e);
-      const spriteSize = TILE * 1.7;
-      if (zombieSprite.complete && zombieSprite.naturalWidth > 0) {
-        const dx = Math.floor(sx + TILE/2 - spriteSize/2);
-        const dy = Math.floor(sy + TILE/2 - spriteSize/2);
-        ctx.drawImage(zombieSprite, dx, dy, spriteSize, spriteSize);
-      } else {
-        ctx.fillStyle = e.aware ? '#f00' : '#600';
-        ctx.fillRect(sx + 4, sy + 4, TILE - 8, TILE - 8);
-      }
+      drawObjects.push({
+        type: 'zombie',
+        y: e.y,
+        render: () => {
+          if (e.aware) {
+            ctx.strokeStyle = '#f00';
+            ctx.globalAlpha = 0.3;
+            ctx.beginPath();
+            ctx.arc(sx + TILE/2, sy + TILE/2, 10 * TILE, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+          }
+          const zombieSprite = currentZombieSprite(e);
+          const spriteSize = TILE * 1.7;
+          if (zombieSprite.complete && zombieSprite.naturalWidth > 0) {
+            const dx = Math.floor(sx + TILE/2 - spriteSize/2);
+            const dy = Math.floor(sy + TILE/2 - spriteSize/2);
+            ctx.drawImage(zombieSprite, dx, dy, spriteSize, spriteSize);
+          } else {
+            ctx.fillStyle = e.aware ? '#f00' : '#600';
+            ctx.fillRect(sx + 4, sy + 4, TILE - 8, TILE - 8);
+          }
+        }
+      });
     }
   }
   
-  // player
+  // Player
   const px = Math.floor((player.x - cx + cols/2) * TILE);
   const py = Math.floor((player.y - cy + rows/2) * TILE);
-  const sprite = currentPlayerSprite();
-  const spriteSize = TILE * 1.7;
-  if (sprite.complete && sprite.naturalWidth > 0) {
-    const dx = Math.floor(px + TILE/2 - spriteSize/2);
-    const dy = Math.floor(py + TILE/2 - spriteSize/2);
-    ctx.drawImage(sprite, dx, dy, spriteSize, spriteSize);
-  } else {
-    ctx.fillStyle = '#0f0';
-    ctx.fillRect(px + 6, py + 6, TILE - 12, TILE - 12);
+  drawObjects.push({
+    type: 'player',
+    y: player.y,
+    render: () => {
+      const sprite = currentPlayerSprite();
+      const spriteSize = TILE * 1.7;
+      if (sprite.complete && sprite.naturalWidth > 0) {
+        const dx = Math.floor(px + TILE/2 - spriteSize/2);
+        const dy = Math.floor(py + TILE/2 - spriteSize/2);
+        ctx.drawImage(sprite, dx, dy, spriteSize, spriteSize);
+      } else {
+        ctx.fillStyle = '#0f0';
+        ctx.fillRect(px + 6, py + 6, TILE - 12, TILE - 12);
+      }
+    }
+  });
+
+  // Sort by Y position so characters pass naturally behind/in front of trees
+  drawObjects.sort((a, b) => a.y - b.y);
+  for (const obj of drawObjects) {
+    obj.render();
   }
 }
 
