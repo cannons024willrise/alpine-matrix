@@ -45,10 +45,14 @@ window.addEventListener('resize', () => {
   H = window.innerHeight;
   canvas.width = W;
   canvas.height = H;
+  viewportCols = Math.ceil(W / TILE) + 4;
+  viewportRows = Math.ceil(H / TILE) + 4;
   buildVignette();
 });
 
 const TILE = 32;
+let viewportCols = Math.ceil(W / TILE) + 4;
+let viewportRows = Math.ceil(H / TILE) + 4;
 
 // Fake sun direction used everywhere lighting matters (terrain shade bias,
 // tree shading, shadow offsets), so the whole scene reads as lit from one
@@ -88,6 +92,7 @@ function mixColor(c1, c2, t) {
 
 const SEED = Math.random() * 1e9;
 const tileCache = new Map();
+const treeCache = new Map();
 
 function getTile(x, y) {
   const key = `${x},${y}`;
@@ -432,8 +437,8 @@ function render() {
 
   const cx = player.x;
   const cy = player.y;
-  const cols = Math.ceil(W / TILE) + 4;
-  const rows = Math.ceil(H / TILE) + 4;
+  const cols = viewportCols;
+  const rows = viewportRows;
   const startX = Math.floor(cx - cols/2);
   const startY = Math.floor(cy - rows/2);
   const time = Date.now() * 0.003;
@@ -452,22 +457,47 @@ function render() {
         ctx.fillStyle = GRASS_PALETTE[shadeIdx];
         ctx.fillRect(sx, sy, TILE, TILE);
 
-        // Visible grass animation with bent tips
+        // Visible grass animation with bent tips.
+        // The pattern is cached once per tile; only the bend is recalculated.
         const baseSway = Math.sin(time + tx * 0.3 + ty * 0.3) * 3;
-        const grassCount = Math.floor(hash(tx, ty, 1) * 6) + 6;
-        for (let i = 0; i < grassCount; i++) {
-          const grassX = Math.floor(sx + hash(tx, ty, i * 2 + 101) * (TILE - 2));
-          const grassY = Math.floor(sy + hash(tx, ty, i * 2 + 102) * (TILE - 8) + 4);
-          const offsetSway = (i % 3) - 1;
-          const tipBend = Math.floor(baseSway + offsetSway * 1);
-          
-          ctx.fillStyle = hash(tx, ty, i * 2 + 103) > 0.5 ? '#5bc46a' : '#3a7a42';
-          
-          // Blade base (straight, rooted at bottom)
+        const tileData = getTile(tx, ty);
+
+        if (!tileData.grassPattern) {
+          const grassCount = Math.floor(hash(tx, ty, 1) * 6) + 6;
+          tileData.grassPattern = [];
+          for (let i = 0; i < grassCount; i++) {
+            tileData.grassPattern.push({
+              x: hash(tx, ty, i * 2 + 101),
+              y: hash(tx, ty, i * 2 + 102),
+              offsetSway: (i % 3) - 1,
+              light: hash(tx, ty, i * 2 + 103) > 0.5
+            });
+          }
+          if (hash(tx, ty, 777) > 0.94) {
+            tileData.flower = {
+              x: hash(tx, ty, 778),
+              y: hash(tx, ty, 779),
+              light: hash(tx, ty, 780) > 0.5
+            };
+          }
+        }
+
+        for (const blade of tileData.grassPattern) {
+          const grassX = Math.floor(sx + blade.x * (TILE - 2));
+          const grassY = Math.floor(sy + blade.y * (TILE - 8) + 4);
+          const tipBend = Math.floor(baseSway + blade.offsetSway);
+
+          ctx.fillStyle = blade.light ? '#5bc46a' : '#3a7a42';
           ctx.fillRect(grassX, grassY + 2, 2, 3);
-          
-          // Blade tip (bent with sway, points upward)
           ctx.fillRect(grassX + tipBend, grassY - 2, 2, 2);
+        }
+
+        if (tileData.flower) {
+          const f = tileData.flower;
+          const fx = Math.floor(sx + f.x * (TILE - 4) + 2);
+          const fy = Math.floor(sy + f.y * (TILE - 4) + 2);
+          ctx.fillStyle = f.light ? '#f2e26b' : '#f0f0f0';
+          ctx.fillRect(fx, fy, 2, 2);
         }
 
         // Occasional flower detail
@@ -496,24 +526,38 @@ function render() {
   // Y-Sorted Objects Pass (Pine Trees, Zombies, Player)
   const drawObjects = [];
 
-  // Irregularly placed pine trees using noise and non-grid offsets
+  // Deterministic tree placement is cached per world tile.
   for (let ty = startY - 2; ty < startY + rows + 2; ty++) {
     for (let tx = startX - 2; tx < startX + cols + 2; tx++) {
-      const treeDensity = noise(tx * 0.12, ty * 0.12, SEED + 500);
-      if (treeDensity > 0.62) {
-        const offsetX = (hash(tx, ty, 801) - 0.5) * TILE * 1.2;
-        const offsetY = (hash(tx, ty, 802) - 0.5) * TILE * 1.2;
-        const worldX = tx + 0.5 + offsetX / TILE;
-        const worldY = ty + 0.5 + offsetY / TILE;
+      const key = tx + ',' + ty;
+      let tree = treeCache.get(key);
 
-        const sx = Math.floor((worldX - cx + cols/2) * TILE);
-        const sy = Math.floor((worldY - cy + rows/2) * TILE);
-        const seedVal = Math.floor(hash(tx, ty, 999) * 100000);
+      if (tree === undefined) {
+        const treeDensity = noise(tx * 0.12, ty * 0.12, SEED + 500);
+        if (treeDensity > 0.62) {
+          const offsetX = (hash(tx, ty, 801) - 0.5) * TILE * 1.2;
+          const offsetY = (hash(tx, ty, 802) - 0.5) * TILE * 1.2;
+          tree = {
+            worldX: tx + 0.5 + offsetX / TILE,
+            worldY: ty + 0.5 + offsetY / TILE,
+            seedVal: Math.floor(hash(tx, ty, 999) * 100000)
+          };
+        } else {
+          tree = null;
+        }
+        treeCache.set(key, tree);
+      }
+
+      if (tree) {
+        const sx = Math.floor((tree.worldX - cx + cols/2) * TILE);
+        const sy = Math.floor((tree.worldY - cy + rows/2) * TILE);
 
         drawObjects.push({
           type: 'tree',
-          y: worldY,
-          render: () => drawPineTree(ctx, sx, sy, seedVal)
+          y: tree.worldY,
+          sx,
+          sy,
+          seedVal: tree.seedVal
         });
       }
     }
@@ -537,7 +581,7 @@ function render() {
             ctx.globalAlpha = 0.22 + Math.sin(Date.now() * 0.004) * 0.06;
             ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.arc(sx + TILE/2, sy + TILE/2, 10 * TILE, 0, Math.PI * 2);
+            ctx.arc(sx + TILE/2, sy + TILE/2, 10, 0, Math.PI * 2);
             ctx.stroke();
             ctx.restore();
           }
@@ -579,7 +623,11 @@ function render() {
   // Sort by Y position so characters pass naturally behind/in front of trees
   drawObjects.sort((a, b) => a.y - b.y);
   for (const obj of drawObjects) {
-    obj.render();
+    if (obj.type === 'tree') {
+      drawPineTree(ctx, obj.sx, obj.sy, obj.seedVal);
+    } else {
+      obj.render();
+    }
   }
 
   // Ambient vignette on top of everything, for depth and focus
@@ -587,11 +635,21 @@ function render() {
 }
 
 // HUD
-function updateHUD() {
+let hudTimer = 0;
+function updateHUD(dtMs = 0) {
+  hudTimer += dtMs;
+  if (hudTimer < 100) return;
+
+  hudTimer = 0;
+  let zombieCount = 0;
+  for (const e of entities) {
+    if (e.type === 'zombie') zombieCount++;
+  }
+
   hud.innerHTML = `
     Player: (${Math.round(player.x)}, ${Math.round(player.y)}) HP: ${player.hp}<br>
     Entities: ${entities.length}<br>
-    Zombies: ${entities.filter(e => e.type === 'zombie').length}
+    Zombies: ${zombieCount}
   `;
 }
 
@@ -601,15 +659,16 @@ for (let i = 0; i < 5; i++) {
 }
 
 // LOOP
-let lastTime = Date.now();
+let lastTime = performance.now();
 function loop() {
-  const now = Date.now();
-  const dt = (now - lastTime) / 16.67; // rough ms->frame conversion
+  const now = performance.now();
+  const rawDt = Math.min(now - lastTime, 100);
+  const dt = rawDt / 16.67;
   lastTime = now;
 
   update(dt);
   render();
-  updateHUD();
+  updateHUD(rawDt);
 
   requestAnimationFrame(loop);
 }
