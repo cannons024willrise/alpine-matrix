@@ -94,6 +94,19 @@ const SEED = Math.random() * 1e9;
 const tileCache = new Map();
 const treeCache = new Map();
 
+// Bounded caches: instead of a full clear() (which produces a single ugly
+// stutter every time the player has explored ~10000 tiles), trim the oldest
+// slice of entries so most cached work survives and the cost is spread out.
+function trimCache(map, limit, trimCount) {
+  if (map.size <= limit) return;
+  const it = map.keys();
+  for (let i = 0; i < trimCount; i++) {
+    const k = it.next().value;
+    if (k === undefined) break;
+    map.delete(k);
+  }
+}
+
 function getTile(x, y) {
   const key = `${x},${y}`;
   let tile = tileCache.get(key);
@@ -104,7 +117,7 @@ function getTile(x, y) {
     tile = { type: n > 0.5 ? 'grass' : 'dirt', shade };
 
     // Prevent memory leaks if the player explores endlessly
-    if (tileCache.size > 10000) tileCache.clear();
+    trimCache(tileCache, 10000, 1000);
     tileCache.set(key, tile);
   }
   return tile;
@@ -122,6 +135,69 @@ for (let i = 0; i <= PALETTE_STEPS; i++) {
   DIRT_PALETTE.push(mixColor(DIRT_DARK, DIRT_LIGHT, i / PALETTE_STEPS));
 }
 
+// Everything about a tile that DOESN'T move frame-to-frame (base color,
+// pebbles, flower, and the stationary base of each grass blade) is baked
+// once into a tiny offscreen canvas the first time the tile is seen. Every
+// frame after that costs one drawImage() blit instead of a dozen-plus
+// fillRect() calls with fillStyle switches. Only the swaying blade *tips*
+// still get drawn live, since those actually animate.
+function buildTileBackground(tx, ty, tileData) {
+  const shadeIdx = Math.min(PALETTE_STEPS, Math.floor(tileData.shade * PALETTE_STEPS));
+  const bg = document.createElement('canvas');
+  bg.width = TILE;
+  bg.height = TILE;
+  const bctx = bg.getContext('2d');
+
+  if (tileData.type === 'grass') {
+    bctx.fillStyle = GRASS_PALETTE[shadeIdx];
+    bctx.fillRect(0, 0, TILE, TILE);
+
+    const grassCount = Math.floor(hash(tx, ty, 1) * 6) + 6;
+    const pattern = [];
+    for (let i = 0; i < grassCount; i++) {
+      pattern.push({
+        x: hash(tx, ty, i * 2 + 101),
+        y: hash(tx, ty, i * 2 + 102),
+        offsetSway: (i % 3) - 1,
+        light: hash(tx, ty, i * 2 + 103) > 0.5
+      });
+    }
+    tileData.grassPattern = pattern;
+
+    for (const blade of pattern) {
+      const grassX = Math.floor(blade.x * (TILE - 2));
+      const grassY = Math.floor(blade.y * (TILE - 8) + 4);
+      bctx.fillStyle = blade.light ? '#5bc46a' : '#3a7a42';
+      bctx.fillRect(grassX, grassY + 2, 2, 3); // static base of the blade
+    }
+
+    if (hash(tx, ty, 777) > 0.94) {
+      const flower = {
+        x: hash(tx, ty, 778),
+        y: hash(tx, ty, 779),
+        light: hash(tx, ty, 780) > 0.5
+      };
+      tileData.flower = flower;
+      const fx = Math.floor(flower.x * (TILE - 4) + 2);
+      const fy = Math.floor(flower.y * (TILE - 4) + 2);
+      bctx.fillStyle = flower.light ? '#f2e26b' : '#f0f0f0';
+      bctx.fillRect(fx, fy, 2, 2);
+    }
+  } else {
+    bctx.fillStyle = DIRT_PALETTE[shadeIdx];
+    bctx.fillRect(0, 0, TILE, TILE);
+
+    if (hash(tx, ty, 790) > 0.7) {
+      const rx2 = Math.floor(hash(tx, ty, 791) * (TILE - 6) + 3);
+      const ry2 = Math.floor(hash(tx, ty, 792) * (TILE - 6) + 3);
+      bctx.fillStyle = 'rgba(0,0,0,0.25)';
+      bctx.fillRect(rx2, ry2, 3, 2);
+    }
+  }
+
+  tileData.bgCanvas = bg;
+}
+
 // PINE TREE DRAWING
 // More realistic conical evergreen with dense foliage and proper lighting
 const TIER_COLORS = [
@@ -131,8 +207,9 @@ const TIER_COLORS = [
   { dark: '#2a5030', light: '#4a8a55' }  // top, smallest tier, brightest
 ];
 
-function drawPineTree(ctx, screenX, screenY, seedVal) {
-  const scale = 0.9 + hash(seedVal, 1, 10) * 0.5;
+// Raw drawing routine (unchanged math/visuals) - now only ever called once
+// per distinct tree (seedVal) to bake a sprite, instead of every frame.
+function drawPineTreeRaw(ctx, screenX, screenY, seedVal, scale) {
   const trunkW = Math.max(2, Math.floor(2.5 * scale));
   const trunkH = Math.floor(24 * scale);
 
@@ -145,7 +222,7 @@ function drawPineTree(ctx, screenX, screenY, seedVal) {
   // Trunk with realistic two-tone shading
   const trunkX = Math.floor(screenX - trunkW / 2);
   const trunkTop = Math.floor(screenY - trunkH);
-  
+
   const trunkLit = Math.max(1, Math.floor(trunkW * 0.55));
   ctx.fillStyle = '#5a4a2a';
   ctx.fillRect(trunkX, trunkTop, trunkLit, trunkH);
@@ -177,7 +254,7 @@ function drawPineTree(ctx, screenX, screenY, seedVal) {
       ctx.fillRect(rx, ry, lightW, stepH);
       ctx.fillStyle = dark;
       ctx.fillRect(rx + lightW, ry, Math.max(1, stepW - lightW), stepH);
-      
+
       // Add subtle edge detail on the dark side
       if (stepW > 6) {
         ctx.fillStyle = 'rgba(0,0,0,0.15)';
@@ -187,6 +264,38 @@ function drawPineTree(ctx, screenX, screenY, seedVal) {
     // Greater overlap between tiers for denser look
     currentY -= Math.floor(tierHeight * 0.5);
   }
+}
+
+// Each tree is fully determined by its seedVal, so its appearance is baked
+// once into an offscreen canvas and reused for as long as it stays cached.
+// This turns ~150 fillRect calls per visible tree per frame into a single
+// drawImage() blit.
+const treeSpriteCache = new Map();
+const TREE_SPRITE_SIZE = 160;
+const TREE_ANCHOR_X = 80;
+const TREE_ANCHOR_Y = 130;
+
+function getTreeSprite(seedVal) {
+  let sprite = treeSpriteCache.get(seedVal);
+  if (sprite) return sprite;
+
+  const scale = 0.9 + hash(seedVal, 1, 10) * 0.5;
+  const tc = document.createElement('canvas');
+  tc.width = TREE_SPRITE_SIZE;
+  tc.height = TREE_SPRITE_SIZE;
+  const tctx = tc.getContext('2d');
+  drawPineTreeRaw(tctx, TREE_ANCHOR_X, TREE_ANCHOR_Y, seedVal, scale);
+
+  sprite = { canvas: tc };
+  treeSpriteCache.set(seedVal, sprite);
+  trimCache(treeSpriteCache, 2000, 500);
+
+  return sprite;
+}
+
+function drawPineTree(ctx, screenX, screenY, seedVal) {
+  const sprite = getTreeSprite(seedVal);
+  ctx.drawImage(sprite.canvas, Math.floor(screenX - TREE_ANCHOR_X), Math.floor(screenY - TREE_ANCHOR_Y));
 }
 
 // ZOMBIE SPRITE GENERATION
@@ -447,77 +556,24 @@ function render() {
   for (let ty = startY; ty < startY + rows; ty++) {
     for (let tx = startX; tx < startX + cols; tx++) {
       const tile = getTile(tx, ty);
+      if (!tile.bgCanvas) buildTileBackground(tx, ty, tile);
+
       // Math.floor prevents expensive sub-pixel rendering
       const sx = Math.floor((tx - cx + cols/2) * TILE);
       const sy = Math.floor((ty - cy + rows/2) * TILE);
-      const shadeIdx = Math.min(PALETTE_STEPS, Math.floor(tile.shade * PALETTE_STEPS));
 
-      if (tile.type === 'grass') {
-        // Mottled ground color
-        ctx.fillStyle = GRASS_PALETTE[shadeIdx];
-        ctx.fillRect(sx, sy, TILE, TILE);
+      // Static base (fill, pebbles, blade bases, flower) - one cheap blit.
+      ctx.drawImage(tile.bgCanvas, sx, sy);
 
-        // Visible grass animation with bent tips.
-        // The pattern is cached once per tile; only the bend is recalculated.
+      // Only the swaying blade tips are redrawn live each frame.
+      if (tile.type === 'grass' && tile.grassPattern) {
         const baseSway = Math.sin(time + tx * 0.3 + ty * 0.3) * 3;
-        const tileData = getTile(tx, ty);
-
-        if (!tileData.grassPattern) {
-          const grassCount = Math.floor(hash(tx, ty, 1) * 6) + 6;
-          tileData.grassPattern = [];
-          for (let i = 0; i < grassCount; i++) {
-            tileData.grassPattern.push({
-              x: hash(tx, ty, i * 2 + 101),
-              y: hash(tx, ty, i * 2 + 102),
-              offsetSway: (i % 3) - 1,
-              light: hash(tx, ty, i * 2 + 103) > 0.5
-            });
-          }
-          if (hash(tx, ty, 777) > 0.94) {
-            tileData.flower = {
-              x: hash(tx, ty, 778),
-              y: hash(tx, ty, 779),
-              light: hash(tx, ty, 780) > 0.5
-            };
-          }
-        }
-
-        for (const blade of tileData.grassPattern) {
+        for (const blade of tile.grassPattern) {
           const grassX = Math.floor(sx + blade.x * (TILE - 2));
           const grassY = Math.floor(sy + blade.y * (TILE - 8) + 4);
           const tipBend = Math.floor(baseSway + blade.offsetSway);
-
           ctx.fillStyle = blade.light ? '#5bc46a' : '#3a7a42';
-          ctx.fillRect(grassX, grassY + 2, 2, 3);
           ctx.fillRect(grassX + tipBend, grassY - 2, 2, 2);
-        }
-
-        if (tileData.flower) {
-          const f = tileData.flower;
-          const fx = Math.floor(sx + f.x * (TILE - 4) + 2);
-          const fy = Math.floor(sy + f.y * (TILE - 4) + 2);
-          ctx.fillStyle = f.light ? '#f2e26b' : '#f0f0f0';
-          ctx.fillRect(fx, fy, 2, 2);
-        }
-
-        // Occasional flower detail
-        if (hash(tx, ty, 777) > 0.94) {
-          const fx = Math.floor(sx + hash(tx, ty, 778) * (TILE - 4) + 2);
-          const fy = Math.floor(sy + hash(tx, ty, 779) * (TILE - 4) + 2);
-          ctx.fillStyle = hash(tx, ty, 780) > 0.5 ? '#f2e26b' : '#f0f0f0';
-          ctx.fillRect(fx, fy, 2, 2);
-        }
-      } else {
-        // Earthy dirt tones instead of a near-black green
-        ctx.fillStyle = DIRT_PALETTE[shadeIdx];
-        ctx.fillRect(sx, sy, TILE, TILE);
-
-        // Small pebbles for texture
-        if (hash(tx, ty, 790) > 0.7) {
-          const rx2 = Math.floor(sx + hash(tx, ty, 791) * (TILE - 6) + 3);
-          const ry2 = Math.floor(sy + hash(tx, ty, 792) * (TILE - 6) + 3);
-          ctx.fillStyle = 'rgba(0,0,0,0.25)';
-          ctx.fillRect(rx2, ry2, 3, 2);
         }
       }
     }
@@ -545,6 +601,7 @@ function render() {
         } else {
           tree = null;
         }
+        trimCache(treeCache, 10000, 1000);
         treeCache.set(key, tree);
       }
 
