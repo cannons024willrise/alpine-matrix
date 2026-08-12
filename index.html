@@ -50,7 +50,8 @@ window.addEventListener('resize', () => {
   buildVignette();
 });
 
-const TILE = 32;
+const TILE = 64;
+const SCALE = 2; // Global scale factor for all visual elements
 let viewportCols = Math.ceil(W / TILE) + 4;
 let viewportRows = Math.ceil(H / TILE) + 4;
 
@@ -93,6 +94,7 @@ function mixColor(c1, c2, t) {
 const SEED = Math.random() * 1e9;
 const tileCache = new Map();
 const treeCache = new Map();
+const pebbleCache = new Map(); // Track which tiles have spawned their pebbles
 
 // Bounded caches: instead of a full clear() (which produces a single ugly
 // stutter every time the player has explored ~10000 tiles), trim the oldest
@@ -123,10 +125,48 @@ function getTile(x, y) {
   return tile;
 }
 
+// Generate big pebbles for a tile (only for dirt tiles)
+function generatePebblesForTile(tx, ty) {
+  const key = `${tx},${ty}`;
+  if (pebbleCache.has(key)) return; // Already generated
+  
+  const tile = getTile(tx, ty);
+  if (tile.type !== 'dirt') {
+    pebbleCache.set(key, true);
+    return; // No pebbles on grass
+  }
+  
+  const largeRockCount = Math.floor(hash(tx, ty, 850) * 2.5) + 1; // 1-3 larger rocks
+  for (let i = 0; i < largeRockCount; i++) {
+    const rSeed = 851 + i * 5;
+    const radius = 0.08 + hash(tx, ty, rSeed + 2) * 0.08; // 0.08-0.16 world units
+    // Position within tile bounds, accounting for radius
+    const localX = (hash(tx, ty, rSeed) * (1 - radius * 2)) + radius; // Fit within tile
+    const localY = (hash(tx, ty, rSeed + 1) * (1 - radius * 2)) + radius;
+    const worldX = tx + localX;
+    const worldY = ty + localY;
+    const tone = hash(tx, ty, rSeed + 3);
+    const light = hash(tx, ty, rSeed + 4);
+    
+    // Create clickable pebble entity
+    createEntity('pebble', worldX, worldY, {
+      radius,
+      tone,
+      light,
+      tileX: tx,
+      tileY: ty,
+      seed: Math.floor(hash(tx, ty, rSeed + 6) * 100000)
+    });
+    console.log(`Created pebble at (${worldX.toFixed(2)}, ${worldY.toFixed(2)}) radius=${radius.toFixed(3)}`);
+  }
+  
+  pebbleCache.set(key, true);
+}
+
 // Precomputed terrain palettes (dark->light) so each tile is a cheap array
 // lookup at render time instead of blending colors every frame.
 const GRASS_DARK = '#1f4620', GRASS_LIGHT = '#3c7a3f';
-const DIRT_DARK = '#2a1c10', DIRT_LIGHT = '#4a3319';
+const DIRT_DARK = '#38352f', DIRT_LIGHT = '#6f6a5e';
 const PALETTE_STEPS = 8;
 const GRASS_PALETTE = [];
 const DIRT_PALETTE = [];
@@ -165,10 +205,10 @@ function buildTileBackground(tx, ty, tileData) {
     tileData.grassPattern = pattern;
 
     for (const blade of pattern) {
-      const grassX = Math.floor(blade.x * (TILE - 2));
-      const grassY = Math.floor(blade.y * (TILE - 8) + 4);
+      const grassX = Math.floor(blade.x * (TILE - 2 * SCALE));
+      const grassY = Math.floor(blade.y * (TILE - 8 * SCALE) + 4 * SCALE);
       bctx.fillStyle = blade.light ? '#5bc46a' : '#3a7a42';
-      bctx.fillRect(grassX, grassY + 2, 2, 3); // static base of the blade
+      bctx.fillRect(grassX, grassY + 2 * SCALE, 2 * SCALE, 3 * SCALE); // static base of the blade
     }
 
     if (hash(tx, ty, 777) > 0.94) {
@@ -178,20 +218,37 @@ function buildTileBackground(tx, ty, tileData) {
         light: hash(tx, ty, 780) > 0.5
       };
       tileData.flower = flower;
-      const fx = Math.floor(flower.x * (TILE - 4) + 2);
-      const fy = Math.floor(flower.y * (TILE - 4) + 2);
+      const fx = Math.floor(flower.x * (TILE - 4 * SCALE) + 2 * SCALE);
+      const fy = Math.floor(flower.y * (TILE - 4 * SCALE) + 2 * SCALE);
       bctx.fillStyle = flower.light ? '#f2e26b' : '#f0f0f0';
-      bctx.fillRect(fx, fy, 2, 2);
+      bctx.fillRect(fx, fy, 2 * SCALE, 2 * SCALE);
     }
   } else {
     bctx.fillStyle = DIRT_PALETTE[shadeIdx];
     bctx.fillRect(0, 0, TILE, TILE);
 
-    if (hash(tx, ty, 790) > 0.7) {
-      const rx2 = Math.floor(hash(tx, ty, 791) * (TILE - 6) + 3);
-      const ry2 = Math.floor(hash(tx, ty, 792) * (TILE - 6) + 3);
-      bctx.fillStyle = 'rgba(0,0,0,0.25)';
-      bctx.fillRect(rx2, ry2, 3, 2);
+    // Small pebbles: numerous tiny stones scattered across the tile
+    const smallPebbleCount = Math.floor(hash(tx, ty, 790) * 8) + 5; // 5-12 small pebbles
+    for (let i = 0; i < smallPebbleCount; i++) {
+      const pSeed = 791 + i * 3;
+      const px = Math.floor(hash(tx, ty, pSeed) * TILE);
+      const py = Math.floor(hash(tx, ty, pSeed + 1) * TILE);
+      const pTone = hash(tx, ty, pSeed + 2);
+      bctx.fillStyle = pTone > 0.7 ? 'rgba(220,215,205,0.5)'
+                       : pTone > 0.4 ? 'rgba(160,155,145,0.5)'
+                       : 'rgba(120,115,105,0.45)';
+      // Draw small pebbles as circles, radius ~0.75px * SCALE
+      bctx.beginPath();
+      bctx.arc(px + 0.5, py + 0.5, 0.75 * SCALE, 0, Math.PI * 2);
+      bctx.fill();
+    }
+
+    // Occasional patch of grey-green lichen clinging to the rocky soil
+    if (hash(tx, ty, 900) > 0.88) {
+      const lx = Math.floor(hash(tx, ty, 901) * (TILE - 6 * SCALE) + 3 * SCALE);
+      const ly = Math.floor(hash(tx, ty, 902) * (TILE - 6 * SCALE) + 3 * SCALE);
+      bctx.fillStyle = 'rgba(122,133,108,0.45)';
+      bctx.fillRect(lx, ly, 3 * SCALE, 2 * SCALE);
     }
   }
 
@@ -271,18 +328,18 @@ function drawPineTreeRaw(ctx, screenX, screenY, seedVal, scale) {
 // This turns ~150 fillRect calls per visible tree per frame into a single
 // drawImage() blit.
 const treeSpriteCache = new Map();
-const TREE_SPRITE_SIZE = 160;
-const TREE_ANCHOR_X = 80;
-const TREE_ANCHOR_Y = 130;
+const TREE_SPRITE_SIZE = 160 * SCALE;
+const TREE_ANCHOR_X = 80 * SCALE;
+const TREE_ANCHOR_Y = 130 * SCALE;
 
 function getTreeSprite(seedVal) {
   let sprite = treeSpriteCache.get(seedVal);
   if (sprite) return sprite;
 
-  const scale = 0.9 + hash(seedVal, 1, 10) * 0.5;
+  const scale = (0.9 + hash(seedVal, 1, 10) * 0.5) * SCALE;
   const tc = document.createElement('canvas');
-  tc.width = TREE_SPRITE_SIZE;
-  tc.height = TREE_SPRITE_SIZE;
+  tc.width = TREE_SPRITE_SIZE * SCALE;
+  tc.height = TREE_SPRITE_SIZE * SCALE;
   const tctx = tc.getContext('2d');
   drawPineTreeRaw(tctx, TREE_ANCHOR_X, TREE_ANCHOR_Y, seedVal, scale);
 
@@ -374,14 +431,15 @@ function currentZombieSprite(e) {
 const entities = [];
 let nextId = 0;
 
-function createEntity(type, x, y) {
+function createEntity(type, x, y, data) {
   const entity = {
     id: nextId++,
     type,
     x, y,
     vx: 0, vy: 0,
     hp: type === 'zombie' ? 30 : 100,
-    animPhase: 0
+    animPhase: 0,
+    ...data
   };
   if (type === 'zombie') {
     entity.colorSeed = Math.random();
@@ -478,6 +536,42 @@ const keys = {};
 window.addEventListener('keydown', e => { keys[e.key] = true; });
 window.addEventListener('keyup', e => { keys[e.key] = false; });
 
+window.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  // Convert screen pixel to world coordinates
+  const screenX = e.clientX - rect.left;
+  const screenY = e.clientY - rect.top;
+  const clickX = screenX / TILE + (player.x - viewportCols/2);
+  const clickY = screenY / TILE + (player.y - viewportRows/2);
+  
+  console.log(`Click at screen (${screenX.toFixed(0)}, ${screenY.toFixed(0)}) -> world (${clickX.toFixed(2)}, ${clickY.toFixed(2)})`);
+  console.log(`Player at (${player.x.toFixed(2)}, ${player.y.toFixed(2)}), viewport ${viewportCols}x${viewportRows}`);
+  console.log(`Total pebbles in world: ${entities.filter(e => e.type === 'pebble').length}`);
+  
+  let hitPebble = false;
+  // Check if a pebble was clicked (generous hit radius for playability)
+  for (const ent of entities) {
+    if (ent.type === 'pebble') {
+      const dx = clickX - ent.x;
+      const dy = clickY - ent.y;
+      const dist = Math.hypot(dx, dy);
+      const hitRadius = ent.radius + 0.1; // Generous hit box
+      console.log(`  Pebble at (${ent.x.toFixed(2)}, ${ent.y.toFixed(2)}) r=${ent.radius.toFixed(3)}: dist=${dist.toFixed(3)} vs hitR=${hitRadius.toFixed(3)}`);
+      if (dist < hitRadius) {
+        // Pebble clicked!
+        console.log('  -> HIT!');
+        ent.clicked = true;
+        hitPebble = true;
+        setTimeout(() => { ent.clicked = false; }, 200); // Visual feedback
+        break; // Only one pebble per click
+      }
+    }
+  }
+  if (!hitPebble) {
+    console.log('No pebble hit');
+  }
+});
+
 // UPDATE
 function update(dt) {
   // player movement
@@ -557,6 +651,9 @@ function render() {
     for (let tx = startX; tx < startX + cols; tx++) {
       const tile = getTile(tx, ty);
       if (!tile.bgCanvas) buildTileBackground(tx, ty, tile);
+      
+      // Generate big pebbles for this tile if not already done
+      generatePebblesForTile(tx, ty);
 
       // Math.floor prevents expensive sub-pixel rendering
       const sx = Math.floor((tx - cx + cols/2) * TILE);
@@ -569,11 +666,11 @@ function render() {
       if (tile.type === 'grass' && tile.grassPattern) {
         const baseSway = Math.sin(time + tx * 0.3 + ty * 0.3) * 3;
         for (const blade of tile.grassPattern) {
-          const grassX = Math.floor(sx + blade.x * (TILE - 2));
-          const grassY = Math.floor(sy + blade.y * (TILE - 8) + 4);
+          const grassX = Math.floor(sx + blade.x * (TILE - 2 * SCALE));
+          const grassY = Math.floor(sy + blade.y * (TILE - 8 * SCALE) + 4 * SCALE);
           const tipBend = Math.floor(baseSway + blade.offsetSway);
           ctx.fillStyle = blade.light ? '#5bc46a' : '#3a7a42';
-          ctx.fillRect(grassX + tipBend, grassY - 2, 2, 2);
+          ctx.fillRect(grassX + tipBend, grassY - 2 * SCALE, 2 * SCALE, 2 * SCALE);
         }
       }
     }
@@ -651,6 +748,54 @@ function render() {
           } else {
             ctx.fillStyle = e.aware ? '#f00' : '#600';
             ctx.fillRect(sx + 4, sy + 4, TILE - 8, TILE - 8);
+          }
+        }
+      });
+    } else if (e.type === 'pebble') {
+      drawObjects.push({
+        type: 'pebble',
+        y: e.y,
+        render: () => {
+          const pRadius = Math.floor(e.radius * TILE);
+          const px = sx;
+          const py = sy;
+          
+          // Pixelated pebble: draw as small squares in a circular pattern
+          ctx.fillStyle = e.tone > 0.65 ? 'rgba(100,95,85,0.8)'
+                           : e.tone > 0.35 ? 'rgba(140,135,125,0.8)'
+                           : 'rgba(180,175,165,0.7)';
+          
+          const pixelSize = Math.max(1, Math.floor(pRadius / 3));
+          for (let dy = -pRadius; dy <= pRadius; dy += pixelSize) {
+            for (let dx = -pRadius; dx <= pRadius; dx += pixelSize) {
+              const dist = Math.hypot(dx, dy);
+              if (dist <= pRadius) {
+                ctx.fillRect(px + dx, py + dy, pixelSize, pixelSize);
+              }
+            }
+          }
+          
+          // Highlight on lit side
+          if (e.light > 0.5) {
+            ctx.fillStyle = 'rgba(220,215,205,0.5)';
+            const hlRadius = Math.floor(pRadius * 0.35);
+            const hlPixelSize = Math.max(1, Math.floor(hlRadius / 2));
+            for (let dy = -hlRadius; dy <= hlRadius; dy += hlPixelSize) {
+              for (let dx = -hlRadius; dx <= hlRadius; dx += hlPixelSize) {
+                const dist = Math.hypot(dx, dy);
+                if (dist <= hlRadius) {
+                  ctx.fillRect(px - Math.floor(pRadius * 0.3) + dx, 
+                              py - Math.floor(pRadius * 0.3) + dy, hlPixelSize, hlPixelSize);
+                }
+              }
+            }
+          }
+          
+          // Click feedback
+          if (e.clicked) {
+            ctx.strokeStyle = '#ff0';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(px - pRadius - 2, py - pRadius - 2, (pRadius + 2) * 2, (pRadius + 2) * 2);
           }
         }
       });
