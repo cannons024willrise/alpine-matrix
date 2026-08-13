@@ -94,7 +94,10 @@ function mixColor(c1, c2, t) {
 const SEED = Math.random() * 1e9;
 const tileCache = new Map();
 const treeCache = new Map();
+const treeEntityCache = new Map(); // Track which tiles have spawned tree entities
 const pebbleCache = new Map(); // Track which tiles have spawned their pebbles
+const MAX_PEBBLES = 400; // Cap on live pebble entities to avoid unbounded growth
+let frameCounter = 0;
 
 // Bounded caches: instead of a full clear() (which produces a single ugly
 // stutter every time the player has explored ~10000 tiles), trim the oldest
@@ -125,7 +128,47 @@ function getTile(x, y) {
   return tile;
 }
 
-// Generate big pebbles for a tile (only for dirt tiles)
+// Generate tree entity for a tile (only if tree should exist here)
+function generateTreeEntityForTile(tx, ty) {
+  const key = `${tx},${ty}`;
+  if (treeEntityCache.has(key)) return; // Already generated or checked
+  
+  const treeDensity = noise(tx * 0.12, ty * 0.12, SEED + 500);
+  const sparseNoise = noise(tx * 0.08, ty * 0.08, SEED + 501); // Different noise for sparse trees
+  
+  // Two tree placement systems:
+  // 1. Clustered trees (main pattern at density > 0.55)
+  // 2. Sparse isolated trees (rare, anywhere, adds variety)
+  let shouldSpawnTree = false;
+  
+  if (treeDensity > 0.72) {
+    shouldSpawnTree = true;  // Normal clustered tree - much higher threshold
+  } else if (sparseNoise > 0.92) {
+    shouldSpawnTree = true;  // Rare isolated tree scattered randomly
+  }
+  
+  if (!shouldSpawnTree) {
+    treeEntityCache.set(key, true);
+    return; // No tree on this tile
+  }
+  
+  const offsetX = (hash(tx, ty, 801) - 0.5) * TILE * 1.2;
+  const offsetY = (hash(tx, ty, 802) - 0.5) * TILE * 1.2;
+  const worldX = tx + 0.5 + offsetX / TILE;
+  const worldY = ty + 0.5 + offsetY / TILE;
+  const seedVal = Math.floor(hash(tx, ty, 999) * 100000);
+  
+  // Create clickable tree entity with collision radius
+  createEntity('tree', worldX, worldY, {
+    seedVal,
+    radius: 0.25,  // Collision radius - easier to walk through forests
+    tileX: tx,
+    tileY: ty,
+    solid: true    // Flag for collision detection
+  });
+  
+  treeEntityCache.set(key, true);
+}
 function generatePebblesForTile(tx, ty) {
   const key = `${tx},${ty}`;
   if (pebbleCache.has(key)) return; // Already generated
@@ -157,7 +200,6 @@ function generatePebblesForTile(tx, ty) {
       tileY: ty,
       seed: Math.floor(hash(tx, ty, rSeed + 6) * 100000)
     });
-    console.log(`Created pebble at (${worldX.toFixed(2)}, ${worldY.toFixed(2)}) radius=${radius.toFixed(3)}`);
   }
   
   pebbleCache.set(key, true);
@@ -165,8 +207,10 @@ function generatePebblesForTile(tx, ty) {
 
 // Precomputed terrain palettes (dark->light) so each tile is a cheap array
 // lookup at render time instead of blending colors every frame.
+// Alpine soil: authentic grey-toned weathered earth with exposed limestone/granite
+// Much lighter and greyer than lowland soil, minimal brown
 const GRASS_DARK = '#1f4620', GRASS_LIGHT = '#3c7a3f';
-const DIRT_DARK = '#38352f', DIRT_LIGHT = '#6f6a5e';
+const DIRT_DARK = '#6b6861', DIRT_LIGHT = '#9b9289';
 const PALETTE_STEPS = 8;
 const GRASS_PALETTE = [];
 const DIRT_PALETTE = [];
@@ -227,28 +271,39 @@ function buildTileBackground(tx, ty, tileData) {
     bctx.fillStyle = DIRT_PALETTE[shadeIdx];
     bctx.fillRect(0, 0, TILE, TILE);
 
-    // Small pebbles: numerous tiny stones scattered across the tile
+    // Small pebbles: numerous tiny Alpine stones scattered across the tile
+    // Alpine scree includes pale limestone, grey granite, and weathered schist
     const smallPebbleCount = Math.floor(hash(tx, ty, 790) * 8) + 5; // 5-12 small pebbles
     for (let i = 0; i < smallPebbleCount; i++) {
       const pSeed = 791 + i * 3;
       const px = Math.floor(hash(tx, ty, pSeed) * TILE);
       const py = Math.floor(hash(tx, ty, pSeed + 1) * TILE);
       const pTone = hash(tx, ty, pSeed + 2);
-      bctx.fillStyle = pTone > 0.7 ? 'rgba(220,215,205,0.5)'
-                       : pTone > 0.4 ? 'rgba(160,155,145,0.5)'
-                       : 'rgba(120,115,105,0.45)';
+      // Alpine stone palette: pale limestone, medium grey, dark schist
+      bctx.fillStyle = pTone > 0.75 ? 'rgba(230,225,215,0.55)'  // pale limestone
+                       : pTone > 0.5 ? 'rgba(170,165,155,0.5)'   // medium grey
+                       : pTone > 0.25 ? 'rgba(130,125,115,0.5)'  // darker schist
+                       : 'rgba(90,85,75,0.45)';                  // dark slate
       // Draw small pebbles as circles, radius ~0.75px * SCALE
       bctx.beginPath();
       bctx.arc(px + 0.5, py + 0.5, 0.75 * SCALE, 0, Math.PI * 2);
       bctx.fill();
     }
 
-    // Occasional patch of grey-green lichen clinging to the rocky soil
-    if (hash(tx, ty, 900) > 0.88) {
+    // Sparse Alpine lichen and moss: grey-green patches on rocks
+    if (hash(tx, ty, 900) > 0.85) {
       const lx = Math.floor(hash(tx, ty, 901) * (TILE - 6 * SCALE) + 3 * SCALE);
       const ly = Math.floor(hash(tx, ty, 902) * (TILE - 6 * SCALE) + 3 * SCALE);
-      bctx.fillStyle = 'rgba(122,133,108,0.45)';
+      bctx.fillStyle = 'rgba(110,120,95,0.4)'; // Sparse, muted Alpine moss
       bctx.fillRect(lx, ly, 3 * SCALE, 2 * SCALE);
+    }
+    
+    // Occasional exposed pale stone outcrops (Alpine limestone bedrock)
+    if (hash(tx, ty, 910) > 0.92) {
+      const sx = Math.floor(hash(tx, ty, 911) * (TILE - 8 * SCALE) + 4 * SCALE);
+      const sy = Math.floor(hash(tx, ty, 912) * (TILE - 8 * SCALE) + 4 * SCALE);
+      bctx.fillStyle = 'rgba(235,230,220,0.3)'; // Pale exposed rock
+      bctx.fillRect(sx, sy, 4 * SCALE, 3 * SCALE);
     }
   }
 
@@ -453,6 +508,7 @@ const player = {
   vx: 0, vy: 0,
   hp: 100,
   speed: 0.15,
+  radius: 0.2,  // Collision radius for tree/solid entity interaction
   facingAngle: Math.PI / 2, // radians, 0 = facing right
   animPhase: 0,
   moving: false
@@ -544,33 +600,63 @@ window.addEventListener('click', (e) => {
   const clickX = screenX / TILE + (player.x - viewportCols/2);
   const clickY = screenY / TILE + (player.y - viewportRows/2);
   
-  console.log(`Click at screen (${screenX.toFixed(0)}, ${screenY.toFixed(0)}) -> world (${clickX.toFixed(2)}, ${clickY.toFixed(2)})`);
-  console.log(`Player at (${player.x.toFixed(2)}, ${player.y.toFixed(2)}), viewport ${viewportCols}x${viewportRows}`);
-  console.log(`Total pebbles in world: ${entities.filter(e => e.type === 'pebble').length}`);
-  
   let hitPebble = false;
-  // Check if a pebble was clicked (generous hit radius for playability)
+  // Check if a pebble or tree was clicked (generous hit radius for playability)
   for (const ent of entities) {
-    if (ent.type === 'pebble') {
+    if (ent.type === 'pebble' || ent.type === 'tree') {
       const dx = clickX - ent.x;
       const dy = clickY - ent.y;
       const dist = Math.hypot(dx, dy);
       const hitRadius = ent.radius + 0.1; // Generous hit box
-      console.log(`  Pebble at (${ent.x.toFixed(2)}, ${ent.y.toFixed(2)}) r=${ent.radius.toFixed(3)}: dist=${dist.toFixed(3)} vs hitR=${hitRadius.toFixed(3)}`);
       if (dist < hitRadius) {
-        // Pebble clicked!
-        console.log('  -> HIT!');
+        // Entity clicked!
         ent.clicked = true;
         hitPebble = true;
         setTimeout(() => { ent.clicked = false; }, 200); // Visual feedback
-        break; // Only one pebble per click
+        break; // Only one entity per click
       }
     }
   }
-  if (!hitPebble) {
-    console.log('No pebble hit');
-  }
 });
+
+// Removes the farthest pebbles and trees once the live count exceeds MAX_PEBBLES,
+// and clears their tile from the cache so they can respawn if the player wanders back.
+// Without this, entities accumulate forever as new tiles come into view and the
+// entities array (walked every frame for AI + rendering) grows unbounded.
+function cullFarEntities() {
+  let pebbleCount = 0, treeCount = 0;
+  for (let i = 0; i < entities.length; i++) {
+    if (entities[i].type === 'pebble') pebbleCount++;
+    else if (entities[i].type === 'tree') treeCount++;
+  }
+  const totalCount = pebbleCount + treeCount;
+  if (totalCount <= MAX_PEBBLES) return;
+
+  const withDist = [];
+  for (let i = 0; i < entities.length; i++) {
+    const e = entities[i];
+    if (e.type !== 'pebble' && e.type !== 'tree') continue;
+    const dx = e.x - player.x, dy = e.y - player.y;
+    withDist.push({ i, distSq: dx * dx + dy * dy, e });
+  }
+  withDist.sort((a, b) => b.distSq - a.distSq); // farthest first
+
+  const excess = totalCount - MAX_PEBBLES;
+  const removeIndices = new Set();
+  for (let i = 0; i < excess; i++) {
+    const item = withDist[i];
+    removeIndices.add(item.i);
+    // Clear from appropriate cache so tile can respawn entity if player returns
+    if (item.e.type === 'pebble') {
+      pebbleCache.delete(`${item.e.tileX},${item.e.tileY}`);
+    } else if (item.e.type === 'tree') {
+      treeEntityCache.delete(`${item.e.tileX},${item.e.tileY}`);
+    }
+  }
+  for (let i = entities.length - 1; i >= 0; i--) {
+    if (removeIndices.has(i)) entities.splice(i, 1);
+  }
+}
 
 // UPDATE
 function update(dt) {
@@ -590,6 +676,29 @@ function update(dt) {
 
   player.x += player.vx;
   player.y += player.vy;
+
+  // Tree collision: prevent player from walking through solid trees
+  for (const e of entities) {
+    if (e.type === 'tree' && e.solid) {
+      const dx = player.x - e.x;
+      const dy = player.y - e.y;
+      const dist = Math.hypot(dx, dy);
+      const minDist = player.radius + e.radius; // collision distance
+      if (dist < minDist) {
+        // Push player back out of tree
+        if (dist > 0.001) {
+          const pushBackDist = (minDist - dist) + 0.01;
+          const angle = Math.atan2(dy, dx);
+          player.x += Math.cos(angle) * pushBackDist;
+          player.y += Math.sin(angle) * pushBackDist;
+        }
+      }
+    }
+  }
+
+  // Throttled: only check entity count periodically, not every frame
+  frameCounter = (frameCounter + 1) % 30;
+  if (frameCounter === 0) cullFarEntities();
 
   // entity AI
   for (const e of entities) {
@@ -679,45 +788,14 @@ function render() {
   // Y-Sorted Objects Pass (Pine Trees, Zombies, Player)
   const drawObjects = [];
 
-  // Deterministic tree placement is cached per world tile.
+  // Generate tree entities as tiles come into view
   for (let ty = startY - 2; ty < startY + rows + 2; ty++) {
     for (let tx = startX - 2; tx < startX + cols + 2; tx++) {
-      const key = tx + ',' + ty;
-      let tree = treeCache.get(key);
-
-      if (tree === undefined) {
-        const treeDensity = noise(tx * 0.12, ty * 0.12, SEED + 500);
-        if (treeDensity > 0.62) {
-          const offsetX = (hash(tx, ty, 801) - 0.5) * TILE * 1.2;
-          const offsetY = (hash(tx, ty, 802) - 0.5) * TILE * 1.2;
-          tree = {
-            worldX: tx + 0.5 + offsetX / TILE,
-            worldY: ty + 0.5 + offsetY / TILE,
-            seedVal: Math.floor(hash(tx, ty, 999) * 100000)
-          };
-        } else {
-          tree = null;
-        }
-        trimCache(treeCache, 10000, 1000);
-        treeCache.set(key, tree);
-      }
-
-      if (tree) {
-        const sx = Math.floor((tree.worldX - cx + cols/2) * TILE);
-        const sy = Math.floor((tree.worldY - cy + rows/2) * TILE);
-
-        drawObjects.push({
-          type: 'tree',
-          y: tree.worldY,
-          sx,
-          sy,
-          seedVal: tree.seedVal
-        });
-      }
+      generateTreeEntityForTile(tx, ty);
     }
   }
 
-  // Entities
+  // Entities - add to Y-sorted draw list
   for (const e of entities) {
     const sx = Math.floor((e.x - cx + cols/2) * TILE);
     const sy = Math.floor((e.y - cy + rows/2) * TILE);
@@ -751,6 +829,29 @@ function render() {
           }
         }
       });
+    } else if (e.type === 'tree') {
+      drawObjects.push({
+        type: 'tree',
+        y: e.y,
+        render: () => {
+          const spriteSize = TILE * 4.5;
+          const treeSprite = getTreeSprite(e.seedVal);
+          const dx = Math.floor(sx - spriteSize/2);
+          const dy = Math.floor(sy - spriteSize/2);
+          if (treeSprite.canvas) {
+            ctx.drawImage(treeSprite.canvas, dx, dy, spriteSize, spriteSize);
+          }
+          
+          // Click feedback - highlight when selected
+          if (e.clicked) {
+            ctx.strokeStyle = '#0f0';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(sx, sy, Math.floor(e.radius * TILE) + 5, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
+      });
     } else if (e.type === 'pebble') {
       drawObjects.push({
         type: 'pebble',
@@ -760,42 +861,30 @@ function render() {
           const px = sx;
           const py = sy;
           
-          // Pixelated pebble: draw as small squares in a circular pattern
+          // Simple filled circle pebble - much faster than nested pixel loops
           ctx.fillStyle = e.tone > 0.65 ? 'rgba(100,95,85,0.8)'
                            : e.tone > 0.35 ? 'rgba(140,135,125,0.8)'
                            : 'rgba(180,175,165,0.7)';
-          
-          const pixelSize = Math.max(1, Math.floor(pRadius / 3));
-          for (let dy = -pRadius; dy <= pRadius; dy += pixelSize) {
-            for (let dx = -pRadius; dx <= pRadius; dx += pixelSize) {
-              const dist = Math.hypot(dx, dy);
-              if (dist <= pRadius) {
-                ctx.fillRect(px + dx, py + dy, pixelSize, pixelSize);
-              }
-            }
-          }
+          ctx.beginPath();
+          ctx.arc(px, py, pRadius, 0, Math.PI * 2);
+          ctx.fill();
           
           // Highlight on lit side
           if (e.light > 0.5) {
             ctx.fillStyle = 'rgba(220,215,205,0.5)';
-            const hlRadius = Math.floor(pRadius * 0.35);
-            const hlPixelSize = Math.max(1, Math.floor(hlRadius / 2));
-            for (let dy = -hlRadius; dy <= hlRadius; dy += hlPixelSize) {
-              for (let dx = -hlRadius; dx <= hlRadius; dx += hlPixelSize) {
-                const dist = Math.hypot(dx, dy);
-                if (dist <= hlRadius) {
-                  ctx.fillRect(px - Math.floor(pRadius * 0.3) + dx, 
-                              py - Math.floor(pRadius * 0.3) + dy, hlPixelSize, hlPixelSize);
-                }
-              }
-            }
+            ctx.beginPath();
+            ctx.arc(px - Math.floor(pRadius * 0.3), py - Math.floor(pRadius * 0.3), 
+                    Math.floor(pRadius * 0.35), 0, Math.PI * 2);
+            ctx.fill();
           }
           
           // Click feedback
           if (e.clicked) {
             ctx.strokeStyle = '#ff0';
             ctx.lineWidth = 2;
-            ctx.strokeRect(px - pRadius - 2, py - pRadius - 2, (pRadius + 2) * 2, (pRadius + 2) * 2);
+            ctx.beginPath();
+            ctx.arc(px, py, pRadius + 3, 0, Math.PI * 2);
+            ctx.stroke();
           }
         }
       });
@@ -825,11 +914,7 @@ function render() {
   // Sort by Y position so characters pass naturally behind/in front of trees
   drawObjects.sort((a, b) => a.y - b.y);
   for (const obj of drawObjects) {
-    if (obj.type === 'tree') {
-      drawPineTree(ctx, obj.sx, obj.sy, obj.seedVal);
-    } else {
-      obj.render();
-    }
+    obj.render();
   }
 
   // Ambient vignette on top of everything, for depth and focus
