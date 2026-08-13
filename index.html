@@ -135,16 +135,19 @@ function generateTreeEntityForTile(tx, ty) {
   
   const treeDensity = noise(tx * 0.12, ty * 0.12, SEED + 500);
   const sparseNoise = noise(tx * 0.08, ty * 0.08, SEED + 501); // Different noise for sparse trees
+  const internalSpacing = hash(tx, ty, 803); // Per-tile random for internal forest spacing
   
   // Two tree placement systems:
-  // 1. Clustered trees (main pattern at density > 0.55)
+  // 1. Clustered trees in forest areas (density > 0.72) but still internally spaced
   // 2. Sparse isolated trees (rare, anywhere, adds variety)
   let shouldSpawnTree = false;
   
-  if (treeDensity > 0.72) {
-    shouldSpawnTree = true;  // Normal clustered tree - much higher threshold
+  if (treeDensity > 0.72 && internalSpacing > 0.6) {
+    // Forest area AND passes spacing filter = tree spawns
+    shouldSpawnTree = true;
   } else if (sparseNoise > 0.92) {
-    shouldSpawnTree = true;  // Rare isolated tree scattered randomly
+    // Rare isolated tree scattered randomly
+    shouldSpawnTree = true;
   }
   
   if (!shouldSpawnTree) {
@@ -834,7 +837,7 @@ function render() {
         type: 'tree',
         y: e.y,
         render: () => {
-          const spriteSize = TILE * 4.5;
+          const spriteSize = TILE * 6.5;
           const treeSprite = getTreeSprite(e.seedVal);
           const dx = Math.floor(sx - spriteSize/2);
           const dy = Math.floor(sy - spriteSize/2);
