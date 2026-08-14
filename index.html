@@ -2,968 +2,231 @@
 <html>
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>BASE</title>
 <style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{background:#000;font-family:monospace;color:#0f0}
-  canvas{display:block;image-rendering:pixelated}
-  #hud{position:fixed;top:10px;left:10px;font-size:12px;line-height:1.5;z-index:10}
+html,body{width:100%;height:100%;overflow:hidden;touch-action:none;overscroll-behavior:none}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;font-family:monospace;color:#0f0}
+canvas{display:block;image-rendering:pixelated}
+#hud{position:fixed;top:max(10px,env(safe-area-inset-top));left:max(10px,env(safe-area-inset-left));font-size:12px;line-height:1.5;z-index:10;pointer-events:none;text-shadow:1px 1px #000}
+#mobileControls{display:none;position:fixed;inset:0;z-index:20;pointer-events:none}
+#joystick{position:absolute;left:max(18px,env(safe-area-inset-left));bottom:max(22px,env(safe-area-inset-bottom));width:118px;height:118px;border:2px solid rgba(255,255,255,.3);border-radius:50%;background:rgba(0,0,0,.18);pointer-events:auto;touch-action:none}
+#joystickKnob{position:absolute;left:39px;top:39px;width:36px;height:36px;border-radius:50%;background:rgba(220,240,225,.65);box-shadow:0 0 0 2px rgba(0,0,0,.25)}
+#actionButton{position:absolute;right:max(22px,env(safe-area-inset-right));bottom:max(28px,env(safe-area-inset-bottom));width:82px;height:82px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(0,70,0,.38);color:#d8ffe0;font:700 15px monospace;pointer-events:auto;touch-action:none}
+@media (pointer:coarse), (max-width:700px){#mobileControls{display:block}#hud{font-size:11px}}
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
 <div id="hud"></div>
+<div id="mobileControls"><div id="joystick"><div id="joystickKnob"></div></div><button id="actionButton" type="button">ACT</button></div>
 <script>
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
-const hud = document.getElementById('hud');
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+const hud=document.getElementById('hud');
+let W=innerWidth,H=innerHeight;
+const touchMove={x:0,y:0,active:false};
+let suppressNextClick=false;
+canvas.width=W;canvas.height=H;
+const TILE=32,SCALE=1;
+let viewportCols=Math.ceil(W/TILE)+4,viewportRows=Math.ceil(H/TILE)+4;
+let vignetteCanvas=null;
+function buildVignette(){const vc=document.createElement('canvas');vc.width=W;vc.height=H;const c=vc.getContext('2d');const g=c.createRadialGradient(W/2,H/2,Math.min(W,H)*.35,W/2,H/2,Math.max(W,H)*.72);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,.45)');c.fillStyle=g;c.fillRect(0,0,W,H);vignetteCanvas=vc}buildVignette();
+addEventListener('resize',()=>{W=innerWidth;H=innerHeight;canvas.width=W;canvas.height=H;viewportCols=Math.ceil(W/TILE)+4;viewportRows=Math.ceil(H/TILE)+4;buildVignette()});
+addEventListener('orientationchange',()=>setTimeout(()=>dispatchEvent(new Event('resize')),100));
+const LIGHT_DX=-.55,LIGHT_DY=-.8;
+function hash(x,y,seed){let h=(x*374761393+y*668265263+seed*2147483647)|0;h=(h^(h>>>13))*1274126177|0;return((h>>>0)%1000000)/1000000}
+function noise(x,y,seed){const x0=Math.floor(x),y0=Math.floor(y),sx=x-x0,sy=y-y0,u=sx*sx*(3-2*sx),v=sy*sy*(3-2*sy);const n00=hash(x0,y0,seed),n10=hash(x0+1,y0,seed),n01=hash(x0,y0+1,seed),n11=hash(x0+1,y0+1,seed);return(n00+u*(n10-n00))+v*((n01+u*(n11-n01))-(n00+u*(n10-n00)))}
+function mixColor(a,b,t){const r1=parseInt(a.slice(1,3),16),g1=parseInt(a.slice(3,5),16),b1=parseInt(a.slice(5,7),16),r2=parseInt(b.slice(1,3),16),g2=parseInt(b.slice(3,5),16),b2=parseInt(b.slice(5,7),16);return`rgb(${Math.round(r1+(r2-r1)*t)},${Math.round(g1+(g2-g1)*t)},${Math.round(b1+(b2-b1)*t)})`}
+const SEED=Math.random()*1e9;
+const tileCache=new Map(),treeEntityCache=new Map(),pebbleCache=new Map(),bushEntityCache=new Map(),stickEntityCache=new Map(),collectedStickCache=new Map(),treeSpriteCache=new Map(),bushSpriteCache=new Map();
+const MAX_PEBBLES=400,MAX_BUSHES=180,MAX_STICKS=180;
+let frameCounter=0;
+function trimCache(map,limit,count){if(map.size<=limit)return;const it=map.keys();for(let i=0;i<count;i++){const k=it.next().value;if(k===undefined)break;map.delete(k)}}
+function getTile(x,y){const key=`${x},${y}`;let tile=tileCache.get(key);if(!tile){const n=noise(x*.05,y*.05,SEED),shade=noise(x*.17,y*.17,SEED+300);tile={type:n>.5?'grass':'dirt',shade};trimCache(tileCache,10000,1000);tileCache.set(key,tile)}return tile}
+const GRASS_DARK='#1f4620',GRASS_LIGHT='#3c7a3f',DIRT_DARK='#6b6861',DIRT_LIGHT='#9b9289',PALETTE_STEPS=8,GRASS_PALETTE=[],DIRT_PALETTE=[];
+for(let i=0;i<=PALETTE_STEPS;i++){GRASS_PALETTE.push(mixColor(GRASS_DARK,GRASS_LIGHT,i/PALETTE_STEPS));DIRT_PALETTE.push(mixColor(DIRT_DARK,DIRT_LIGHT,i/PALETTE_STEPS))}
 
-let W = window.innerWidth;
-let H = window.innerHeight;
-canvas.width = W;
-canvas.height = H;
+const entities=[];let nextId=0;
+function createEntity(type,x,y,data={}){const e={id:nextId++,type,x,y,vx:0,vy:0,hp:type==='zombie'?30:100,animPhase:0,...data};if(type==='zombie')e.colorSeed=Math.random();entities.push(e);return e}
 
-// Soft ambient vignette, rebuilt whenever the viewport changes. Cached as an
-// offscreen canvas so it costs one drawImage per frame instead of building a
-// gradient every frame.
-let vignetteCanvas = null;
-function buildVignette() {
-  const vc = document.createElement('canvas');
-  vc.width = W; vc.height = H;
-  const vctx = vc.getContext('2d');
-  const grad = vctx.createRadialGradient(W/2, H/2, Math.min(W,H)*0.35, W/2, H/2, Math.max(W,H)*0.72);
-  grad.addColorStop(0, 'rgba(0,0,0,0)');
-  grad.addColorStop(1, 'rgba(0,0,0,0.45)');
-  vctx.fillStyle = grad;
-  vctx.fillRect(0, 0, W, H);
-  vignetteCanvas = vc;
-}
-buildVignette();
+function treeShouldSpawn(tx,ty){const treeDensity=noise(tx*.12,ty*.12,SEED+500),sparseNoise=noise(tx*.08,ty*.08,SEED+501),spacing=hash(tx,ty,803);return (treeDensity>.72&&spacing>.6)||sparseNoise>.92}
+function getTreePlacement(tx,ty){const ox=(hash(tx,ty,801)-.5)*TILE*1.2,oy=(hash(tx,ty,802)-.5)*TILE*1.2;return{x:tx+.5+ox/TILE,y:ty+.5+oy/TILE}}
+function generateTreeEntityForTile(tx,ty){const key=`${tx},${ty}`;if(treeEntityCache.has(key))return;if(!treeShouldSpawn(tx,ty)){treeEntityCache.set(key,true);return}const pos=getTreePlacement(tx,ty);createEntity('tree',pos.x,pos.y,{seedVal:Math.floor(hash(tx,ty,999)*100000),radius:.25,tileX:tx,tileY:ty,solid:true,stickHarvested:false,stickYield:1+(hash(tx,ty,1001)>.68?1:0)});treeEntityCache.set(key,true)}
 
-window.addEventListener('resize', () => {
-  W = window.innerWidth;
-  H = window.innerHeight;
-  canvas.width = W;
-  canvas.height = H;
-  viewportCols = Math.ceil(W / TILE) + 4;
-  viewportRows = Math.ceil(H / TILE) + 4;
-  buildVignette();
-});
+// Alpine shrub resource. Bushes prefer grassy, open/forest-edge areas and are not solid.
+function generateBushEntityForTile(tx,ty){const key=`${tx},${ty}`;if(bushEntityCache.has(key))return;const tile=getTile(tx,ty),density=noise(tx*.11,ty*.11,SEED+610),edge=noise(tx*.07,ty*.07,SEED+611),place=hash(tx,ty,612);const spawn=tile.type==='grass'&&((density>.54&&place>.56)||(edge>.7&&place>.68));if(!spawn){bushEntityCache.set(key,true);return}const ox=(hash(tx,ty,613)-.5)*TILE*.75,oy=(hash(tx,ty,614)-.5)*TILE*.75;createEntity('bush',tx+.5+ox/TILE,ty+.5+oy/TILE,{tileX:tx,tileY:ty,radius:.22,seedVal:Math.floor(hash(tx,ty,615)*100000),fiberYield:2+Math.floor(hash(tx,ty,616)*4),harvested:false,regrowAt:0});bushEntityCache.set(key,true)}
 
-const TILE = 32;
-const SCALE = 1; // Global scale factor for all visual elements
-let viewportCols = Math.ceil(W / TILE) + 4;
-let viewportRows = Math.ceil(H / TILE) + 4;
+function generateStickEntityForTile(tx,ty){const key=`${tx},${ty}`;if(stickEntityCache.has(key)||collectedStickCache.has(key))return;
+  // Fallen thick sticks only occur beneath trees. Keep them uncommon.
+  if(!treeShouldSpawn(tx,ty)||hash(tx,ty,741)>.28){stickEntityCache.set(key,true);return}
+  const treePos=getTreePlacement(tx,ty);
+  // Drop the branch close to the trunk, but not directly underneath it.
+  const angle=(hash(tx,ty,742)-.5)*Math.PI*2;
+  const distance=.16+hash(tx,ty,743)*.28;
+  const x=treePos.x+Math.cos(angle)*distance;
+  const y=treePos.y+Math.sin(angle)*distance*.65;
+  createEntity('stick',x,y,{tileX:tx,tileY:ty,radius:.16,seedVal:Math.floor(hash(tx,ty,744)*100000),length:.62+hash(tx,ty,745)*.30,angle:(hash(tx,ty,746)-.5)*Math.PI,thick:true,collected:false});
+  stickEntityCache.set(key,true)}
 
-// Fake sun direction used everywhere lighting matters (terrain shade bias,
-// tree shading, shadow offsets), so the whole scene reads as lit from one
-// consistent place instead of every object shading itself independently.
-const LIGHT_DX = -0.55;
-const LIGHT_DY = -0.8;
+function generatePebblesForTile(tx,ty){const key=`${tx},${ty}`;if(pebbleCache.has(key))return;const tile=getTile(tx,ty);if(tile.type!=='dirt'){pebbleCache.set(key,true);return}const count=Math.floor(hash(tx,ty,850)*2.5)+1;for(let i=0;i<count;i++){const s=851+i*5,r=.08+hash(tx,ty,s+2)*.08,lx=hash(tx,ty,s)*(1-r*2)+r,ly=hash(tx,ty,s+1)*(1-r*2)+r;createEntity('pebble',tx+lx,ty+ly,{radius:r,tone:hash(tx,ty,s+3),light:hash(tx,ty,s+4),tileX:tx,tileY:ty,seed:Math.floor(hash(tx,ty,s+6)*100000)})}pebbleCache.set(key,true)}
 
-// WORLD GENERATION
-function hash(x, y, seed) {
-  let h = (x*374761393 + y*668265263 + seed*2147483647) | 0;
-  h = (h ^ (h>>>13))*1274126177 | 0;
-  return ((h>>>0) % 1000000) / 1000000;
-}
+function buildTileBackground(tx,ty,tileData){const idx=Math.min(PALETTE_STEPS,Math.floor(tileData.shade*PALETTE_STEPS));const bg=document.createElement('canvas');bg.width=TILE;bg.height=TILE;const c=bg.getContext('2d');c.fillStyle=tileData.type==='grass'?GRASS_PALETTE[idx]:DIRT_PALETTE[idx];c.fillRect(0,0,TILE,TILE);if(tileData.type==='grass'){const count=Math.floor(hash(tx,ty,1)*6)+6;tileData.grassPattern=[];for(let i=0;i<count;i++){const blade={x:hash(tx,ty,i*2+101),y:hash(tx,ty,i*2+102),offsetSway:i%3-1,light:hash(tx,ty,i*2+103)>.5};tileData.grassPattern.push(blade);const gx=Math.floor(blade.x*(TILE-2*SCALE)),gy=Math.floor(blade.y*(TILE-8*SCALE)+4*SCALE);c.fillStyle=blade.light?'#5bc46a':'#3a7a42';c.fillRect(gx,gy+2,2,3)}if(hash(tx,ty,777)>.94){const fx=Math.floor(hash(tx,ty,778)*(TILE-4)+2),fy=Math.floor(hash(tx,ty,779)*(TILE-4)+2);c.fillStyle=hash(tx,ty,780)>.5?'#f2e26b':'#f0f0f0';c.fillRect(fx,fy,2,2)}}else{const count=Math.floor(hash(tx,ty,790)*8)+5;for(let i=0;i<count;i++){const s=791+i*3,px=Math.floor(hash(tx,ty,s)*TILE),py=Math.floor(hash(tx,ty,s+1)*TILE),t=hash(tx,ty,s+2);c.fillStyle=t>.75?'rgba(230,225,215,.55)':t>.5?'rgba(170,165,155,.5)':t>.25?'rgba(130,125,115,.5)':'rgba(90,85,75,.45)';c.beginPath();c.arc(px+.5,py+.5,.75,0,Math.PI*2);c.fill()}}tileData.bgCanvas=bg}
 
-function noise(x, y, seed) {
-  const x0 = Math.floor(x);
-  const y0 = Math.floor(y);
-  const sx = x - x0, sy = y - y0;
-  const u = sx*sx*(3-2*sx), v = sy*sy*(3-2*sy);
-  const n00 = hash(x0, y0, seed);
-  const n10 = hash(x0+1, y0, seed);
-  const n01 = hash(x0, y0+1, seed);
-  const n11 = hash(x0+1, y0+1, seed);
-  const nx0 = n00 + u*(n10-n00);
-  const nx1 = n01 + u*(n11-n01);
-  return nx0 + v*(nx1-nx0);
-}
+const TIER_COLORS=[{dark:'#0a2810',light:'#1e5a2a'},{dark:'#0f3215',light:'#2a6a35'},{dark:'#1a4020',light:'#357a45'},{dark:'#2a5030',light:'#4a8a55'}];
+function drawPineTreeRaw(c,x,y,seed,scale){const trunkW=Math.max(2,Math.floor(2.5*scale)),trunkH=Math.floor(24*scale);c.fillStyle='rgba(0,0,0,.3)';c.beginPath();c.ellipse(x-LIGHT_DX*8,y+2,18*scale,8*scale,0,0,Math.PI*2);c.fill();const tx=Math.floor(x-trunkW/2),top=Math.floor(y-trunkH),lit=Math.max(1,Math.floor(trunkW*.55));c.fillStyle='#5a4a2a';c.fillRect(tx,top,lit,trunkH);c.fillStyle='#1a0e08';c.fillRect(tx+lit,top,trunkW-lit,trunkH);let cy=y-trunkH+8;for(let t=0;t<8;t++){const tw=Math.floor((32-t*4.5)*scale),th=Math.floor((11-t*.5)*scale),sh=Math.max(1,Math.floor(th/6)),col=TIER_COLORS[Math.min(t,3)];for(let s=0;s<6;s++){const sw=Math.floor(tw*(1-(s/6)*.75)),j=Math.floor((hash(seed,t*10+s,t)-.5)*3),rx=Math.floor(x-sw/2)+j,ry=Math.floor(cy-(s+1)*sh),lw=Math.max(1,Math.floor(sw*.55));c.fillStyle=col.light;c.fillRect(rx,ry,lw,sh);c.fillStyle=col.dark;c.fillRect(rx+lw,ry,Math.max(1,sw-lw),sh)}cy-=Math.floor(th*.5)}}
+function getTreeSprite(seed){let s=treeSpriteCache.get(seed);if(s)return s;const tc=document.createElement('canvas');tc.width=160;tc.height=160;drawPineTreeRaw(tc.getContext('2d'),80,130,seed,.9+hash(seed,1,10)*.5);s={canvas:tc};treeSpriteCache.set(seed,s);trimCache(treeSpriteCache,2000,500);return s}
 
-function mixColor(c1, c2, t) {
-  const r1 = parseInt(c1.slice(1,3),16), g1 = parseInt(c1.slice(3,5),16), b1 = parseInt(c1.slice(5,7),16);
-  const r2 = parseInt(c2.slice(1,3),16), g2 = parseInt(c2.slice(3,5),16), b2 = parseInt(c2.slice(5,7),16);
-  const r = Math.round(r1 + (r2-r1)*t);
-  const g = Math.round(g1 + (g2-g1)*t);
-  const b = Math.round(b1 + (b2-b1)*t);
-  return `rgb(${r},${g},${b})`;
-}
+function drawBushRaw(c,x,y,seed){const sc=1+hash(seed,1,51)*.35;c.fillStyle='rgba(0,0,0,.22)';c.beginPath();c.ellipse(x,y+5,15*sc,5*sc,0,0,Math.PI*2);c.fill();c.strokeStyle='#3b3225';c.lineWidth=2;c.beginPath();c.moveTo(x-7*sc,y+3);c.lineTo(x-3*sc,y-9*sc);c.moveTo(x,y+3);c.lineTo(x+1*sc,y-12*sc);c.moveTo(x+7*sc,y+3);c.lineTo(x+5*sc,y-8*sc);c.stroke();const leaves=['#214c27','#2e6631','#3f7f3d','#315f35'];for(let i=0;i<14;i++){const a=hash(seed,i,70)*Math.PI*2,r=3+hash(seed,i+100,71)*10,lx=x+Math.cos(a)*r,ly=y-5*sc+Math.sin(a)*r*.45;c.fillStyle=leaves[Math.floor(hash(seed,i+200,72)*leaves.length)];c.beginPath();c.arc(lx,ly,2.5+hash(seed,i+300,73)*2.2,0,Math.PI*2);c.fill()}}
+function getBushSprite(seed){let s=bushSpriteCache.get(seed);if(s)return s;const bc=document.createElement('canvas');bc.width=64;bc.height=64;drawBushRaw(bc.getContext('2d'),32,43,seed);s={canvas:bc};bushSpriteCache.set(seed,s);trimCache(bushSpriteCache,1200,250);return s}
+function drawBareBushRaw(c,x,y,seed){const sc=1+hash(seed,1,81)*.25;c.fillStyle='rgba(0,0,0,.18)';c.beginPath();c.ellipse(x,y+5,13*sc,4*sc,0,0,Math.PI*2);c.fill();c.strokeStyle='#4a3827';c.lineWidth=2;c.beginPath();c.moveTo(x,y+4);c.lineTo(x-7*sc,y-9*sc);c.moveTo(x,y+4);c.lineTo(x+2*sc,y-12*sc);c.moveTo(x,y+4);c.lineTo(x+8*sc,y-8*sc);c.moveTo(x-2*sc,y);c.lineTo(x-10*sc,y-3*sc);c.moveTo(x+2*sc,y);c.lineTo(x+10*sc,y-2*sc);c.stroke();c.strokeStyle='rgba(110,78,48,.8)';c.lineWidth=1;c.beginPath();c.moveTo(x-7*sc,y-9*sc);c.lineTo(x-3*sc,y-3*sc);c.moveTo(x+2*sc,y-12*sc);c.lineTo(x+1*sc,y-4*sc);c.moveTo(x+8*sc,y-8*sc);c.lineTo(x+3*sc,y-2*sc);c.stroke()}
+function getBareBushSprite(seed){let s=bushSpriteCache.get('bare:'+seed);if(s)return s;const bc=document.createElement('canvas');bc.width=64;bc.height=64;drawBareBushRaw(bc.getContext('2d'),32,43,seed);s={canvas:bc};bushSpriteCache.set('bare:'+seed,s);trimCache(bushSpriteCache,1600,300);return s}
 
-const SEED = Math.random() * 1e9;
-const tileCache = new Map();
-const treeCache = new Map();
-const treeEntityCache = new Map(); // Track which tiles have spawned tree entities
-const pebbleCache = new Map(); // Track which tiles have spawned their pebbles
-const MAX_PEBBLES = 400; // Cap on live pebble entities to avoid unbounded growth
-let frameCounter = 0;
+function buildZombieSVG(phase,moving){const sh=moving?Math.sin(phase*Math.PI*2):0,leg=sh*18,arm=sh*35,tilt=sh*8,drop=moving?8:4,limb='#3f8a4c';return`<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="-64 -64 128 128"><defs><radialGradient id="zBody" cx="35%" cy="25%" r="80%"><stop offset="0%" stop-color="#77cf85"/><stop offset="100%" stop-color="#2e5c37"/></radialGradient><radialGradient id="zHead" cx="35%" cy="25%" r="80%"><stop offset="0%" stop-color="#6ec97e"/><stop offset="100%" stop-color="#2e5c37"/></radialGradient></defs><ellipse cx="0" cy="32" rx="18" ry="6" fill="rgba(0,0,0,.25)"/><g transform="rotate(${leg*.7} -6 6)"><rect x="-10" y="6" width="8" height="28" rx="4" fill="${limb}"/></g><g transform="rotate(${-leg*1.2} 6 6)"><rect x="2" y="4" width="8" height="30" rx="4" fill="${limb}"/></g><g transform="rotate(${arm*1.1} -16 ${-drop}) skewX(${sh*6})"><rect x="-20" y="${-12-drop}" width="7" height="28" rx="3.5" fill="${limb}"/></g><g transform="rotate(${tilt})"><rect x="-13" y="-18" width="26" height="36" rx="10" fill="url(#zBody)"/><rect x="-9" y="-6" width="5" height="10" rx="1" fill="#1c3a22" opacity=".6"/></g><g transform="rotate(${-arm*.9} 16 ${-drop+2}) skewX(${-sh*4})"><rect x="13" y="${-10-drop}" width="7" height="26" rx="3.5" fill="${limb}"/></g><g transform="rotate(${tilt*.6})"><circle cx="0" cy="-28" r="13" fill="url(#zHead)"/><circle cx="-4" cy="-29" r="1.6" fill="#ff5a4d"/><circle cx="4" cy="-29" r="1.6" fill="#ff5a4d"/></g></svg>`}
+const ZOMBIE_FRAME_COUNT=8,zombieFrames=[];for(let i=0;i<ZOMBIE_FRAME_COUNT;i++){const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildZombieSVG(i/ZOMBIE_FRAME_COUNT,true));zombieFrames.push(img)}const zombieIdleFrame=new Image();zombieIdleFrame.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildZombieSVG(0,false));function currentZombieSprite(e){if(!e.vx&&!e.vy)return zombieIdleFrame;return zombieFrames[Math.floor(e.animPhase*ZOMBIE_FRAME_COUNT)%ZOMBIE_FRAME_COUNT]}
 
-// Bounded caches: instead of a full clear() (which produces a single ugly
-// stutter every time the player has explored ~10000 tiles), trim the oldest
-// slice of entries so most cached work survives and the cost is spread out.
-function trimCache(map, limit, trimCount) {
-  if (map.size <= limit) return;
-  const it = map.keys();
-  for (let i = 0; i < trimCount; i++) {
-    const k = it.next().value;
-    if (k === undefined) break;
-    map.delete(k);
-  }
-}
+const player={x:0,y:0,vx:0,vy:0,hp:100,speed:.15,radius:.2,facingAngle:Math.PI/2,animPhase:0,moving:false,inventory:{fiber:0,thickStick:0},target:null};
+function buildPlayerSVG(phase,moving){const cyc=phase*Math.PI*2,sw=moving?Math.sin(cyc):0,la=sw*28,aa=-sw*32,bob=moving?Math.abs(Math.sin(cyc*2))*3.5:0,bt=moving?sw*4:0,hs=moving?-sw*3:0,limb='#bcd9c4';return`<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="-64 -64 128 128"><defs><radialGradient id="pBody" cx="35%" cy="30%" r="75%"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#cfe6d6"/></radialGradient><radialGradient id="pHead" cx="35%" cy="30%" r="75%"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#d6ebdc"/></radialGradient></defs><ellipse cx="${sw*2}" cy="32" rx="${20-Math.abs(sw)*2}" ry="7" fill="rgba(0,0,0,.35)"/><g transform="rotate(${la} -6 6) translate(0 ${-bob})"><rect x="-11" y="4" width="9" height="27" rx="4.5" fill="${limb}"/></g><g transform="rotate(${-la} 6 6) translate(0 ${-bob})"><rect x="2" y="4" width="9" height="27" rx="4.5" fill="${limb}"/></g><g transform="rotate(${-aa} -15 -4) translate(0 ${-bob})"><rect x="-19" y="-10" width="8" height="25" rx="4" fill="${limb}"/></g><g transform="rotate(${bt}) translate(0 ${-bob})"><rect x="-14" y="-19" width="28" height="34" rx="11" fill="url(#pBody)"/></g><g transform="rotate(${aa} 15 -4) translate(0 ${-bob})"><rect x="11" y="-10" width="8" height="25" rx="4" fill="${limb}"/></g><g transform="rotate(${hs} 0 ${-29-bob}) translate(0 ${-bob})"><circle cx="0" cy="-29" r="12.5" fill="url(#pHead)"/><circle cx="-4" cy="-30" r="1.4" fill="#1a2b20"/><circle cx="4" cy="-30" r="1.4" fill="#1a2b20"/></g></svg>`}
+const PLAYER_FRAME_COUNT=8,playerFrames=[];for(let i=0;i<PLAYER_FRAME_COUNT;i++){const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildPlayerSVG(i/PLAYER_FRAME_COUNT,true));playerFrames.push(img)}const playerIdleFrame=new Image();playerIdleFrame.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildPlayerSVG(0,false));function currentPlayerSprite(){if(!player.moving)return playerIdleFrame;return playerFrames[Math.floor(player.animPhase*PLAYER_FRAME_COUNT)%PLAYER_FRAME_COUNT]}
 
-function getTile(x, y) {
-  const key = `${x},${y}`;
-  let tile = tileCache.get(key);
+const keys={};addEventListener('keydown',e=>{keys[e.key]=true});addEventListener('keyup',e=>{keys[e.key]=false});
+function screenToWorld(x,y){const r=canvas.getBoundingClientRect();const sx=x-r.left,sy=y-r.top;return{x:sx/TILE+(player.x-viewportCols/2),y:sy/TILE+(player.y-viewportRows/2)}}
+function addItem(name,amount){player.inventory[name]=(player.inventory[name]||0)+amount}
+function harvestBush(e){if(!e||e.type!=='bush'||e.harvested)return;e.harvested=true;e.clicked=true;addItem('fiber',e.fiberYield);e.regrowAt=performance.now()+15000;setTimeout(()=>e.clicked=false,200)}
+function harvestTreeForSticks(e){if(!e||e.type!=='tree'||e.stickHarvested)return;e.stickHarvested=true;e.clicked=true;addItem('thickStick',e.stickYield||1);setTimeout(()=>e.clicked=false,200)}
+function worldToScreenPoint(x,y){return{x:(x-player.x+viewportCols/2)*TILE+TILE/2,y:(y-player.y+viewportRows/2)*TILE+TILE/2}}
 
-  if (!tile) {
-    const n = noise(x*0.05, y*0.05, SEED);
-    const shade = noise(x*0.17, y*0.17, SEED + 300); // secondary layer for color variation
-    tile = { type: n > 0.5 ? 'grass' : 'dirt', shade };
-
-    // Prevent memory leaks if the player explores endlessly
-    trimCache(tileCache, 10000, 1000);
-    tileCache.set(key, tile);
-  }
-  return tile;
-}
-
-// Generate tree entity for a tile (only if tree should exist here)
-function generateTreeEntityForTile(tx, ty) {
-  const key = `${tx},${ty}`;
-  if (treeEntityCache.has(key)) return; // Already generated or checked
-  
-  const treeDensity = noise(tx * 0.12, ty * 0.12, SEED + 500);
-  const sparseNoise = noise(tx * 0.08, ty * 0.08, SEED + 501); // Different noise for sparse trees
-  const internalSpacing = hash(tx, ty, 803); // Per-tile random for internal forest spacing
-  
-  // Two tree placement systems:
-  // 1. Clustered trees in forest areas (density > 0.72) but still internally spaced
-  // 2. Sparse isolated trees (rare, anywhere, adds variety)
-  let shouldSpawnTree = false;
-  
-  if (treeDensity > 0.72 && internalSpacing > 0.6) {
-    // Forest area AND passes spacing filter = tree spawns
-    shouldSpawnTree = true;
-  } else if (sparseNoise > 0.92) {
-    // Rare isolated tree scattered randomly
-    shouldSpawnTree = true;
-  }
-  
-  if (!shouldSpawnTree) {
-    treeEntityCache.set(key, true);
-    return; // No tree on this tile
-  }
-  
-  const offsetX = (hash(tx, ty, 801) - 0.5) * TILE * 1.2;
-  const offsetY = (hash(tx, ty, 802) - 0.5) * TILE * 1.2;
-  const worldX = tx + 0.5 + offsetX / TILE;
-  const worldY = ty + 0.5 + offsetY / TILE;
-  const seedVal = Math.floor(hash(tx, ty, 999) * 100000);
-  
-  // Create clickable tree entity with collision radius
-  createEntity('tree', worldX, worldY, {
-    seedVal,
-    radius: 0.25,  // Collision radius - easier to walk through forests
-    tileX: tx,
-    tileY: ty,
-    solid: true    // Flag for collision detection
-  });
-  
-  treeEntityCache.set(key, true);
-}
-function generatePebblesForTile(tx, ty) {
-  const key = `${tx},${ty}`;
-  if (pebbleCache.has(key)) return; // Already generated
-  
-  const tile = getTile(tx, ty);
-  if (tile.type !== 'dirt') {
-    pebbleCache.set(key, true);
-    return; // No pebbles on grass
-  }
-  
-  const largeRockCount = Math.floor(hash(tx, ty, 850) * 2.5) + 1; // 1-3 larger rocks
-  for (let i = 0; i < largeRockCount; i++) {
-    const rSeed = 851 + i * 5;
-    const radius = 0.08 + hash(tx, ty, rSeed + 2) * 0.08; // 0.08-0.16 world units
-    // Position within tile bounds, accounting for radius
-    const localX = (hash(tx, ty, rSeed) * (1 - radius * 2)) + radius; // Fit within tile
-    const localY = (hash(tx, ty, rSeed + 1) * (1 - radius * 2)) + radius;
-    const worldX = tx + localX;
-    const worldY = ty + localY;
-    const tone = hash(tx, ty, rSeed + 3);
-    const light = hash(tx, ty, rSeed + 4);
-    
-    // Create clickable pebble entity
-    createEntity('pebble', worldX, worldY, {
-      radius,
-      tone,
-      light,
-      tileX: tx,
-      tileY: ty,
-      seed: Math.floor(hash(tx, ty, rSeed + 6) * 100000)
-    });
-  }
-  
-  pebbleCache.set(key, true);
-}
-
-// Precomputed terrain palettes (dark->light) so each tile is a cheap array
-// lookup at render time instead of blending colors every frame.
-// Alpine soil: authentic grey-toned weathered earth with exposed limestone/granite
-// Much lighter and greyer than lowland soil, minimal brown
-const GRASS_DARK = '#1f4620', GRASS_LIGHT = '#3c7a3f';
-const DIRT_DARK = '#6b6861', DIRT_LIGHT = '#9b9289';
-const PALETTE_STEPS = 8;
-const GRASS_PALETTE = [];
-const DIRT_PALETTE = [];
-for (let i = 0; i <= PALETTE_STEPS; i++) {
-  GRASS_PALETTE.push(mixColor(GRASS_DARK, GRASS_LIGHT, i / PALETTE_STEPS));
-  DIRT_PALETTE.push(mixColor(DIRT_DARK, DIRT_LIGHT, i / PALETTE_STEPS));
-}
-
-// Everything about a tile that DOESN'T move frame-to-frame (base color,
-// pebbles, flower, and the stationary base of each grass blade) is baked
-// once into a tiny offscreen canvas the first time the tile is seen. Every
-// frame after that costs one drawImage() blit instead of a dozen-plus
-// fillRect() calls with fillStyle switches. Only the swaying blade *tips*
-// still get drawn live, since those actually animate.
-function buildTileBackground(tx, ty, tileData) {
-  const shadeIdx = Math.min(PALETTE_STEPS, Math.floor(tileData.shade * PALETTE_STEPS));
-  const bg = document.createElement('canvas');
-  bg.width = TILE;
-  bg.height = TILE;
-  const bctx = bg.getContext('2d');
-
-  if (tileData.type === 'grass') {
-    bctx.fillStyle = GRASS_PALETTE[shadeIdx];
-    bctx.fillRect(0, 0, TILE, TILE);
-
-    const grassCount = Math.floor(hash(tx, ty, 1) * 6) + 6;
-    const pattern = [];
-    for (let i = 0; i < grassCount; i++) {
-      pattern.push({
-        x: hash(tx, ty, i * 2 + 101),
-        y: hash(tx, ty, i * 2 + 102),
-        offsetSway: (i % 3) - 1,
-        light: hash(tx, ty, i * 2 + 103) > 0.5
-      });
-    }
-    tileData.grassPattern = pattern;
-
-    for (const blade of pattern) {
-      const grassX = Math.floor(blade.x * (TILE - 2 * SCALE));
-      const grassY = Math.floor(blade.y * (TILE - 8 * SCALE) + 4 * SCALE);
-      bctx.fillStyle = blade.light ? '#5bc46a' : '#3a7a42';
-      bctx.fillRect(grassX, grassY + 2 * SCALE, 2 * SCALE, 3 * SCALE); // static base of the blade
-    }
-
-    if (hash(tx, ty, 777) > 0.94) {
-      const flower = {
-        x: hash(tx, ty, 778),
-        y: hash(tx, ty, 779),
-        light: hash(tx, ty, 780) > 0.5
-      };
-      tileData.flower = flower;
-      const fx = Math.floor(flower.x * (TILE - 4 * SCALE) + 2 * SCALE);
-      const fy = Math.floor(flower.y * (TILE - 4 * SCALE) + 2 * SCALE);
-      bctx.fillStyle = flower.light ? '#f2e26b' : '#f0f0f0';
-      bctx.fillRect(fx, fy, 2 * SCALE, 2 * SCALE);
-    }
-  } else {
-    bctx.fillStyle = DIRT_PALETTE[shadeIdx];
-    bctx.fillRect(0, 0, TILE, TILE);
-
-    // Small pebbles: numerous tiny Alpine stones scattered across the tile
-    // Alpine scree includes pale limestone, grey granite, and weathered schist
-    const smallPebbleCount = Math.floor(hash(tx, ty, 790) * 8) + 5; // 5-12 small pebbles
-    for (let i = 0; i < smallPebbleCount; i++) {
-      const pSeed = 791 + i * 3;
-      const px = Math.floor(hash(tx, ty, pSeed) * TILE);
-      const py = Math.floor(hash(tx, ty, pSeed + 1) * TILE);
-      const pTone = hash(tx, ty, pSeed + 2);
-      // Alpine stone palette: pale limestone, medium grey, dark schist
-      bctx.fillStyle = pTone > 0.75 ? 'rgba(230,225,215,0.55)'  // pale limestone
-                       : pTone > 0.5 ? 'rgba(170,165,155,0.5)'   // medium grey
-                       : pTone > 0.25 ? 'rgba(130,125,115,0.5)'  // darker schist
-                       : 'rgba(90,85,75,0.45)';                  // dark slate
-      // Draw small pebbles as circles, radius ~0.75px * SCALE
-      bctx.beginPath();
-      bctx.arc(px + 0.5, py + 0.5, 0.75 * SCALE, 0, Math.PI * 2);
-      bctx.fill();
-    }
-
-    // Sparse Alpine lichen and moss: grey-green patches on rocks
-    if (hash(tx, ty, 900) > 0.85) {
-      const lx = Math.floor(hash(tx, ty, 901) * (TILE - 6 * SCALE) + 3 * SCALE);
-      const ly = Math.floor(hash(tx, ty, 902) * (TILE - 6 * SCALE) + 3 * SCALE);
-      bctx.fillStyle = 'rgba(110,120,95,0.4)'; // Sparse, muted Alpine moss
-      bctx.fillRect(lx, ly, 3 * SCALE, 2 * SCALE);
-    }
-    
-    // Occasional exposed pale stone outcrops (Alpine limestone bedrock)
-    if (hash(tx, ty, 910) > 0.92) {
-      const sx = Math.floor(hash(tx, ty, 911) * (TILE - 8 * SCALE) + 4 * SCALE);
-      const sy = Math.floor(hash(tx, ty, 912) * (TILE - 8 * SCALE) + 4 * SCALE);
-      bctx.fillStyle = 'rgba(235,230,220,0.3)'; // Pale exposed rock
-      bctx.fillRect(sx, sy, 4 * SCALE, 3 * SCALE);
-    }
-  }
-
-  tileData.bgCanvas = bg;
-}
-
-// PINE TREE DRAWING
-// More realistic conical evergreen with dense foliage and proper lighting
-const TIER_COLORS = [
-  { dark: '#0a2810', light: '#1e5a2a' }, // bottom, largest tier, very dark
-  { dark: '#0f3215', light: '#2a6a35' },
-  { dark: '#1a4020', light: '#357a45' },
-  { dark: '#2a5030', light: '#4a8a55' }  // top, smallest tier, brightest
-];
-
-// Raw drawing routine (unchanged math/visuals) - now only ever called once
-// per distinct tree (seedVal) to bake a sprite, instead of every frame.
-function drawPineTreeRaw(ctx, screenX, screenY, seedVal, scale) {
-  const trunkW = Math.max(2, Math.floor(2.5 * scale));
-  const trunkH = Math.floor(24 * scale);
-
-  // Ground shadow, cast away from the light source
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.beginPath();
-  ctx.ellipse(screenX - LIGHT_DX * 8, screenY + 2, 18 * scale, 8 * scale, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Trunk with realistic two-tone shading
-  const trunkX = Math.floor(screenX - trunkW / 2);
-  const trunkTop = Math.floor(screenY - trunkH);
-
-  const trunkLit = Math.max(1, Math.floor(trunkW * 0.55));
-  ctx.fillStyle = '#5a4a2a';
-  ctx.fillRect(trunkX, trunkTop, trunkLit, trunkH);
-  ctx.fillStyle = '#1a0e08';
-  ctx.fillRect(trunkX + trunkLit, trunkTop, trunkW - trunkLit, trunkH);
-
-  // Foliage: 8 tiers for tall, thin cone shape
-  const tiers = 8;
-  let currentY = screenY - trunkH + 8;
-  const steps = 6;
-
-  for (let t = 0; t < tiers; t++) {
-    // Narrower base, tapering to point - creates slender cone
-    const tierWidth = Math.floor((32 - t * 4.5) * scale);
-    const tierHeight = Math.floor((11 - t * 0.5) * scale);
-    const stepH = Math.max(1, Math.floor(tierHeight / steps));
-    const { dark, light } = TIER_COLORS[Math.min(t, 3)];
-
-    for (let s = 0; s < steps; s++) {
-      // Smooth taper within each tier
-      const stepW = Math.floor(tierWidth * (1 - (s / steps) * 0.75));
-      const jitter = Math.floor((hash(seedVal, t * 10 + s, t) - 0.5) * 3);
-      const rx = Math.floor(screenX - stepW / 2) + jitter;
-      const ry = Math.floor(currentY - (s + 1) * stepH);
-
-      // Lit and shadow sides with better contrast
-      const lightW = Math.max(1, Math.floor(stepW * 0.55));
-      ctx.fillStyle = light;
-      ctx.fillRect(rx, ry, lightW, stepH);
-      ctx.fillStyle = dark;
-      ctx.fillRect(rx + lightW, ry, Math.max(1, stepW - lightW), stepH);
-
-      // Add subtle edge detail on the dark side
-      if (stepW > 6) {
-        ctx.fillStyle = 'rgba(0,0,0,0.15)';
-        ctx.fillRect(rx + stepW - 1, ry, 1, stepH);
-      }
-    }
-    // Greater overlap between tiers for denser look
-    currentY -= Math.floor(tierHeight * 0.5);
-  }
-}
-
-// Each tree is fully determined by its seedVal, so its appearance is baked
-// once into an offscreen canvas and reused for as long as it stays cached.
-// This turns ~150 fillRect calls per visible tree per frame into a single
-// drawImage() blit.
-const treeSpriteCache = new Map();
-const TREE_SPRITE_SIZE = 160 * SCALE;
-const TREE_ANCHOR_X = 80 * SCALE;
-const TREE_ANCHOR_Y = 130 * SCALE;
-
-function getTreeSprite(seedVal) {
-  let sprite = treeSpriteCache.get(seedVal);
-  if (sprite) return sprite;
-
-  const scale = (0.9 + hash(seedVal, 1, 10) * 0.5) * SCALE;
-  const tc = document.createElement('canvas');
-  tc.width = TREE_SPRITE_SIZE * SCALE;
-  tc.height = TREE_SPRITE_SIZE * SCALE;
-  const tctx = tc.getContext('2d');
-  drawPineTreeRaw(tctx, TREE_ANCHOR_X, TREE_ANCHOR_Y, seedVal, scale);
-
-  sprite = { canvas: tc };
-  treeSpriteCache.set(seedVal, sprite);
-  trimCache(treeSpriteCache, 2000, 500);
-
-  return sprite;
-}
-
-function drawPineTree(ctx, screenX, screenY, seedVal) {
-  const sprite = getTreeSprite(seedVal);
-  ctx.drawImage(sprite.canvas, Math.floor(screenX - TREE_ANCHOR_X), Math.floor(screenY - TREE_ANCHOR_Y));
-}
-
-// ZOMBIE SPRITE GENERATION
-// Gradient-shaded silhouette (light top-left, dark edges) instead of a flat
-// fill, plus glowing eyes and a torn patch, for a more volumetric, undead look.
-// Shambling gait (asymmetric legs, wider arm swing, body tilt) is what reads
-// as "zombie", not color detail.
-function buildZombieSVG(phase, moving) {
-  const shuffle = moving ? Math.sin(phase * Math.PI * 2) : 0;
-  const legSwing = shuffle * 18;
-  const armSwing = shuffle * 35;
-  const tilt = shuffle * 8;
-  const armDrop = moving ? 8 : 4;
-  const limbColor = '#3f8a4c';
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="-64 -64 128 128">
-    <defs>
-      <radialGradient id="zBody" cx="35%" cy="25%" r="80%">
-        <stop offset="0%" stop-color="#77cf85"/>
-        <stop offset="100%" stop-color="#2e5c37"/>
-      </radialGradient>
-      <radialGradient id="zHead" cx="35%" cy="25%" r="80%">
-        <stop offset="0%" stop-color="#6ec97e"/>
-        <stop offset="100%" stop-color="#2e5c37"/>
-      </radialGradient>
-    </defs>
-
-    <ellipse cx="0" cy="32" rx="18" ry="6" fill="rgba(0,0,0,0.25)"/>
-
-    <g transform="rotate(${legSwing * 0.7} -6 6)">
-      <rect x="-10" y="6" width="8" height="28" rx="4" fill="${limbColor}"/>
-    </g>
-    <g transform="rotate(${-legSwing * 1.2} 6 6)">
-      <rect x="2" y="4" width="8" height="30" rx="4" fill="${limbColor}"/>
-    </g>
-
-    <g transform="rotate(${armSwing * 1.1} -16 ${-armDrop}) skewX(${shuffle * 6})">
-      <rect x="-20" y="${-12 - armDrop}" width="7" height="28" rx="3.5" fill="${limbColor}"/>
-    </g>
-
-    <g transform="rotate(${tilt})">
-      <rect x="-13" y="-18" width="26" height="36" rx="10" fill="url(#zBody)"/>
-      <rect x="-9" y="-6" width="5" height="10" rx="1" fill="#1c3a22" opacity="0.6"/>
-    </g>
-
-    <g transform="rotate(${-armSwing * 0.9} 16 ${-armDrop + 2}) skewX(${-shuffle * 4})">
-      <rect x="13" y="${-10 - armDrop}" width="7" height="26" rx="3.5" fill="${limbColor}"/>
-    </g>
-
-    <g transform="rotate(${tilt * 0.6})">
-      <circle cx="0" cy="-28" r="13" fill="url(#zHead)"/>
-      <circle cx="-4" cy="-29" r="1.6" fill="#ff5a4d"/>
-      <circle cx="4" cy="-29" r="1.6" fill="#ff5a4d"/>
-    </g>
-  </svg>`;
-}
-
-const ZOMBIE_FRAME_COUNT = 8;
-const zombieFrames = [];
-for (let i = 0; i < ZOMBIE_FRAME_COUNT; i++) {
-  const svg = buildZombieSVG(i / ZOMBIE_FRAME_COUNT, true);
-  const img = new Image();
-  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-  zombieFrames.push(img);
-}
-const zombieIdleFrame = new Image();
-zombieIdleFrame.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(buildZombieSVG(0, false));
-
-function currentZombieSprite(e) {
-  if (!e.vx && !e.vy) return zombieIdleFrame;
-  const idx = Math.floor(e.animPhase * ZOMBIE_FRAME_COUNT) % ZOMBIE_FRAME_COUNT;
-  return zombieFrames[idx];
-}
-
-// ENTITIES
-const entities = [];
-let nextId = 0;
-
-function createEntity(type, x, y, data) {
-  const entity = {
-    id: nextId++,
-    type,
-    x, y,
-    vx: 0, vy: 0,
-    hp: type === 'zombie' ? 30 : 100,
-    animPhase: 0,
-    ...data
+function screenPointForEntity(ent){
+  return {
+    x:(ent.x-player.x+viewportCols/2)*TILE+TILE/2,
+    y:(ent.y-player.y+viewportRows/2)*TILE+TILE/2
   };
-  if (type === 'zombie') {
-    entity.colorSeed = Math.random();
-  }
-  entities.push(entity);
 }
 
-// PLAYER
-const player = {
-  x: 0, y: 0,
-  vx: 0, vy: 0,
-  hp: 100,
-  speed: 0.15,
-  radius: 0.2,  // Collision radius for tree/solid entity interaction
-  facingAngle: Math.PI / 2, // radians, 0 = facing right
-  animPhase: 0,
-  moving: false
-};
-
-// ANIMATED SVG PLAYER SPRITE
-// Enhanced walk cycle with dynamic leg extensions, arm swing, torso tilt, and
-// head counter-sway. Gradient-shaded body/head for a rounded, lit look
-// instead of a flat silhouette.
-function buildPlayerSVG(phase, moving) {
-  const cycle = phase * Math.PI * 2;
-  const swing = moving ? Math.sin(cycle) : 0;
-
-  const legAngle = swing * 28;
-  const armAngle = -swing * 32;
-  const bob = moving ? Math.abs(Math.sin(cycle * 2)) * 3.5 : 0;
-  const bodyTilt = moving ? swing * 4 : 0;
-  const headSway = moving ? -swing * 3 : 0;
-  const limbColor = '#bcd9c4';
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="-64 -64 128 128">
-    <defs>
-      <radialGradient id="pBody" cx="35%" cy="30%" r="75%">
-        <stop offset="0%" stop-color="#ffffff"/>
-        <stop offset="100%" stop-color="#cfe6d6"/>
-      </radialGradient>
-      <radialGradient id="pHead" cx="35%" cy="30%" r="75%">
-        <stop offset="0%" stop-color="#ffffff"/>
-        <stop offset="100%" stop-color="#d6ebdc"/>
-      </radialGradient>
-    </defs>
-
-    <ellipse cx="${swing * 2}" cy="32" rx="${20 - Math.abs(swing) * 2}" ry="7" fill="rgba(0,0,0,0.35)"/>
-
-    <g transform="rotate(${legAngle} -6 6) translate(0 ${-bob})">
-      <rect x="-11" y="4" width="9" height="27" rx="4.5" fill="${limbColor}"/>
-    </g>
-    <g transform="rotate(${-legAngle} 6 6) translate(0 ${-bob})">
-      <rect x="2" y="4" width="9" height="27" rx="4.5" fill="${limbColor}"/>
-    </g>
-
-    <g transform="rotate(${-armAngle} -15 -4) translate(0 ${-bob})">
-      <rect x="-19" y="-10" width="8" height="25" rx="4" fill="${limbColor}"/>
-    </g>
-
-    <g transform="rotate(${bodyTilt} 0 0) translate(0 ${-bob})">
-      <rect x="-14" y="-19" width="28" height="34" rx="11" fill="url(#pBody)"/>
-    </g>
-
-    <g transform="rotate(${armAngle} 15 -4) translate(0 ${-bob})">
-      <rect x="11" y="-10" width="8" height="25" rx="4" fill="${limbColor}"/>
-    </g>
-
-    <g transform="rotate(${headSway} 0 ${-29 - bob}) translate(0 ${-bob})">
-      <circle cx="0" cy="-29" r="12.5" fill="url(#pHead)"/>
-      <circle cx="-4" cy="-30" r="1.4" fill="#1a2b20"/>
-      <circle cx="4" cy="-30" r="1.4" fill="#1a2b20"/>
-    </g>
-  </svg>`;
+function pointToSegmentDistance(px,py,x1,y1,x2,y2){
+  const dx=x2-x1,dy=y2-y1;
+  const lenSq=dx*dx+dy*dy;
+  if(lenSq===0)return Math.hypot(px-x1,py-y1);
+  let t=((px-x1)*dx+(py-y1)*dy)/lenSq;
+  t=Math.max(0,Math.min(1,t));
+  const qx=x1+t*dx,qy=y1+t*dy;
+  return Math.hypot(px-qx,py-qy);
 }
 
-const PLAYER_FRAME_COUNT = 8;
-const playerFrames = [];
-for (let i = 0; i < PLAYER_FRAME_COUNT; i++) {
-  const svg = buildPlayerSVG(i / PLAYER_FRAME_COUNT, true);
-  const img = new Image();
-  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-  playerFrames.push(img);
-}
-const playerIdleFrame = new Image();
-playerIdleFrame.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(buildPlayerSVG(0, false));
+function hitEntityAtScreen(clientX,clientY){
+  const rect=canvas.getBoundingClientRect();
+  const x=clientX-rect.left,y=clientY-rect.top;
+  let best=null,bestScore=Infinity,bestPriority=-1;
 
-function currentPlayerSprite() {
-  if (!player.moving) return playerIdleFrame;
-  const idx = Math.floor(player.animPhase * PLAYER_FRAME_COUNT) % PLAYER_FRAME_COUNT;
-  return playerFrames[idx];
-}
+  for(const ent of entities){
+    if(ent.type!=='pebble'&&ent.type!=='tree'&&ent.type!=='bush'&&ent.type!=='stick')continue;
 
-// INPUT
-const keys = {};
-window.addEventListener('keydown', e => { keys[e.key] = true; });
-window.addEventListener('keyup', e => { keys[e.key] = false; });
+    const p=screenPointForEntity(ent);
+    let distance;
 
-window.addEventListener('click', (e) => {
-  const rect = canvas.getBoundingClientRect();
-  // Convert screen pixel to world coordinates
-  const screenX = e.clientX - rect.left;
-  const screenY = e.clientY - rect.top;
-  const clickX = screenX / TILE + (player.x - viewportCols/2);
-  const clickY = screenY / TILE + (player.y - viewportRows/2);
-  
-  let hitPebble = false;
-  // Check if a pebble or tree was clicked (generous hit radius for playability)
-  for (const ent of entities) {
-    if (ent.type === 'pebble' || ent.type === 'tree') {
-      const dx = clickX - ent.x;
-      const dy = clickY - ent.y;
-      const dist = Math.hypot(dx, dy);
-      const hitRadius = ent.radius + 0.1; // Generous hit box
-      if (dist < hitRadius) {
-        // Entity clicked!
-        ent.clicked = true;
-        hitPebble = true;
-        setTimeout(() => { ent.clicked = false; }, 200); // Visual feedback
-        break; // Only one entity per click
-      }
+    if(ent.type==='stick'){
+      // A branch is long and thin, so testing only its center makes phones
+      // unnecessarily painful. Use a capsule around the actual rendered
+      // branch, with a generous touch margin.
+      const half=(ent.length*TILE)/2;
+      const dx=Math.cos(ent.angle)*half;
+      const dy=Math.sin(ent.angle)*half;
+      distance=pointToSegmentDistance(x,y,p.x-dx,p.y-dy,p.x+dx,p.y+dy);
+    }else{
+      distance=Math.hypot(x-p.x,y-p.y);
+    }
+
+    const radius=ent.type==='stick'?46:ent.type==='tree'?44:ent.type==='bush'?40:30;
+    if(distance>radius)continue;
+
+    // Prefer a stick when the tap overlaps several tiny ground objects.
+    const priority=ent.type==='stick'?3:ent.type==='bush'?2:ent.type==='tree'?1:0;
+    const score=distance-(priority*6);
+    if(priority>bestPriority || (priority===bestPriority && score<bestScore)){
+      best=ent;
+      bestScore=score;
+      bestPriority=priority;
     }
   }
+
+  if(!best)return null;
+  player.target=best;
+  best.clicked=true;
+  setTimeout(()=>best.clicked=false,200);
+
+  if(best.type==='tree'&&!best.stickHarvested)harvestTreeForSticks(best);
+  if(best.type==='bush'&&!best.harvested)harvestBush(best);
+  if(best.type==='stick'&&!best.collected){
+    best.collected=true;
+    addItem('thickStick',1);
+    best.clicked=false;
+    const stickKey=`${best.tileX},${best.tileY}`;
+    stickEntityCache.delete(stickKey);
+    collectedStickCache.set(stickKey,true);
+  }
+  return best;
+}
+function interactTarget(){
+  if(player.target){
+    const t=player.target;
+    if(t.type==='tree'&&!t.stickHarvested){harvestTreeForSticks(t);return}
+    if(t.type==='bush'&&!t.harvested){harvestBush(t);return}
+    if(t.type==='stick'&&!t.collected){t.collected=true;addItem('thickStick',1);const stickKey=`${t.tileX},${t.tileY}`;stickEntityCache.delete(stickKey);collectedStickCache.set(stickKey,true);return}
+  }
+}
+
+addEventListener('click',e=>{
+  if(suppressNextClick){suppressNextClick=false;return}
+  hitEntityAtScreen(e.clientX,e.clientY);
 });
 
-// Removes the farthest pebbles and trees once the live count exceeds MAX_PEBBLES,
-// and clears their tile from the cache so they can respawn if the player wanders back.
-// Without this, entities accumulate forever as new tiles come into view and the
-// entities array (walked every frame for AI + rendering) grows unbounded.
-function cullFarEntities() {
-  let pebbleCount = 0, treeCount = 0;
-  for (let i = 0; i < entities.length; i++) {
-    if (entities[i].type === 'pebble') pebbleCount++;
-    else if (entities[i].type === 'tree') treeCount++;
-  }
-  const totalCount = pebbleCount + treeCount;
-  if (totalCount <= MAX_PEBBLES) return;
-
-  const withDist = [];
-  for (let i = 0; i < entities.length; i++) {
-    const e = entities[i];
-    if (e.type !== 'pebble' && e.type !== 'tree') continue;
-    const dx = e.x - player.x, dy = e.y - player.y;
-    withDist.push({ i, distSq: dx * dx + dy * dy, e });
-  }
-  withDist.sort((a, b) => b.distSq - a.distSq); // farthest first
-
-  const excess = totalCount - MAX_PEBBLES;
-  const removeIndices = new Set();
-  for (let i = 0; i < excess; i++) {
-    const item = withDist[i];
-    removeIndices.add(item.i);
-    // Clear from appropriate cache so tile can respawn entity if player returns
-    if (item.e.type === 'pebble') {
-      pebbleCache.delete(`${item.e.tileX},${item.e.tileY}`);
-    } else if (item.e.type === 'tree') {
-      treeEntityCache.delete(`${item.e.tileX},${item.e.tileY}`);
-    }
-  }
-  for (let i = entities.length - 1; i >= 0; i--) {
-    if (removeIndices.has(i)) entities.splice(i, 1);
-  }
+const joystick=document.getElementById('joystick');
+const joystickKnob=document.getElementById('joystickKnob');
+const actionButton=document.getElementById('actionButton');
+let joystickPointer=null;
+function updateJoystick(clientX,clientY){
+  const r=joystick.getBoundingClientRect();
+  const cx=r.left+r.width/2,cy=r.top+r.height/2;
+  let dx=clientX-cx,dy=clientY-cy;
+  const max=38,dist=Math.hypot(dx,dy);
+  if(dist>max){dx=dx/dist*max;dy=dy/dist*max}
+  touchMove.x=dx/max;touchMove.y=dy/max;
+  joystickKnob.style.transform=`translate(${dx}px,${dy}px)`;
 }
+function resetJoystick(){touchMove.x=0;touchMove.y=0;touchMove.active=false;joystickKnob.style.transform='translate(0px,0px)';joystickPointer=null}
+joystick.addEventListener('pointerdown',e=>{joystickPointer=e.pointerId;touchMove.active=true;joystick.setPointerCapture(e.pointerId);updateJoystick(e.clientX,e.clientY);e.preventDefault()});
+joystick.addEventListener('pointermove',e=>{if(e.pointerId===joystickPointer)updateJoystick(e.clientX,e.clientY);e.preventDefault()});
+joystick.addEventListener('pointerup',e=>{if(e.pointerId===joystickPointer)resetJoystick();e.preventDefault()});
+joystick.addEventListener('pointercancel',resetJoystick);
+actionButton.addEventListener('pointerdown',e=>{interactTarget();actionButton.textContent='OK';setTimeout(()=>actionButton.textContent='ACT',120);e.preventDefault()});
 
-// UPDATE
-function update(dt) {
-  // player movement
-  player.vx = 0;
-  player.vy = 0;
-  if (keys['w'] || keys['W'] || keys['ArrowUp']) player.vy -= player.speed;
-  if (keys['s'] || keys['S'] || keys['ArrowDown']) player.vy += player.speed;
-  if (keys['a'] || keys['A'] || keys['ArrowLeft']) player.vx -= player.speed;
-  if (keys['d'] || keys['D'] || keys['ArrowRight']) player.vx += player.speed;
-
-  player.moving = player.vx !== 0 || player.vy !== 0;
-  if (player.moving) {
-    player.facingAngle = Math.atan2(player.vy, player.vx);
-    player.animPhase = (player.animPhase + dt * 0.045) % 1;
+canvas.addEventListener('pointerdown',e=>{
+  if(e.pointerType==='touch'){
+    suppressNextClick=true;
+    hitEntityAtScreen(e.clientX,e.clientY);
+    e.preventDefault();
   }
+},{passive:false});
 
-  player.x += player.vx;
-  player.y += player.vy;
+function cullFarEntities(){let count=0;for(const e of entities)if(e.type==='pebble'||e.type==='tree'||e.type==='bush'||e.type==='stick')count++;const limit=MAX_PEBBLES+MAX_BUSHES+MAX_STICKS;if(count<=limit)return;const arr=[];for(let i=0;i<entities.length;i++){const e=entities[i];if(!['pebble','tree','bush','stick'].includes(e.type))continue;const dx=e.x-player.x,dy=e.y-player.y;arr.push({i,d:dx*dx+dy*dy,e})}arr.sort((a,b)=>b.d-a.d);const remove=new Set();for(let i=0;i<Math.max(0,arr.length-limit);i++){const x=arr[i];remove.add(x.i);const k=`${x.e.tileX},${x.e.tileY}`;if(x.e.type==='pebble')pebbleCache.delete(k);else if(x.e.type==='tree')treeEntityCache.delete(k);else if(x.e.type==='bush')bushEntityCache.delete(k);else stickEntityCache.delete(k)}for(let i=entities.length-1;i>=0;i--)if(remove.has(i))entities.splice(i,1)}
 
-  // Tree collision: prevent player from walking through solid trees
-  for (const e of entities) {
-    if (e.type === 'tree' && e.solid) {
-      const dx = player.x - e.x;
-      const dy = player.y - e.y;
-      const dist = Math.hypot(dx, dy);
-      const minDist = player.radius + e.radius; // collision distance
-      if (dist < minDist) {
-        // Push player back out of tree
-        if (dist > 0.001) {
-          const pushBackDist = (minDist - dist) + 0.01;
-          const angle = Math.atan2(dy, dx);
-          player.x += Math.cos(angle) * pushBackDist;
-          player.y += Math.sin(angle) * pushBackDist;
-        }
-      }
-    }
-  }
+function update(dt){player.vx=player.vy=0;const mobileX=touchMove.active?touchMove.x:0,mobileY=touchMove.active?touchMove.y:0;if(keys.w||keys.W||keys.ArrowUp)player.vy-=player.speed;if(keys.s||keys.S||keys.ArrowDown)player.vy+=player.speed;if(keys.a||keys.A||keys.ArrowLeft)player.vx-=player.speed;if(keys.d||keys.D||keys.ArrowRight)player.vx+=player.speed;player.vx+=mobileX*player.speed;player.vy+=mobileY*player.speed;player.moving=player.vx!==0||player.vy!==0;if(player.moving){player.facingAngle=Math.atan2(player.vy,player.vx);player.animPhase=(player.animPhase+dt*.045)%1}player.x+=player.vx;player.y+=player.vy;for(const e of entities){if(e.type==='tree'&&e.solid){const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy),min=player.radius+e.radius;if(d<min&&d>.001){const push=min-d+.01,a=Math.atan2(dy,dx);player.x+=Math.cos(a)*push;player.y+=Math.sin(a)*push}}if(e.type==='bush'&&e.harvested&&performance.now()>=e.regrowAt){e.harvested=false;e.regrowAt=0}}frameCounter=(frameCounter+1)%30;if(frameCounter===0)cullFarEntities();for(const e of entities)if(e.type==='zombie'){const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy);if(d<10){if(d>.1){e.vx=dx/d*.08;e.vy=dy/d*.08}e.aware=true}else{e.vx=e.vy=0;e.aware=false}e.x+=e.vx;e.y+=e.vy;if(e.vx||e.vy)e.animPhase=(e.animPhase+dt*.04)%1;else e.animPhase=0}}
 
-  // Throttled: only check entity count periodically, not every frame
-  frameCounter = (frameCounter + 1) % 30;
-  if (frameCounter === 0) cullFarEntities();
+function render(){ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);const cx=player.x,cy=player.y,cols=viewportCols,rows=viewportRows,sx0=Math.floor(cx-cols/2),sy0=Math.floor(cy-rows/2),time=Date.now()*.003;for(let ty=sy0;ty<sy0+rows;ty++)for(let tx=sx0;tx<sx0+cols;tx++){const tile=getTile(tx,ty);if(!tile.bgCanvas)buildTileBackground(tx,ty,tile);generatePebblesForTile(tx,ty);generateBushEntityForTile(tx,ty);generateStickEntityForTile(tx,ty);const sx=Math.floor((tx-cx+cols/2)*TILE),sy=Math.floor((ty-cy+rows/2)*TILE);ctx.drawImage(tile.bgCanvas,sx,sy);if(tile.type==='grass'&&tile.grassPattern){const sway=Math.sin(time+tx*.3+ty*.3)*3;for(const b of tile.grassPattern){const gx=Math.floor(sx+b.x*(TILE-2)),gy=Math.floor(sy+b.y*(TILE-8)+4),bend=Math.floor(sway+b.offsetSway);ctx.fillStyle=b.light?'#5bc46a':'#3a7a42';ctx.fillRect(gx+bend,gy-2,2,2)}}}
+const draw=[];for(let ty=sy0-2;ty<sy0+rows+2;ty++)for(let tx=sx0-2;tx<sx0+cols+2;tx++){generateTreeEntityForTile(tx,ty);generateBushEntityForTile(tx,ty);generateStickEntityForTile(tx,ty)}for(const e of entities){const sx=Math.floor((e.x-cx+cols/2)*TILE),sy=Math.floor((e.y-cy+rows/2)*TILE);if(e.type==='zombie')draw.push({y:e.y,render:()=>{if(e.aware){ctx.save();ctx.strokeStyle='#f00';ctx.globalAlpha=.22+Math.sin(Date.now()*.004)*.06;ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx+TILE/2,sy+TILE/2,10,0,Math.PI*2);ctx.stroke();ctx.restore()}const sp=currentZombieSprite(e),size=TILE*1.7;if(sp.complete&&sp.naturalWidth){ctx.drawImage(sp,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2),size,size)}else{ctx.fillStyle=e.aware?'#f00':'#600';ctx.fillRect(sx+4,sy+4,TILE-8,TILE-8)}}});else if(e.type==='tree')draw.push({y:e.y,render:()=>{const sp=getTreeSprite(e.seedVal),size=TILE*6.5;ctx.drawImage(sp.canvas,Math.floor(sx-size/2),Math.floor(sy-size/2),size,size);if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,e.radius*TILE+5,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='bush')draw.push({y:e.y,render:()=>{const sp=e.harvested?getBareBushSprite(e.seedVal):getBushSprite(e.seedVal),size=TILE*2;ctx.globalAlpha=e.harvested?.9:1;ctx.drawImage(sp.canvas,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2-4),size,size);ctx.globalAlpha=1;if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,e.radius*TILE+5,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='stick')draw.push({y:e.y,render:()=>{if(e.collected)return;const len=e.length*TILE;ctx.save();ctx.translate(sx,sy);ctx.rotate(e.angle);ctx.lineCap='round';
+  // Irregular fallen branch: darker bark body, thinner lit ridge, slightly tapered ends.
+  ctx.strokeStyle='#352416';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(-len*.5,1);ctx.lineTo(-len*.18,.5);ctx.lineTo(len*.2,-.5);ctx.lineTo(len*.5,-1);ctx.stroke();
+  ctx.strokeStyle='#664326';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(-len*.48,0);ctx.lineTo(-len*.15,-.5);ctx.lineTo(len*.18,-1);ctx.lineTo(len*.47,-1.5);ctx.stroke();
+  ctx.strokeStyle='rgba(120,82,46,.65)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-len*.25,-1);ctx.lineTo(len*.32,-2);ctx.stroke();
+  // Small broken twig.
+  ctx.strokeStyle='#432b19';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(len*.15,-.5);ctx.lineTo(len*.27,-6);ctx.stroke();
+  ctx.restore();if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,Math.max(10,e.radius*TILE+6),0,Math.PI*2);ctx.stroke()}}});else if(e.type==='pebble')draw.push({y:e.y,render:()=>{const r=Math.floor(e.radius*TILE);ctx.fillStyle=e.tone>.65?'rgba(100,95,85,.8)':e.tone>.35?'rgba(140,135,125,.8)':'rgba(180,175,165,.7)';ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();if(e.light>.5){ctx.fillStyle='rgba(220,215,205,.5)';ctx.beginPath();ctx.arc(sx-r*.3,sy-r*.3,Math.max(1,r*.35),0,Math.PI*2);ctx.fill()}if(e.clicked){ctx.strokeStyle='#ff0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+3,0,Math.PI*2);ctx.stroke()}}})}
+const px=Math.floor((player.x-cx+cols/2)*TILE),py=Math.floor((player.y-cy+rows/2)*TILE);draw.push({y:player.y,render:()=>{const sp=currentPlayerSprite(),size=TILE*1.7;if(sp.complete&&sp.naturalWidth)ctx.drawImage(sp,Math.floor(px+TILE/2-size/2),Math.floor(py+TILE/2-size/2),size,size);else{ctx.fillStyle='#0f0';ctx.fillRect(px+6,py+6,TILE-12,TILE-12)}}});draw.sort((a,b)=>a.y-b.y);for(const o of draw)o.render();if(vignetteCanvas)ctx.drawImage(vignetteCanvas,0,0)}
 
-  // entity AI
-  for (const e of entities) {
-    if (e.type === 'zombie') {
-      const dx = player.x - e.x;
-      const dy = player.y - e.y;
-      const dist = Math.hypot(dx, dy);
-      const detectionRange = 10;
-
-      if (dist < detectionRange) {
-        // player detected, chase
-        if (dist > 0.1) {
-          e.vx = (dx / dist) * 0.08;
-          e.vy = (dy / dist) * 0.08;
-        }
-        e.aware = true;
-      } else {
-        // out of range, stop
-        e.vx = 0;
-        e.vy = 0;
-        e.aware = false;
-      }
-
-      e.x += e.vx;
-      e.y += e.vy;
-
-      // animate zombie
-      if (e.vx !== 0 || e.vy !== 0) {
-        e.animPhase = (e.animPhase + dt * 0.04) % 1;
-      } else {
-        e.animPhase = 0;
-      }
-    }
-  }
-}
-
-// RENDER
-function render() {
-  // Reset canvas state at the top of every frame. Without this, any drawing
-  // call that changes globalAlpha/compositing and doesn't get to clean up
-  // after itself (e.g. an interrupted draw) would silently bleed into every
-  // frame after it, washing out the colors of everything drawn afterward.
-  ctx.globalAlpha = 1;
-  ctx.globalCompositeOperation = 'source-over';
-
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, W, H);
-
-  const cx = player.x;
-  const cy = player.y;
-  const cols = viewportCols;
-  const rows = viewportRows;
-  const startX = Math.floor(cx - cols/2);
-  const startY = Math.floor(cy - rows/2);
-  const time = Date.now() * 0.003;
-
-  // terrain pass
-  for (let ty = startY; ty < startY + rows; ty++) {
-    for (let tx = startX; tx < startX + cols; tx++) {
-      const tile = getTile(tx, ty);
-      if (!tile.bgCanvas) buildTileBackground(tx, ty, tile);
-      
-      // Generate big pebbles for this tile if not already done
-      generatePebblesForTile(tx, ty);
-
-      // Math.floor prevents expensive sub-pixel rendering
-      const sx = Math.floor((tx - cx + cols/2) * TILE);
-      const sy = Math.floor((ty - cy + rows/2) * TILE);
-
-      // Static base (fill, pebbles, blade bases, flower) - one cheap blit.
-      ctx.drawImage(tile.bgCanvas, sx, sy);
-
-      // Only the swaying blade tips are redrawn live each frame.
-      if (tile.type === 'grass' && tile.grassPattern) {
-        const baseSway = Math.sin(time + tx * 0.3 + ty * 0.3) * 3;
-        for (const blade of tile.grassPattern) {
-          const grassX = Math.floor(sx + blade.x * (TILE - 2 * SCALE));
-          const grassY = Math.floor(sy + blade.y * (TILE - 8 * SCALE) + 4 * SCALE);
-          const tipBend = Math.floor(baseSway + blade.offsetSway);
-          ctx.fillStyle = blade.light ? '#5bc46a' : '#3a7a42';
-          ctx.fillRect(grassX + tipBend, grassY - 2 * SCALE, 2 * SCALE, 2 * SCALE);
-        }
-      }
-    }
-  }
-
-  // Y-Sorted Objects Pass (Pine Trees, Zombies, Player)
-  const drawObjects = [];
-
-  // Generate tree entities as tiles come into view
-  for (let ty = startY - 2; ty < startY + rows + 2; ty++) {
-    for (let tx = startX - 2; tx < startX + cols + 2; tx++) {
-      generateTreeEntityForTile(tx, ty);
-    }
-  }
-
-  // Entities - add to Y-sorted draw list
-  for (const e of entities) {
-    const sx = Math.floor((e.x - cx + cols/2) * TILE);
-    const sy = Math.floor((e.y - cy + rows/2) * TILE);
-
-    if (e.type === 'zombie') {
-      drawObjects.push({
-        type: 'zombie',
-        y: e.y,
-        render: () => {
-          if (e.aware) {
-            // save/restore guarantees globalAlpha always gets put back,
-            // even if a future edit throws partway through this block
-            ctx.save();
-            ctx.strokeStyle = '#f00';
-            ctx.globalAlpha = 0.22 + Math.sin(Date.now() * 0.004) * 0.06;
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(sx + TILE/2, sy + TILE/2, 10, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.restore();
-          }
-          const zombieSprite = currentZombieSprite(e);
-          const spriteSize = TILE * 1.7;
-          if (zombieSprite.complete && zombieSprite.naturalWidth > 0) {
-            const dx = Math.floor(sx + TILE/2 - spriteSize/2);
-            const dy = Math.floor(sy + TILE/2 - spriteSize/2);
-            ctx.drawImage(zombieSprite, dx, dy, spriteSize, spriteSize);
-          } else {
-            ctx.fillStyle = e.aware ? '#f00' : '#600';
-            ctx.fillRect(sx + 4, sy + 4, TILE - 8, TILE - 8);
-          }
-        }
-      });
-    } else if (e.type === 'tree') {
-      drawObjects.push({
-        type: 'tree',
-        y: e.y,
-        render: () => {
-          const spriteSize = TILE * 6.5;
-          const treeSprite = getTreeSprite(e.seedVal);
-          const dx = Math.floor(sx - spriteSize/2);
-          const dy = Math.floor(sy - spriteSize/2);
-          if (treeSprite.canvas) {
-            ctx.drawImage(treeSprite.canvas, dx, dy, spriteSize, spriteSize);
-          }
-          
-          // Click feedback - highlight when selected
-          if (e.clicked) {
-            ctx.strokeStyle = '#0f0';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(sx, sy, Math.floor(e.radius * TILE) + 5, 0, Math.PI * 2);
-            ctx.stroke();
-          }
-        }
-      });
-    } else if (e.type === 'pebble') {
-      drawObjects.push({
-        type: 'pebble',
-        y: e.y,
-        render: () => {
-          const pRadius = Math.floor(e.radius * TILE);
-          const px = sx;
-          const py = sy;
-          
-          // Simple filled circle pebble - much faster than nested pixel loops
-          ctx.fillStyle = e.tone > 0.65 ? 'rgba(100,95,85,0.8)'
-                           : e.tone > 0.35 ? 'rgba(140,135,125,0.8)'
-                           : 'rgba(180,175,165,0.7)';
-          ctx.beginPath();
-          ctx.arc(px, py, pRadius, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Highlight on lit side
-          if (e.light > 0.5) {
-            ctx.fillStyle = 'rgba(220,215,205,0.5)';
-            ctx.beginPath();
-            ctx.arc(px - Math.floor(pRadius * 0.3), py - Math.floor(pRadius * 0.3), 
-                    Math.floor(pRadius * 0.35), 0, Math.PI * 2);
-            ctx.fill();
-          }
-          
-          // Click feedback
-          if (e.clicked) {
-            ctx.strokeStyle = '#ff0';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(px, py, pRadius + 3, 0, Math.PI * 2);
-            ctx.stroke();
-          }
-        }
-      });
-    }
-  }
-
-  // Player
-  const px = Math.floor((player.x - cx + cols/2) * TILE);
-  const py = Math.floor((player.y - cy + rows/2) * TILE);
-  drawObjects.push({
-    type: 'player',
-    y: player.y,
-    render: () => {
-      const sprite = currentPlayerSprite();
-      const spriteSize = TILE * 1.7;
-      if (sprite.complete && sprite.naturalWidth > 0) {
-        const dx = Math.floor(px + TILE/2 - spriteSize/2);
-        const dy = Math.floor(py + TILE/2 - spriteSize/2);
-        ctx.drawImage(sprite, dx, dy, spriteSize, spriteSize);
-      } else {
-        ctx.fillStyle = '#0f0';
-        ctx.fillRect(px + 6, py + 6, TILE - 12, TILE - 12);
-      }
-    }
-  });
-
-  // Sort by Y position so characters pass naturally behind/in front of trees
-  drawObjects.sort((a, b) => a.y - b.y);
-  for (const obj of drawObjects) {
-    obj.render();
-  }
-
-  // Ambient vignette on top of everything, for depth and focus
-  if (vignetteCanvas) ctx.drawImage(vignetteCanvas, 0, 0);
-}
-
-// HUD
-let hudTimer = 0;
-function updateHUD(dtMs = 0) {
-  hudTimer += dtMs;
-  if (hudTimer < 100) return;
-
-  hudTimer = 0;
-  let zombieCount = 0;
-  for (const e of entities) {
-    if (e.type === 'zombie') zombieCount++;
-  }
-
-  hud.innerHTML = `
-    Player: (${Math.round(player.x)}, ${Math.round(player.y)}) HP: ${player.hp}<br>
-    Entities: ${entities.length}<br>
-    Zombies: ${zombieCount}
-  `;
-}
-
-// SPAWN TEST ZOMBIES
-for (let i = 0; i < 5; i++) {
-  createEntity('zombie', Math.random() * 20 - 10, Math.random() * 20 - 10);
-}
-
-// LOOP
-let lastTime = performance.now();
-function loop() {
-  const now = performance.now();
-  const rawDt = Math.min(now - lastTime, 100);
-  const dt = rawDt / 16.67;
-  lastTime = now;
-
-  update(dt);
-  render();
-  updateHUD(rawDt);
-
-  requestAnimationFrame(loop);
-}
-
-loop();
+let hudTimer=0;function updateHUD(ms=0){hudTimer+=ms;if(hudTimer<100)return;hudTimer=0;let z=0,b=0;for(const e of entities){if(e.type==='zombie')z++;if(e.type==='bush'&&!e.harvested)b++}const t=player.target?player.target.type:'none';hud.innerHTML=`Player: (${Math.round(player.x)}, ${Math.round(player.y)}) HP: ${player.hp}<br>Fiber: ${player.inventory.fiber||0}<br>Thick sticks: ${player.inventory.thickStick||0}<br>Target: ${t}<br>Entities: ${entities.length}<br>Harvestable bushes: ${b}<br>Zombies: ${z}`}
+for(let i=0;i<5;i++)createEntity('zombie',Math.random()*20-10,Math.random()*20-10);
+let last=performance.now();function loop(){const now=performance.now(),raw=Math.min(now-last,100),dt=raw/16.67;last=now;update(dt);render();updateHUD(raw);requestAnimationFrame(loop)}loop();
 </script>
 </body>
 </html>
