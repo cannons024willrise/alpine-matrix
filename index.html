@@ -55,14 +55,11 @@ function treeShouldSpawn(tx,ty){const treeDensity=noise(tx*.12,ty*.12,SEED+500),
 function getTreePlacement(tx,ty){const ox=(hash(tx,ty,801)-.5)*TILE*1.2,oy=(hash(tx,ty,802)-.5)*TILE*1.2;return{x:tx+.5+ox/TILE,y:ty+.5+oy/TILE}}
 function generateTreeEntityForTile(tx,ty){const key=`${tx},${ty}`;if(treeEntityCache.has(key))return;if(!treeShouldSpawn(tx,ty)){treeEntityCache.set(key,true);return}const pos=getTreePlacement(tx,ty);createEntity('tree',pos.x,pos.y,{seedVal:Math.floor(hash(tx,ty,999)*100000),radius:.25,tileX:tx,tileY:ty,solid:true,stickHarvested:false,stickYield:1+(hash(tx,ty,1001)>.68?1:0)});treeEntityCache.set(key,true)}
 
-// Alpine shrub resource. Bushes prefer grassy, open/forest-edge areas and are not solid.
 function generateBushEntityForTile(tx,ty){const key=`${tx},${ty}`;if(bushEntityCache.has(key))return;const tile=getTile(tx,ty),density=noise(tx*.11,ty*.11,SEED+610),edge=noise(tx*.07,ty*.07,SEED+611),place=hash(tx,ty,612);const spawn=tile.type==='grass'&&((density>.54&&place>.56)||(edge>.7&&place>.68));if(!spawn){bushEntityCache.set(key,true);return}const ox=(hash(tx,ty,613)-.5)*TILE*.75,oy=(hash(tx,ty,614)-.5)*TILE*.75;createEntity('bush',tx+.5+ox/TILE,ty+.5+oy/TILE,{tileX:tx,tileY:ty,radius:.22,seedVal:Math.floor(hash(tx,ty,615)*100000),fiberYield:2+Math.floor(hash(tx,ty,616)*4),harvested:false,regrowAt:0});bushEntityCache.set(key,true)}
 
 function generateStickEntityForTile(tx,ty){const key=`${tx},${ty}`;if(stickEntityCache.has(key)||collectedStickCache.has(key))return;
-  // Fallen thick sticks only occur beneath trees. Keep them uncommon.
   if(!treeShouldSpawn(tx,ty)||hash(tx,ty,741)>.28){stickEntityCache.set(key,true);return}
   const treePos=getTreePlacement(tx,ty);
-  // Drop the branch close to the trunk, but not directly underneath it.
   const angle=(hash(tx,ty,742)-.5)*Math.PI*2;
   const distance=.16+hash(tx,ty,743)*.28;
   const x=treePos.x+Math.cos(angle)*distance;
@@ -70,7 +67,7 @@ function generateStickEntityForTile(tx,ty){const key=`${tx},${ty}`;if(stickEntit
   createEntity('stick',x,y,{tileX:tx,tileY:ty,radius:.16,seedVal:Math.floor(hash(tx,ty,744)*100000),length:.62+hash(tx,ty,745)*.30,angle:(hash(tx,ty,746)-.5)*Math.PI,thick:true,collected:false});
   stickEntityCache.set(key,true)}
 
-function generateFlintForTile(tx,ty){const key=`${tx},${ty}`;if(flintEntityCache.has(key)||collectedFlintCache.has(key))return;const tile=getTile(tx,ty);const regionX=Math.floor(tx/3),regionY=Math.floor(ty/3);const regionHasFlint=hash(regionX,regionY,861)<0.04;const regionCellX=regionX*3+Math.floor(hash(regionX,regionY,865)*3);const regionCellY=regionY*3+Math.floor(hash(regionX,regionY,866)*3);if(tile.type!=='dirt'||!regionHasFlint||tx!==regionCellX||ty!==regionCellY){flintEntityCache.set(key,true);return}const x=tx+.15+hash(tx,ty,862)*.7,y=ty+.15+hash(tx,ty,863)*.7;createEntity('flint',x,y,{tileX:tx,tileY:ty,radius:.13,seedVal:Math.floor(hash(tx,ty,864)*100000),sharp:true,collected:false});flintEntityCache.set(key,true)}
+function generateFlintForTile(tx,ty){const key=`${tx},${ty}`;if(flintEntityCache.has(key)||collectedFlintCache.has(key))return;const tile=getTile(tx,ty);const regionX=Math.floor(tx/3),regionY=Math.floor(ty/3);const regionHasFlint=hash(regionX,regionY,861)<0.12;const regionCellX=regionX*3+Math.floor(hash(regionX,regionY,865)*3);const regionCellY=regionY*3+Math.floor(hash(regionX,regionY,866)*3);if(tile.type!=='dirt'||!regionHasFlint||tx!==regionCellX||ty!==regionCellY){flintEntityCache.set(key,true);return}const x=tx+.15+hash(tx,ty,862)*.7,y=ty+.15+hash(tx,ty,863)*.7;createEntity('flint',x,y,{tileX:tx,tileY:ty,radius:.13,seedVal:Math.floor(hash(tx,ty,864)*100000),sharp:true,collected:false});flintEntityCache.set(key,true)}
 
 function generatePebblesForTile(tx,ty){const key=`${tx},${ty}`;if(pebbleCache.has(key))return;const tile=getTile(tx,ty);if(tile.type!=='dirt'){pebbleCache.set(key,true);return}const count=Math.floor(hash(tx,ty,850)*2.5)+1;for(let i=0;i<count;i++){const s=851+i*5,r=.08+hash(tx,ty,s+2)*.08,lx=hash(tx,ty,s)*(1-r*2)+r,ly=hash(tx,ty,s+1)*(1-r*2)+r;createEntity('pebble',tx+lx,ty+ly,{radius:r,tone:hash(tx,ty,s+3),light:hash(tx,ty,s+4),tileX:tx,tileY:ty,seed:Math.floor(hash(tx,ty,s+6)*100000)})}pebbleCache.set(key,true)}
 
@@ -128,9 +125,6 @@ function hitEntityAtScreen(clientX,clientY){
     let distance;
 
     if(ent.type==='stick'){
-      // A branch is long and thin, so testing only its center makes phones
-      // unnecessarily painful. Use a capsule around the actual rendered
-      // branch, with a generous touch margin.
       const half=(ent.length*TILE)/2;
       const dx=Math.cos(ent.angle)*half;
       const dy=Math.sin(ent.angle)*half;
@@ -142,7 +136,6 @@ function hitEntityAtScreen(clientX,clientY){
     const radius=ent.type==='stick'?46:ent.type==='flint'?34:ent.type==='tree'?44:ent.type==='bush'?40:30;
     if(distance>radius)continue;
 
-    // Prefer a stick when the tap overlaps several tiny ground objects.
     const priority=ent.type==='stick'?3:ent.type==='flint'?2.5:ent.type==='bush'?2:ent.type==='tree'?1:0;
     const score=distance-(priority*6);
     if(priority>bestPriority || (priority===bestPriority && score<bestScore)){
@@ -219,11 +212,9 @@ function update(dt){player.vx=player.vy=0;const mobileX=touchMove.active?touchMo
 
 function render(){ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);const cx=player.x,cy=player.y,cols=viewportCols,rows=viewportRows,sx0=Math.floor(cx-cols/2),sy0=Math.floor(cy-rows/2),time=Date.now()*.003;for(let ty=sy0;ty<sy0+rows;ty++)for(let tx=sx0;tx<sx0+cols;tx++){const tile=getTile(tx,ty);if(!tile.bgCanvas)buildTileBackground(tx,ty,tile);generatePebblesForTile(tx,ty);generateBushEntityForTile(tx,ty);generateStickEntityForTile(tx,ty);generateFlintForTile(tx,ty);const sx=Math.floor((tx-cx+cols/2)*TILE),sy=Math.floor((ty-cy+rows/2)*TILE);ctx.drawImage(tile.bgCanvas,sx,sy);if(tile.type==='grass'&&tile.grassPattern){const sway=Math.sin(time+tx*.3+ty*.3)*3;for(const b of tile.grassPattern){const gx=Math.floor(sx+b.x*(TILE-2)),gy=Math.floor(sy+b.y*(TILE-8)+4),bend=Math.floor(sway+b.offsetSway);ctx.fillStyle=b.light?'#5bc46a':'#3a7a42';ctx.fillRect(gx+bend,gy-2,2,2)}}}
 const draw=[];for(let ty=sy0-2;ty<sy0+rows+2;ty++)for(let tx=sx0-2;tx<sx0+cols+2;tx++){generateTreeEntityForTile(tx,ty);generateBushEntityForTile(tx,ty);generateStickEntityForTile(tx,ty);generateFlintForTile(tx,ty)}for(const e of entities){const sx=Math.floor((e.x-cx+cols/2)*TILE),sy=Math.floor((e.y-cy+rows/2)*TILE);if(e.type==='zombie')draw.push({y:e.y,render:()=>{if(e.aware){ctx.save();ctx.strokeStyle='#f00';ctx.globalAlpha=.22+Math.sin(Date.now()*.004)*.06;ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx+TILE/2,sy+TILE/2,10,0,Math.PI*2);ctx.stroke();ctx.restore()}const sp=currentZombieSprite(e),size=TILE*1.7;if(sp.complete&&sp.naturalWidth){ctx.drawImage(sp,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2),size,size)}else{ctx.fillStyle=e.aware?'#f00':'#600';ctx.fillRect(sx+4,sy+4,TILE-8,TILE-8)}}});else if(e.type==='tree')draw.push({y:e.y,render:()=>{const sp=getTreeSprite(e.seedVal),size=TILE*6.5;ctx.drawImage(sp.canvas,Math.floor(sx-size/2),Math.floor(sy-size/2),size,size);if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,e.radius*TILE+5,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='bush')draw.push({y:e.y,render:()=>{const sp=e.harvested?getBareBushSprite(e.seedVal):getBushSprite(e.seedVal),size=TILE*2;ctx.globalAlpha=e.harvested?.9:1;ctx.drawImage(sp.canvas,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2-4),size,size);ctx.globalAlpha=1;if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,e.radius*TILE+5,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='stick')draw.push({y:e.y,render:()=>{if(e.collected)return;const len=e.length*TILE;ctx.save();ctx.translate(sx,sy);ctx.rotate(e.angle);ctx.lineCap='round';
-  // Irregular fallen branch: darker bark body, thinner lit ridge, slightly tapered ends.
   ctx.strokeStyle='#352416';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(-len*.5,1);ctx.lineTo(-len*.18,.5);ctx.lineTo(len*.2,-.5);ctx.lineTo(len*.5,-1);ctx.stroke();
   ctx.strokeStyle='#664326';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(-len*.48,0);ctx.lineTo(-len*.15,-.5);ctx.lineTo(len*.18,-1);ctx.lineTo(len*.47,-1.5);ctx.stroke();
   ctx.strokeStyle='rgba(120,82,46,.65)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-len*.25,-1);ctx.lineTo(len*.32,-2);ctx.stroke();
-  // Small broken twig.
   ctx.strokeStyle='#432b19';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(len*.15,-.5);ctx.lineTo(len*.27,-6);ctx.stroke();
   ctx.restore();if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,Math.max(10,e.radius*TILE+6),0,Math.PI*2);ctx.stroke()}}});else if(e.type==='flint')draw.push({y:e.y,render:()=>{if(e.collected)return;const ang=e.seedVal%360*Math.PI/180;ctx.save();ctx.translate(sx,sy);ctx.rotate(ang);ctx.fillStyle='#cfd3d0';ctx.beginPath();ctx.moveTo(-7,2);ctx.lineTo(-3,-5);ctx.lineTo(3,-7);ctx.lineTo(8,-2);ctx.lineTo(5,4);ctx.lineTo(-2,6);ctx.closePath();ctx.fill();ctx.fillStyle='#eef1ef';ctx.beginPath();ctx.moveTo(-3,-5);ctx.lineTo(3,-7);ctx.lineTo(1,-1);ctx.lineTo(-2,2);ctx.closePath();ctx.fill();ctx.fillStyle='rgba(80,90,90,.55)';ctx.fillRect(-2,1,5,2);ctx.restore();if(e.clicked){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,11,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='pebble')draw.push({y:e.y,render:()=>{const r=Math.floor(e.radius*TILE);ctx.fillStyle=e.tone>.65?'rgba(100,95,85,.8)':e.tone>.35?'rgba(140,135,125,.8)':'rgba(180,175,165,.7)';ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();if(e.light>.5){ctx.fillStyle='rgba(220,215,205,.5)';ctx.beginPath();ctx.arc(sx-r*.3,sy-r*.3,Math.max(1,r*.35),0,Math.PI*2);ctx.fill()}if(e.clicked){ctx.strokeStyle='#ff0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+3,0,Math.PI*2);ctx.stroke()}}})}
 const px=Math.floor((player.x-cx+cols/2)*TILE),py=Math.floor((player.y-cy+rows/2)*TILE);draw.push({y:player.y,render:()=>{const sp=currentPlayerSprite(),size=TILE*1.7;if(sp.complete&&sp.naturalWidth)ctx.drawImage(sp,Math.floor(px+TILE/2-size/2),Math.floor(py+TILE/2-size/2),size,size);else{ctx.fillStyle='#0f0';ctx.fillRect(px+6,py+6,TILE-12,TILE-12)}}});draw.sort((a,b)=>a.y-b.y);for(const o of draw)o.render();if(vignetteCanvas)ctx.drawImage(vignetteCanvas,0,0)}
