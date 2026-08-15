@@ -191,7 +191,8 @@ function interactTarget(){
 
 addEventListener('click',e=>{
   if(suppressNextClick){suppressNextClick=false;return}
-  hitEntityAtScreen(e.clientX,e.clientY);
+  const hit=hitEntityAtScreen(e.clientX,e.clientY);
+  if(hit)interactTarget();
 });
 
 const joystick=document.getElementById('joystick');
@@ -217,7 +218,8 @@ actionButton.addEventListener('pointerdown',e=>{interactTarget();actionButton.te
 canvas.addEventListener('pointerdown',e=>{
   if(e.pointerType==='touch'){
     suppressNextClick=true;
-    hitEntityAtScreen(e.clientX,e.clientY);
+    const hit=hitEntityAtScreen(e.clientX,e.clientY);
+    if(hit)interactTarget();
     e.preventDefault();
   }
 },{passive:false});
