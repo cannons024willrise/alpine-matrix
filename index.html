@@ -49,7 +49,11 @@ const GRASS_DARK='#1f4620',GRASS_LIGHT='#3c7a3f',DIRT_DARK='#6b6861',DIRT_LIGHT=
 for(let i=0;i<=PALETTE_STEPS;i++){GRASS_PALETTE.push(mixColor(GRASS_DARK,GRASS_LIGHT,i/PALETTE_STEPS));DIRT_PALETTE.push(mixColor(DIRT_DARK,DIRT_LIGHT,i/PALETTE_STEPS))}
 
 const entities=[];let nextId=0;
+const floatingTexts=[];
+function createFloatingText(x,y,text,color='#0f0'){floatingTexts.push({x,y,text,color,age:0,life:1.2})}
 function createEntity(type,x,y,data={}){const e={id:nextId++,type,x,y,vx:0,vy:0,hp:type==='zombie'?30:100,animPhase:0,...data};if(type==='zombie')e.colorSeed=Math.random();entities.push(e);return e}
+let cameraShake={intensity:0,duration:0};
+function addCameraShake(intensity,duration){cameraShake.intensity=Math.max(cameraShake.intensity,intensity);cameraShake.duration=Math.max(cameraShake.duration,duration)}
 
 function treeShouldSpawn(tx,ty){const treeDensity=noise(tx*.12,ty*.12,SEED+500),sparseNoise=noise(tx*.08,ty*.08,SEED+501),spacing=hash(tx,ty,803);return (treeDensity>.72&&spacing>.6)||sparseNoise>.92}
 function getTreePlacement(tx,ty){const ox=(hash(tx,ty,801)-.5)*TILE*1.2,oy=(hash(tx,ty,802)-.5)*TILE*1.2;return{x:tx+.5+ox/TILE,y:ty+.5+oy/TILE}}
@@ -100,7 +104,7 @@ function screenToWorld(x,y){const r=canvas.getBoundingClientRect();const sx=x-r.
 function addItem(name,amount){player.inventory[name]=(player.inventory[name]||0)+amount}
 function harvestBush(e){if(!e||e.type!=='bush'||e.harvested)return;e.harvested=true;e.clicked=true;addItem('fiber',e.fiberYield);e.regrowAt=performance.now()+15000;setTimeout(()=>e.clicked=false,200)}
 /* Tree harvest gives inventory sticks only. It never spawns a visible ground-stick entity. */
-function harvestTreeForSticks(e){if(!e||e.type!=='tree'||e.stickHarvested)return;e.stickHarvested=true;e.clicked=true;addItem('thickStick',e.stickYield||1);setTimeout(()=>e.clicked=false,450)}
+function harvestTreeForSticks(e){if(!e||e.type!=='tree'||e.stickHarvested)return;e.stickHarvested=true;e.clicked=true;const yield_=e.stickYield||1;addItem('thickStick',yield_);createFloatingText(e.x,e.y-1,`◆ Stick ×${yield_}`,'#8f8');addCameraShake(.15,.35);setTimeout(()=>e.clicked=false,450)}
 function worldToScreenPoint(x,y){return{x:(x-player.x+viewportCols/2)*TILE+TILE/2,y:(y-player.y+viewportRows/2)*TILE+TILE/2}}
 
 function screenPointForEntity(ent){
@@ -132,9 +136,6 @@ function hitEntityAtScreen(clientX,clientY){
     let distance;
 
     if(ent.type==='stick'){
-      // A branch is long and thin, so testing only its center makes phones
-      // unnecessarily painful. Use a capsule around the actual rendered
-      // branch, with a generous touch margin.
       const half=(ent.length*TILE)/2;
       const dx=Math.cos(ent.angle)*half;
       const dy=Math.sin(ent.angle)*half;
@@ -146,7 +147,6 @@ function hitEntityAtScreen(clientX,clientY){
     const radius=ent.type==='stick'?46:ent.type==='bigPebble'?34:ent.type==='flint'?34:ent.type==='tree'?88:ent.type==='bush'?40:30;
     if(distance>radius)continue;
 
-    // Prefer a stick when the tap overlaps several tiny ground objects.
     const priority=ent.type==='stick'?3:ent.type==='bigPebble'?2.8:ent.type==='flint'?2.5:ent.type==='tree'?2.2:ent.type==='bush'?2:0;
     const score=distance-(priority*6);
     if(priority>bestPriority || (priority===bestPriority && score<bestScore)){
@@ -160,29 +160,32 @@ function hitEntityAtScreen(clientX,clientY){
   player.target=best;
   best.clicked=true;
   setTimeout(()=>best.clicked=false,200);
-
-  if(best.type==='tree'){ harvestTreeForSticks(best); }
-  if(best.type==='bush'&&!best.harvested)harvestBush(best);
-  if(best.type==='flint'&&!best.collected){best.collected=true;addItem('flint',1);best.clicked=false;const flintKey=`${best.tileX},${best.tileY}`;flintEntityCache.delete(flintKey);collectedFlintCache.set(flintKey,true);return best;}
-  if(best.type==='bigPebble'&&!best.collected){best.collected=true;addItem('bigPebble',1);best.clicked=false;const pebbleKey=`${best.tileX},${best.tileY}`;bigPebbleCache.delete(pebbleKey);collectedBigPebbleCache.set(pebbleKey,true);return best;}
-  if(best.type==='stick'&&!best.collected){
-    best.collected=true;
-    addItem('thickStick',1);
-    best.clicked=false;
-    const stickKey=`${best.tileX},${best.tileY}`;
-    stickEntityCache.delete(stickKey);
-    collectedStickCache.set(stickKey,true);
-  }
   return best;
 }
+
+const COLLECTION_RANGE=2.5;
 function interactTarget(){
   if(player.target){
     const t=player.target;
     if(t.type==='tree'&&!t.stickHarvested){harvestTreeForSticks(t);return}
     if(t.type==='bush'&&!t.harvested){harvestBush(t);return}
-    if(t.type==='stick'&&!t.collected){t.collected=true;addItem('thickStick',1);const stickKey=`${t.tileX},${t.tileY}`;stickEntityCache.delete(stickKey);collectedStickCache.set(stickKey,true);return}
-    if(t.type==='flint'&&!t.collected){t.collected=true;addItem('flint',1);const flintKey=`${t.tileX},${t.tileY}`;flintEntityCache.delete(flintKey);collectedFlintCache.set(flintKey,true);return}
-    if(t.type==='bigPebble'&&!t.collected){t.collected=true;addItem('bigPebble',1);const pebbleKey=`${t.tileX},${t.tileY}`;bigPebbleCache.delete(pebbleKey);collectedBigPebbleCache.set(pebbleKey,true);return}
+    if(t.type==='stick'&&!t.collected){t.collected=true;addItem('thickStick',1);createFloatingText(t.x,t.y-0.5,'◆ Stick','#8f8');const stickKey=`${t.tileX},${t.tileY}`;stickEntityCache.delete(stickKey);collectedStickCache.set(stickKey,true);return}
+    if(t.type==='flint'&&!t.collected){t.collected=true;addItem('flint',1);createFloatingText(t.x,t.y-0.5,'◆ Flint','#fff');const flintKey=`${t.tileX},${t.tileY}`;flintEntityCache.delete(flintKey);collectedFlintCache.set(flintKey,true);return}
+    if(t.type==='bigPebble'&&!t.collected){t.collected=true;addItem('bigPebble',1);createFloatingText(t.x,t.y-0.5,'◆ Pebble','#ffd');const pebbleKey=`${t.tileX},${t.tileY}`;bigPebbleCache.delete(pebbleKey);collectedBigPebbleCache.set(pebbleKey,true);return}
+  }else{
+    for(const e of entities){
+      if(e.type==='bigPebble'||e.type==='flint'||e.type==='stick'){
+        const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy);
+        if(d<COLLECTION_RANGE&&!e.collected){
+          player.target=e;
+          e.clicked=true;
+          setTimeout(()=>e.clicked=false,200);
+          if(e.type==='bigPebble'){e.collected=true;addItem('bigPebble',1);createFloatingText(e.x,e.y-0.5,'◆ Pebble','#ffd');const pebbleKey=`${e.tileX},${e.tileY}`;bigPebbleCache.delete(pebbleKey);collectedBigPebbleCache.set(pebbleKey,true);return}
+          if(e.type==='flint'){e.collected=true;addItem('flint',1);createFloatingText(e.x,e.y-0.5,'◆ Flint','#fff');const flintKey=`${e.tileX},${e.tileY}`;flintEntityCache.delete(flintKey);collectedFlintCache.set(flintKey,true);return}
+          if(e.type==='stick'){e.collected=true;addItem('thickStick',1);createFloatingText(e.x,e.y-0.5,'◆ Stick','#8f8');const stickKey=`${e.tileX},${e.tileY}`;stickEntityCache.delete(stickKey);collectedStickCache.set(stickKey,true);return}
+        }
+      }
+    }
   }
 }
 
@@ -221,10 +224,21 @@ canvas.addEventListener('pointerdown',e=>{
 
 function cullFarEntities(){let count=0;for(const e of entities)if(e.type==='pebble'||e.type==='tree'||e.type==='bush'||e.type==='stick'||e.type==='flint')count++;const limit=MAX_BIG_PEBBLES+MAX_BUSHES+MAX_STICKS+MAX_FLINT;if(count<=limit)return;const arr=[];for(let i=0;i<entities.length;i++){const e=entities[i];if(!['bigPebble','tree','bush','stick','flint'].includes(e.type))continue;const dx=e.x-player.x,dy=e.y-player.y;arr.push({i,d:dx*dx+dy*dy,e})}arr.sort((a,b)=>b.d-a.d);const remove=new Set();for(let i=0;i<Math.max(0,arr.length-limit);i++){const x=arr[i];remove.add(x.i);const k=`${x.e.tileX},${x.e.tileY}`;if(x.e.type==='pebble')pebbleCache.delete(k);else if(x.e.type==='tree')treeEntityCache.delete(k);else if(x.e.type==='bush')bushEntityCache.delete(k);else if(x.e.type==='stick')stickEntityCache.delete(k);else flintEntityCache.delete(k)}for(let i=entities.length-1;i>=0;i--)if(remove.has(i))entities.splice(i,1)}
 
-function update(dt){player.vx=player.vy=0;const mobileX=touchMove.active?touchMove.x:0,mobileY=touchMove.active?touchMove.y:0;if(keys.w||keys.W||keys.ArrowUp)player.vy-=player.speed;if(keys.s||keys.S||keys.ArrowDown)player.vy+=player.speed;if(keys.a||keys.A||keys.ArrowLeft)player.vx-=player.speed;if(keys.d||keys.D||keys.ArrowRight)player.vx+=player.speed;player.vx+=mobileX*player.speed;player.vy+=mobileY*player.speed;player.moving=player.vx!==0||player.vy!==0;if(player.moving){player.facingAngle=Math.atan2(player.vy,player.vx);player.animPhase=(player.animPhase+dt*.045)%1}player.x+=player.vx;player.y+=player.vy;for(const e of entities){if(e.type==='tree'&&e.solid){const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy),min=player.radius+e.radius;if(d<min&&d>.001){const push=min-d+.01,a=Math.atan2(dy,dx);player.x+=Math.cos(a)*push;player.y+=Math.sin(a)*push}}if(e.type==='bush'&&e.harvested&&performance.now()>=e.regrowAt){e.harvested=false;e.regrowAt=0}}frameCounter=(frameCounter+1)%30;if(frameCounter===0)cullFarEntities();for(const e of entities)if(e.type==='zombie'){const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy);if(d<10){if(d>.1){e.vx=dx/d*.08;e.vy=dy/d*.08}e.aware=true}else{e.vx=e.vy=0;e.aware=false}e.x+=e.vx;e.y+=e.vy;if(e.vx||e.vy)e.animPhase=(e.animPhase+dt*.04)%1;else e.animPhase=0}}
+function update(dt){cameraShake.duration=Math.max(0,cameraShake.duration-dt);if(cameraShake.duration<=0)cameraShake.intensity=0;for(let i=floatingTexts.length-1;i>=0;i--){floatingTexts[i].age+=dt;if(floatingTexts[i].age>floatingTexts[i].life)floatingTexts.splice(i,1)}const cols=viewportCols,rows=viewportRows,sx0=Math.floor(player.x-cols/2),sy0=Math.floor(player.y-rows/2);for(let ty=sy0-2;ty<sy0+rows+2;ty++)for(let tx=sx0-2;tx<sx0+cols+2;tx++){generatePebblesForTile(tx,ty);generateBigPebbleForTile(tx,ty);generateTreeEntityForTile(tx,ty);generateBushEntityForTile(tx,ty);generateStickEntityForTile(tx,ty);generateFlintForTile(tx,ty)}player.vx=player.vy=0;const mobileX=touchMove.active?touchMove.x:0,mobileY=touchMove.active?touchMove.y:0;if(keys.w||keys.W||keys.ArrowUp)player.vy-=player.speed;if(keys.s||keys.S||keys.ArrowDown)player.vy+=player.speed;if(keys.a||keys.A||keys.ArrowLeft)player.vx-=player.speed;if(keys.d||keys.D||keys.ArrowRight)player.vx+=player.speed;player.vx+=mobileX*player.speed;player.vy+=mobileY*player.speed;player.moving=player.vx!==0||player.vy!==0;if(player.moving){player.facingAngle=Math.atan2(player.vy,player.vx);player.animPhase=(player.animPhase+dt*.045)%1}player.x+=player.vx;player.y+=player.vy;for(const e of entities){if(e.type==='tree'&&e.solid){const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy),min=player.radius+e.radius;if(d<min&&d>.001){const push=min-d+.01,a=Math.atan2(dy,dx);player.x+=Math.cos(a)*push;player.y+=Math.sin(a)*push}}if(e.type==='bush'&&e.harvested&&performance.now()>=e.regrowAt){e.harvested=false;e.regrowAt=0}}frameCounter=(frameCounter+1)%30;if(frameCounter===0)cullFarEntities();for(const e of entities)if(e.type==='zombie'){const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy);if(d<10){if(d>.1){e.vx=dx/d*.08;e.vy=dy/d*.08}e.aware=true}else{e.vx=e.vy=0;e.aware=false}e.x+=e.vx;e.y+=e.vy;if(e.vx||e.vy)e.animPhase=(e.animPhase+dt*.04)%1;else e.animPhase=0}}
 
-function render(){ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);const cx=player.x,cy=player.y,cols=viewportCols,rows=viewportRows,sx0=Math.floor(cx-cols/2),sy0=Math.floor(cy-rows/2),time=Date.now()*.003;for(let ty=sy0;ty<sy0+rows;ty++)for(let tx=sx0;tx<sx0+cols;tx++){const tile=getTile(tx,ty);if(!tile.bgCanvas)buildTileBackground(tx,ty,tile);generatePebblesForTile(tx,ty);generateBigPebbleForTile(tx,ty);generateBushEntityForTile(tx,ty);generateStickEntityForTile(tx,ty);generateFlintForTile(tx,ty);const sx=Math.floor((tx-cx+cols/2)*TILE),sy=Math.floor((ty-cy+rows/2)*TILE);ctx.drawImage(tile.bgCanvas,sx,sy);if(tile.type==='grass'&&tile.grassPattern){const sway=Math.sin(time+tx*.3+ty*.3)*3;for(const b of tile.grassPattern){const gx=Math.floor(sx+b.x*(TILE-2)),gy=Math.floor(sy+b.y*(TILE-8)+4),bend=Math.floor(sway+b.offsetSway);ctx.fillStyle=b.light?'#5bc46a':'#3a7a42';ctx.fillRect(gx+bend,gy-2,2,2)}}}
-const draw=[];for(let ty=sy0-2;ty<sy0+rows+2;ty++)for(let tx=sx0-2;tx<sx0+cols+2;tx++){generateTreeEntityForTile(tx,ty);generateBushEntityForTile(tx,ty);generateStickEntityForTile(tx,ty);generateFlintForTile(tx,ty)}for(const e of entities){const sx=Math.floor((e.x-cx+cols/2)*TILE),sy=Math.floor((e.y-cy+rows/2)*TILE);if(e.type==='zombie')draw.push({y:e.y,render:()=>{if(e.aware){ctx.save();ctx.strokeStyle='#f00';ctx.globalAlpha=.22+Math.sin(Date.now()*.004)*.06;ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx+TILE/2,sy+TILE/2,10,0,Math.PI*2);ctx.stroke();ctx.restore()}const sp=currentZombieSprite(e),size=TILE*1.7;if(sp.complete&&sp.naturalWidth){ctx.drawImage(sp,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2),size,size)}else{ctx.fillStyle=e.aware?'#f00':'#600';ctx.fillRect(sx+4,sy+4,TILE-8,TILE-8)}}});else if(e.type==='tree')draw.push({y:e.y,render:()=>{const sp=getTreeSprite(e.seedVal),size=TILE*6.5;ctx.drawImage(sp.canvas,Math.floor(sx-size/2),Math.floor(sy-size/2),size,size);if(e.clicked){ctx.save();ctx.strokeStyle='#0f0';ctx.globalAlpha=.9;ctx.lineWidth=3;ctx.beginPath();ctx.arc(sx,sy,Math.max(18,e.radius*TILE+10),0,Math.PI*2);ctx.stroke();ctx.restore()}}});else if(e.type==='bush')draw.push({y:e.y,render:()=>{const sp=e.harvested?getBareBushSprite(e.seedVal):getBushSprite(e.seedVal),size=TILE*2;ctx.globalAlpha=e.harvested?.9:1;ctx.drawImage(sp.canvas,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2-4),size,size);ctx.globalAlpha=1;if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,e.radius*TILE+5,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='stick')draw.push({y:e.y,render:()=>{if(e.collected)return;const len=e.length*TILE;ctx.save();ctx.translate(sx,sy);ctx.rotate(e.angle);ctx.lineCap='round';
+// Visual "ground contact" offsets used ONLY for painter's-algorithm depth
+// sorting. Sprites are drawn centered on the entity's world (x,y), but a
+// tree's canopy is drawn far taller than one tile and its trunk base sits
+// well below the sprite's vertical center. If we sort by raw entity y,
+// small ground objects near a tree (sticks, pebbles, bushes) whose y is
+// only slightly different from the tree's get sorted incorrectly relative
+// to the tree's canopy, making them appear to float on/behind foliage.
+// Offsetting the tree's sort key to its true visual base fixes this.
+const TREE_SORT_BASE_OFFSET=2.05; // tuned from tree sprite geometry (see getTreeSprite/drawPineTreeRaw)
+function treeSortY(e){return e.y+TREE_SORT_BASE_OFFSET}
+
+function render(){ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);const shakeX=cameraShake.intensity>0?((Math.random()-.5)*cameraShake.intensity*TILE):0,shakeY=cameraShake.intensity>0?((Math.random()-.5)*cameraShake.intensity*TILE):0;ctx.translate(shakeX,shakeY);const cx=player.x,cy=player.y,cols=viewportCols,rows=viewportRows,sx0=Math.floor(cx-cols/2),sy0=Math.floor(cy-rows/2),time=Date.now()*.003;for(let ty=sy0;ty<sy0+rows;ty++)for(let tx=sx0;tx<sx0+cols;tx++){const tile=getTile(tx,ty);if(!tile.bgCanvas)buildTileBackground(tx,ty,tile);const sx=Math.floor((tx-cx+cols/2)*TILE),sy=Math.floor((ty-cy+rows/2)*TILE);ctx.drawImage(tile.bgCanvas,sx,sy);if(tile.type==='grass'&&tile.grassPattern){const sway=Math.sin(time+tx*.3+ty*.3)*3;for(const b of tile.grassPattern){const gx=Math.floor(sx+b.x*(TILE-2)),gy=Math.floor(sy+b.y*(TILE-8)+4),bend=Math.floor(sway+b.offsetSway);ctx.fillStyle=b.light?'#5bc46a':'#3a7a42';ctx.fillRect(gx+bend,gy-2,2,2)}}}
+const draw=[];for(const e of entities){const sx=Math.floor((e.x-cx+cols/2)*TILE),sy=Math.floor((e.y-cy+rows/2)*TILE);if(e.type==='zombie')draw.push({y:e.y,render:()=>{if(e.aware){ctx.save();ctx.strokeStyle='#f00';ctx.globalAlpha=.22+Math.sin(Date.now()*.004)*.06;ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx+TILE/2,sy+TILE/2,10,0,Math.PI*2);ctx.stroke();ctx.restore()}const sp=currentZombieSprite(e),size=TILE*1.7;if(sp.complete&&sp.naturalWidth){ctx.drawImage(sp,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2),size,size)}else{ctx.fillStyle=e.aware?'#f00':'#600';ctx.fillRect(sx+4,sy+4,TILE-8,TILE-8)}}});else if(e.type==='tree')draw.push({y:treeSortY(e),render:()=>{const sp=getTreeSprite(e.seedVal),size=TILE*6.5;ctx.drawImage(sp.canvas,Math.floor(sx-size/2),Math.floor(sy-size/2),size,size);if(e.clicked){ctx.save();ctx.strokeStyle='#0f0';ctx.globalAlpha=.9;ctx.lineWidth=3;ctx.beginPath();ctx.arc(sx,sy,Math.max(18,e.radius*TILE+10),0,Math.PI*2);ctx.stroke();ctx.restore()}}});else if(e.type==='bush')draw.push({y:e.y,render:()=>{const sp=e.harvested?getBareBushSprite(e.seedVal):getBushSprite(e.seedVal),size=TILE*2;ctx.globalAlpha=e.harvested?.9:1;ctx.drawImage(sp.canvas,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2-4),size,size);ctx.globalAlpha=1;if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,e.radius*TILE+5,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='stick')draw.push({y:e.y,render:()=>{if(e.collected)return;const len=e.length*TILE;ctx.save();ctx.translate(sx,sy);ctx.rotate(e.angle);ctx.lineCap='round';
   // Irregular fallen branch: darker bark body, thinner lit ridge, slightly tapered ends.
   ctx.strokeStyle='#352416';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(-len*.5,1);ctx.lineTo(-len*.18,.5);ctx.lineTo(len*.2,-.5);ctx.lineTo(len*.5,-1);ctx.stroke();
   ctx.strokeStyle='#664326';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(-len*.48,0);ctx.lineTo(-len*.15,-.5);ctx.lineTo(len*.18,-1);ctx.lineTo(len*.47,-1.5);ctx.stroke();
@@ -232,9 +246,39 @@ const draw=[];for(let ty=sy0-2;ty<sy0+rows+2;ty++)for(let tx=sx0-2;tx<sx0+cols+2
   // Small broken twig.
   ctx.strokeStyle='#432b19';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(len*.15,-.5);ctx.lineTo(len*.27,-6);ctx.stroke();
   ctx.restore();if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,Math.max(10,e.radius*TILE+6),0,Math.PI*2);ctx.stroke()}}});else if(e.type==='bigPebble')draw.push({y:e.y,render:()=>{if(e.collected)return;const r=Math.floor(e.radius*TILE);ctx.save();ctx.fillStyle=e.tone>.62?'#8a8880':e.tone>.3?'#aaa69d':'#6f6d67';ctx.beginPath();ctx.ellipse(sx,sy,r*1.18,r*.92,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(225,222,214,.6)';ctx.beginPath();ctx.ellipse(sx-r*.28,sy-r*.3,r*.38,r*.22,-.2,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(55,52,48,.65)';ctx.lineWidth=1;ctx.stroke();if(e.clicked){ctx.strokeStyle='#ff0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+7,0,Math.PI*2);ctx.stroke()};ctx.restore()}});else if(e.type==='flint')draw.push({y:e.y,render:()=>{if(e.collected)return;const ang=e.seedVal%360*Math.PI/180;ctx.save();ctx.translate(sx,sy);ctx.rotate(ang);ctx.fillStyle='#cfd3d0';ctx.beginPath();ctx.moveTo(-7,2);ctx.lineTo(-3,-5);ctx.lineTo(3,-7);ctx.lineTo(8,-2);ctx.lineTo(5,4);ctx.lineTo(-2,6);ctx.closePath();ctx.fill();ctx.fillStyle='#eef1ef';ctx.beginPath();ctx.moveTo(-3,-5);ctx.lineTo(3,-7);ctx.lineTo(1,-1);ctx.lineTo(-2,2);ctx.closePath();ctx.fill();ctx.fillStyle='rgba(80,90,90,.55)';ctx.fillRect(-2,1,5,2);ctx.restore();if(e.clicked){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,11,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='pebble')draw.push({y:e.y,render:()=>{const r=Math.floor(e.radius*TILE);ctx.fillStyle=e.tone>.65?'rgba(100,95,85,.8)':e.tone>.35?'rgba(140,135,125,.8)':'rgba(180,175,165,.7)';ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();if(e.light>.5){ctx.fillStyle='rgba(220,215,205,.5)';ctx.beginPath();ctx.arc(sx-r*.3,sy-r*.3,Math.max(1,r*.35),0,Math.PI*2);ctx.fill()}if(e.clicked){ctx.strokeStyle='#ff0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+3,0,Math.PI*2);ctx.stroke()}}})}
-const px=Math.floor((player.x-cx+cols/2)*TILE),py=Math.floor((player.y-cy+rows/2)*TILE);draw.push({y:player.y,render:()=>{const sp=currentPlayerSprite(),size=TILE*1.7;if(sp.complete&&sp.naturalWidth)ctx.drawImage(sp,Math.floor(px+TILE/2-size/2),Math.floor(py+TILE/2-size/2),size,size);else{ctx.fillStyle='#0f0';ctx.fillRect(px+6,py+6,TILE-12,TILE-12)}}});draw.sort((a,b)=>a.y-b.y);for(const o of draw)o.render();if(vignetteCanvas)ctx.drawImage(vignetteCanvas,0,0)}
+const px=Math.floor((player.x-cx+cols/2)*TILE),py=Math.floor((player.y-cy+rows/2)*TILE);draw.push({y:player.y,render:()=>{const sp=currentPlayerSprite(),size=TILE*1.7;if(sp.complete&&sp.naturalWidth)ctx.drawImage(sp,Math.floor(px+TILE/2-size/2),Math.floor(py+TILE/2-size/2),size,size);else{ctx.fillStyle='#0f0';ctx.fillRect(px+6,py+6,TILE-12,TILE-12)}}});
+for(const e of entities){
+  if((e.type==='bigPebble'||e.type==='flint'||e.type==='stick')&&!e.collected){
+    const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy);
+    if(d<COLLECTION_RANGE){
+      const sx=Math.floor((e.x-cx+cols/2)*TILE),sy=Math.floor((e.y-cy+rows/2)*TILE);
+      ctx.strokeStyle='#0f0';
+      ctx.lineWidth=2;
+      ctx.beginPath();
+      ctx.arc(sx,sy,14,0,Math.PI*2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(sx-8,sy);ctx.lineTo(sx-5,sy);
+      ctx.moveTo(sx+8,sy);ctx.lineTo(sx+5,sy);
+      ctx.moveTo(sx,sy-8);ctx.lineTo(sx,sy-5);
+      ctx.moveTo(sx,sy+8);ctx.lineTo(sx,sy+5);
+      ctx.stroke();
+    }
+  }
+}
+draw.sort((a,b)=>a.y-b.y);for(const o of draw)o.render();for(const ft of floatingTexts){const progress=ft.age/ft.life,alpha=Math.max(0,1-progress),rise=progress*TILE*.8;ctx.save();ctx.globalAlpha=alpha;ctx.fillStyle=ft.color;ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.textBaseline='middle';const sx=Math.floor((ft.x-cx+cols/2)*TILE),sy=Math.floor((ft.y-cy+rows/2)*TILE+rise);ctx.fillText(ft.text,sx,sy);ctx.restore()}if(vignetteCanvas)ctx.drawImage(vignetteCanvas,0,0);ctx.translate(-shakeX,-shakeY)}
 
-let hudTimer=0;function updateHUD(ms=0){hudTimer+=ms;if(hudTimer<100)return;hudTimer=0;let z=0,b=0;for(const e of entities){if(e.type==='zombie')z++;if(e.type==='bush'&&!e.harvested)b++}const t=player.target?player.target.type:'none';hud.innerHTML=`Player: (${Math.round(player.x)}, ${Math.round(player.y)}) HP: ${player.hp}<br>Fiber: ${player.inventory.fiber||0}<br>Thick sticks: ${player.inventory.thickStick||0}<br>Hammerstones: ${player.inventory.bigPebble||0}<br>Flint: ${player.inventory.flint||0}<br>Target: ${t}<br>Entities: ${entities.length}<br>Harvestable bushes: ${b}<br>Zombies: ${z}`}
+let hudTimer=0;function updateHUD(ms=0){hudTimer+=ms;if(hudTimer<100)return;hudTimer=0;let z=0,b=0;for(const e of entities){if(e.type==='zombie')z++;if(e.type==='bush'&&!e.harvested)b++}const t=player.target?player.target.type:'—';const pos=`${Math.round(player.x)}, ${Math.round(player.y)}`;const fiberIcon=`<svg width="20" height="20" viewBox="0 0 64 64" style="display:inline-block;margin-right:6px;vertical-align:middle"><circle cx="32" cy="32" r="10" fill="#5bc46a"/></svg>`;const stickIcon=`<svg width="20" height="20" viewBox="0 0 64 64" style="display:inline-block;margin-right:6px;vertical-align:middle"><g transform="rotate(-30 32 32)"><rect x="28" y="16" width="8" height="32" rx="4" fill="#664326"/></g></svg>`;const pebbleIcon=`<svg width="20" height="20" viewBox="0 0 64 64" style="display:inline-block;margin-right:6px;vertical-align:middle"><ellipse cx="32" cy="32" rx="10" ry="8" fill="#aaa69d"/></svg>`;const flintIcon=`<svg width="20" height="20" viewBox="0 0 64 64" style="display:inline-block;margin-right:6px;vertical-align:middle"><polygon points="16,48 24,16 36,12 48,28 40,56 20,52" fill="#cfd3d0"/></svg>`;hud.innerHTML=`<div style="background:rgba(0,0,0,.75);padding:14px;border:2px solid #0f0;border-radius:4px;font-size:16px;line-height:2.2;font-family:monospace;font-weight:bold">
+<div style="color:#0f0;margin-bottom:10px;font-weight:bold;font-size:18px">◆ INVENTORY ◆</div>
+<div>${fiberIcon}<span style="color:#8f8">Fiber: ${player.inventory.fiber||0}</span></div>
+<div>${stickIcon}<span style="color:#a85">Sticks: ${player.inventory.thickStick||0}</span></div>
+<div>${pebbleIcon}<span style="color:#aaa">Pebbles: ${player.inventory.bigPebble||0}</span></div>
+<div>${flintIcon}<span style="color:#fff">Flint: ${player.inventory.flint||0}</span></div>
+<div style="margin-top:10px;border-top:1px solid #0f0;padding-top:10px;color:#0f0;font-size:12px;font-weight:normal">
+POS: ${pos} | HP: ${player.hp}<br>
+TARGET: ${t} | ENTITIES: ${entities.length}
+</div>
+</div>`}
 for(let i=0;i<5;i++)createEntity('zombie',Math.random()*20-10,Math.random()*20-10);
 let last=performance.now();function loop(){const now=performance.now(),raw=Math.min(now-last,100),dt=raw/16.67;last=now;update(dt);render();updateHUD(raw);requestAnimationFrame(loop)}loop();
 </script>
