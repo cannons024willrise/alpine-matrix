@@ -160,8 +160,14 @@ function hitEntityAtScreen(clientX,clientY){
     if(distance>radius)continue;
 
     const priority=ent.type==='stick'?3:ent.type==='bigPebble'?2.8:ent.type==='flint'?2.5:ent.type==='tree'?2.2:ent.type==='bush'?2:0;
-    const score=distance-(priority*6);
-    if(priority>bestPriority || (priority===bestPriority && score<bestScore)){
+    // Distance to the actual click point decides the winner; priority only
+    // acts as a small tiebreaker (a few px worth) so it can't override a
+    // click that's clearly closer to a lower-priority object. Previously
+    // priority was checked first, so any stick/pebble whose much-larger
+    // hit-circle merely overlapped the click point would steal it away
+    // from a flint you'd clicked dead-on, making flint feel unclickable.
+    const score=distance-(priority*4);
+    if(score<bestScore){
       best=ent;
       bestScore=score;
       bestPriority=priority;
