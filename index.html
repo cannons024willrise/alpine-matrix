@@ -17,10 +17,17 @@ canvas{display:block;image-rendering:pixelated}
 #joystickKnob{position:absolute;left:39px;top:39px;width:36px;height:36px;border-radius:50%;background:rgba(220,240,225,.65);box-shadow:0 0 0 2px rgba(0,0,0,.25)}
 #actionButton{position:absolute;right:max(22px,env(safe-area-inset-right));bottom:max(28px,env(safe-area-inset-bottom));width:82px;height:82px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(0,70,0,.38);color:#d8ffe0;font:700 15px monospace;pointer-events:auto;touch-action:none}
 #craftButton{position:absolute;right:max(30px,env(safe-area-inset-right));bottom:max(122px,calc(env(safe-area-inset-bottom) + 94px));width:62px;height:62px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(70,55,0,.45);color:#ffe9a8;font:700 11px monospace;pointer-events:auto;touch-action:none}
+#buildButton{position:absolute;right:max(104px,calc(env(safe-area-inset-right) + 74px));bottom:max(132px,calc(env(safe-area-inset-bottom) + 104px));width:62px;height:62px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(90,45,0,.48);color:#ffd27a;font:700 11px monospace;pointer-events:auto;touch-action:none}
 #craftHint{position:fixed;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));font-size:11px;color:#0f0;background:rgba(0,0,0,.6);border:1px solid #0f0;border-radius:4px;padding:6px 10px;z-index:10;text-shadow:1px 1px #000}
+#buildHint{position:fixed;top:max(42px,calc(env(safe-area-inset-top) + 32px));right:max(12px,env(safe-area-inset-right));font-size:11px;color:#ffd27a;background:rgba(0,0,0,.6);border:1px solid #e8a040;border-radius:4px;padding:6px 10px;z-index:10;text-shadow:1px 1px #000}
 @media (pointer:coarse), (max-width:700px){#mobileControls{display:block}#hud{font-size:11px}#craftHint{display:none}}
 #craftPanel{display:none;position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.75);align-items:center;justify-content:center}
 #craftPanel.open{display:flex}
+#buildPanel{display:none;position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.75);align-items:center;justify-content:center}
+#buildPanel.open{display:flex}
+#buildPanelInner{width:min(420px,92vw);max-height:80vh;overflow-y:auto;background:rgba(18,10,4,.97);border:2px solid #e8a040;border-radius:6px;padding:16px;font-family:monospace;color:#ffd27a}
+#buildPanelInner h2{font-size:16px;margin-bottom:12px;letter-spacing:1px}
+#buildClose{position:absolute;top:10px;right:12px;background:none;border:none;color:#ffd27a;font:700 18px monospace;cursor:pointer;pointer-events:auto}
 #craftPanelInner{width:min(420px,92vw);max-height:80vh;overflow-y:auto;background:rgba(6,14,6,.96);border:2px solid #0f0;border-radius:6px;padding:16px;font-family:monospace;color:#0f0}
 #craftPanelInner h2{font-size:16px;margin-bottom:12px;letter-spacing:1px}
 #craftClose{position:absolute;top:10px;right:12px;background:none;border:none;color:#0f0;font:700 18px monospace;cursor:pointer;pointer-events:auto}
@@ -41,8 +48,10 @@ canvas{display:block;image-rendering:pixelated}
 <div id="hud"></div>
 <button id="hudToggle" type="button">◆</button>
 <div id="craftHint">[C] Crafting</div>
+<div id="buildHint">[B] Building</div>
 <div id="craftPanel"><div id="craftPanelInner" style="position:relative"><button id="craftClose" type="button">✕</button><h2>◆ CRAFTING ◆</h2><div id="craftList"></div></div></div>
-<div id="mobileControls"><div id="joystick"><div id="joystickKnob"></div></div><button id="craftButton" type="button">CRAFT</button><button id="actionButton" type="button">ACT</button></div>
+<div id="buildPanel"><div id="buildPanelInner" style="position:relative"><button id="buildClose" type="button">✕</button><h2>🏗 BUILDING</h2><div id="buildList"></div></div></div>
+<div id="mobileControls"><div id="joystick"><div id="joystickKnob"></div></div><button id="craftButton" type="button">CRAFT</button><button id="buildButton" type="button">BUILD</button><button id="actionButton" type="button">ACT</button></div>
 <script>
 const canvas=document.getElementById('game');
 const ctx=canvas.getContext('2d');
@@ -220,7 +229,6 @@ function hitEntityAtScreen(clientX,clientY){
 //    a stone edge is next to useless until it's lashed to a handle;
 //    hafting is what turns a flake into an axe, knife, or spear.
 const RECIPES=[
-  {id:'campfire',name:'Campfire',stage:'Build',desc:'Gather stones and arrange them in a ring. Burn sticks as fuel to produce heat and charcoal.',cost:{thickStick:3,bigPebble:2},icon:'#e8a040',buildable:true},
   {id:'cordage',name:'Cordage',stage:'Process',desc:'Twist plant fiber into two-ply cord for lashing.',cost:{fiber:4},icon:'#5bc46a'},
   {id:'knappedFlint',name:'Knapped Flint Edge',stage:'Process',desc:'Percussion-flake a flint nodule with a hammerstone to raise a sharp edge.',cost:{flint:1,bigPebble:1},icon:'#cfd3d0'},
   {id:'charcoal',name:'Charcoal (at campfire)',stage:'Process',desc:'Burn thick sticks in your campfire to produce glowing embers for fire-hardening.',cost:{thickStick:2},icon:'#4a4a48',requiresCampfire:true},
@@ -235,13 +243,6 @@ function craftItem(id){
   const recipe=RECIPES.find(r=>r.id===id);
   if(!recipe||!canAfford(recipe.cost))return false;
   if(recipe.requiresCampfire&&player.campfires.length===0)return false;
-  if(recipe.buildable){
-    for(const k in recipe.cost)player.inventory[k]-=recipe.cost[k];
-    player.placingCampfire=true;
-    closeCraftPanel();
-    createFloatingText(player.x,player.y-1,'Click to place campfire','#ffd76a');
-    return true;
-  }
   for(const k in recipe.cost)player.inventory[k]-=recipe.cost[k];
   addItem(id,1);
   createFloatingText(player.x,player.y-1,`◆ ${recipe.name}`,'#ffd76a');
@@ -249,10 +250,26 @@ function craftItem(id){
   renderCraftPanel();
   return true;
 }
+
+const BUILD_RECIPES=[
+  {id:'campfire',name:'Campfire',desc:'Gather stones and arrange them in a ring. Burn sticks as fuel to produce heat and charcoal.',cost:{thickStick:3,bigPebble:2}}
+];
+function buildItem(id){
+  const recipe=BUILD_RECIPES.find(r=>r.id===id);
+  if(!recipe||!canAfford(recipe.cost))return false;
+  for(const k in recipe.cost)player.inventory[k]-=recipe.cost[k];
+  if(id==='campfire'){
+    player.placingCampfire=true;
+    closeBuildPanel();
+    createFloatingText(player.x,player.y-1,'Click to place campfire','#ffd76a');
+    return true;
+  }
+  return false;
+}
 const craftPanel=document.getElementById('craftPanel');
 const craftList=document.getElementById('craftList');
 function renderCraftPanel(){
-  const stages=['Build','Process','Haft'];
+  const stages=['Process','Haft'];
   let campfireSelector='';
   if(player.campfires.length>0){
     campfireSelector=`<div style="background:rgba(232,160,64,.15);padding:10px;margin-bottom:12px;border:1px solid #e8a040;border-radius:4px"><div style="font-size:11px;color:#fb2;margin-bottom:6px">SELECT CAMPFIRE:</div>${player.campfires.map((cf,i)=>`<div style="font-size:10px;color:#ccc;margin:4px 0;cursor:pointer;padding:4px;background:${player.selectedCampfire===i?'rgba(232,160,64,.3)':'transparent'};border:1px solid ${player.selectedCampfire===i?'#e8a040':'transparent'};border-radius:2px" onclick="player.selectedCampfire=${i};renderCraftPanel()">${i+1}. (${Math.round(cf.x)}, ${Math.round(cf.y)}) ⚡${Math.ceil(cf.fuel)}</div>`).join('')}</div>`;
@@ -274,13 +291,29 @@ function renderCraftPanel(){
         <div class="rHave">${have}</div>
       </div>`;
     }).join('');
-    const stageName=stage==='Build'?'🏗 Build':stage==='Process'?'① Process Raw Materials':'② Haft Finished Tools';
+    const stageName=stage==='Process'?'① Process Raw Materials':'② Haft Finished Tools';
     return `<div class="craftStageLabel">${stageName}</div>${rows}`;
   }).join('');
 }
-function openCraftPanel(){renderCraftPanel();craftPanel.classList.add('open')}
+function openCraftPanel(){closeBuildPanel();renderCraftPanel();craftPanel.classList.add('open')}
 function closeCraftPanel(){craftPanel.classList.remove('open')}
 function toggleCraftPanel(){craftPanel.classList.contains('open')?closeCraftPanel():openCraftPanel()}
+const buildPanel=document.getElementById('buildPanel');
+const buildList=document.getElementById('buildList');
+function renderBuildPanel(){
+  buildList.innerHTML=BUILD_RECIPES.map(r=>{
+    const afford=canAfford(r.cost);
+    const costStr=Object.entries(r.cost).map(([k,v])=>{const have=player.inventory[k]||0;return `<span style="color:${have<v?'#f66':'#9f9'}">${v} ${k}${have<v?` (have ${have})`:''}</span>`}).join(', ');
+    const placed=r.id==='campfire'&&player.campfires.length?`<div style="font-size:10px;color:#fb2;margin-top:4px">🔥 ${player.campfires.length} campfire(s) placed</div>`:'';
+    return `<div class="craftRecipe ${afford?'affordable':'locked'}" data-id="${r.id}"><div><div class="rName">${r.name}</div><div class="rCost">${costStr}</div><div class="rDesc">${r.desc}</div>${placed}</div></div>`;
+  }).join('');
+}
+function openBuildPanel(){closeCraftPanel();renderBuildPanel();buildPanel.classList.add('open')}
+function closeBuildPanel(){buildPanel.classList.remove('open')}
+function toggleBuildPanel(){buildPanel.classList.contains('open')?closeBuildPanel():openBuildPanel()}
+buildList.addEventListener('click',e=>{const row=e.target.closest('.craftRecipe');if(row)buildItem(row.dataset.id)});
+document.getElementById('buildClose').addEventListener('click',closeBuildPanel);
+document.getElementById('buildButton').addEventListener('pointerdown',e=>{toggleBuildPanel();e.preventDefault()});
 craftList.addEventListener('click',e=>{
   const row=e.target.closest('.craftRecipe');
   if(!row)return;
@@ -288,7 +321,7 @@ craftList.addEventListener('click',e=>{
 });
 document.getElementById('craftClose').addEventListener('click',closeCraftPanel);
 document.getElementById('craftButton').addEventListener('pointerdown',e=>{toggleCraftPanel();e.preventDefault()});
-addEventListener('keydown',e=>{if(e.key==='c'||e.key==='C')toggleCraftPanel()});
+addEventListener('keydown',e=>{if(e.key==='c'||e.key==='C')toggleCraftPanel();if(e.key==='b'||e.key==='B')toggleBuildPanel()});
 
 const COLLECTION_RANGE=2.5;
 function interactTarget(){
