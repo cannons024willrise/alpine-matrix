@@ -10,17 +10,39 @@ html,body{width:100%;height:100%;overflow:hidden;touch-action:none;overscroll-be
 body{background:#000;font-family:monospace;color:#0f0}
 canvas{display:block;image-rendering:pixelated}
 #hud{position:fixed;top:max(10px,env(safe-area-inset-top));left:max(10px,env(safe-area-inset-left));font-size:12px;line-height:1.5;z-index:10;pointer-events:none;text-shadow:1px 1px #000}
+#hud.hidden{display:none}
+#hudToggle{position:fixed;top:max(10px,env(safe-area-inset-top));left:max(10px,env(safe-area-inset-left));width:40px;height:40px;background:rgba(0,70,0,.5);border:2px solid #0f0;border-radius:4px;color:#0f0;font:700 14px monospace;cursor:pointer;pointer-events:auto;z-index:11;display:block}
 #mobileControls{display:none;position:fixed;inset:0;z-index:20;pointer-events:none}
 #joystick{position:absolute;left:max(18px,env(safe-area-inset-left));bottom:max(22px,env(safe-area-inset-bottom));width:118px;height:118px;border:2px solid rgba(255,255,255,.3);border-radius:50%;background:rgba(0,0,0,.18);pointer-events:auto;touch-action:none}
 #joystickKnob{position:absolute;left:39px;top:39px;width:36px;height:36px;border-radius:50%;background:rgba(220,240,225,.65);box-shadow:0 0 0 2px rgba(0,0,0,.25)}
 #actionButton{position:absolute;right:max(22px,env(safe-area-inset-right));bottom:max(28px,env(safe-area-inset-bottom));width:82px;height:82px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(0,70,0,.38);color:#d8ffe0;font:700 15px monospace;pointer-events:auto;touch-action:none}
-@media (pointer:coarse), (max-width:700px){#mobileControls{display:block}#hud{font-size:11px}}
+#craftButton{position:absolute;right:max(30px,env(safe-area-inset-right));bottom:max(122px,calc(env(safe-area-inset-bottom) + 94px));width:62px;height:62px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(70,55,0,.45);color:#ffe9a8;font:700 11px monospace;pointer-events:auto;touch-action:none}
+#craftHint{position:fixed;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));font-size:11px;color:#0f0;background:rgba(0,0,0,.6);border:1px solid #0f0;border-radius:4px;padding:6px 10px;z-index:10;text-shadow:1px 1px #000}
+@media (pointer:coarse), (max-width:700px){#mobileControls{display:block}#hud{font-size:11px}#craftHint{display:none}}
+#craftPanel{display:none;position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.75);align-items:center;justify-content:center}
+#craftPanel.open{display:flex}
+#craftPanelInner{width:min(420px,92vw);max-height:80vh;overflow-y:auto;background:rgba(6,14,6,.96);border:2px solid #0f0;border-radius:6px;padding:16px;font-family:monospace;color:#0f0}
+#craftPanelInner h2{font-size:16px;margin-bottom:12px;letter-spacing:1px}
+#craftClose{position:absolute;top:10px;right:12px;background:none;border:none;color:#0f0;font:700 18px monospace;cursor:pointer;pointer-events:auto}
+.craftRecipe{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;margin-bottom:8px;border:1px solid rgba(0,255,0,.3);border-radius:4px;cursor:pointer;pointer-events:auto}
+.craftRecipe.affordable{border-color:#0f0;background:rgba(0,255,0,.08)}
+.craftRecipe.affordable:active{background:rgba(0,255,0,.22)}
+.craftRecipe.locked{opacity:.45;cursor:default}
+.craftRecipe .rName{font-weight:700;font-size:13px;margin-bottom:4px}
+.craftRecipe .rCost{font-size:11px;color:#9f9}
+.craftRecipe .rDesc{font-size:10px;color:#8a8;margin-top:4px;line-height:1.4;max-width:260px}
+.craftRecipe .rHave{font-size:14px;font-weight:700;min-width:34px;text-align:center}
+.craftStageLabel{font-size:11px;letter-spacing:1px;color:#ffd76a;margin:14px 0 8px;text-transform:uppercase}
+.craftStageLabel:first-child{margin-top:0}
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
 <div id="hud"></div>
-<div id="mobileControls"><div id="joystick"><div id="joystickKnob"></div></div><button id="actionButton" type="button">ACT</button></div>
+<button id="hudToggle" type="button">◆</button>
+<div id="craftHint">[C] Crafting</div>
+<div id="craftPanel"><div id="craftPanelInner" style="position:relative"><button id="craftClose" type="button">✕</button><h2>◆ CRAFTING ◆</h2><div id="craftList"></div></div></div>
+<div id="mobileControls"><div id="joystick"><div id="joystickKnob"></div></div><button id="craftButton" type="button">CRAFT</button><button id="actionButton" type="button">ACT</button></div>
 <script>
 const canvas=document.getElementById('game');
 const ctx=canvas.getContext('2d');
@@ -40,8 +62,8 @@ function hash(x,y,seed){let h=(x*374761393+y*668265263+seed*2147483647)|0;h=(h^(
 function noise(x,y,seed){const x0=Math.floor(x),y0=Math.floor(y),sx=x-x0,sy=y-y0,u=sx*sx*(3-2*sx),v=sy*sy*(3-2*sy);const n00=hash(x0,y0,seed),n10=hash(x0+1,y0,seed),n01=hash(x0,y0+1,seed),n11=hash(x0+1,y0+1,seed);return(n00+u*(n10-n00))+v*((n01+u*(n11-n01))-(n00+u*(n10-n00)))}
 function mixColor(a,b,t){const r1=parseInt(a.slice(1,3),16),g1=parseInt(a.slice(3,5),16),b1=parseInt(a.slice(5,7),16),r2=parseInt(b.slice(1,3),16),g2=parseInt(b.slice(3,5),16),b2=parseInt(b.slice(5,7),16);return`rgb(${Math.round(r1+(r2-r1)*t)},${Math.round(g1+(g2-g1)*t)},${Math.round(b1+(b2-b1)*t)})`}
 const SEED=Math.random()*1e9;
-const tileCache=new Map(),treeEntityCache=new Map(),pebbleCache=new Map(),bigPebbleCache=new Map(),collectedBigPebbleCache=new Map(),bushEntityCache=new Map(),stickEntityCache=new Map(),collectedStickCache=new Map(),flintEntityCache=new Map(),collectedFlintCache=new Map(),treeSpriteCache=new Map(),bushSpriteCache=new Map();
-const MAX_PEBBLES=400,MAX_BIG_PEBBLES=100,MAX_BUSHES=180,MAX_STICKS=180,MAX_FLINT=90;
+const tileCache=new Map(),treeEntityCache=new Map(),pebbleCache=new Map(),bigPebbleCache=new Map(),collectedBigPebbleCache=new Map(),bushEntityCache=new Map(),stickEntityCache=new Map(),collectedStickCache=new Map(),flintEntityCache=new Map(),collectedFlintCache=new Map(),charcoalEntityCache=new Map(),collectedCharcoalCache=new Map(),treeSpriteCache=new Map(),bushSpriteCache=new Map();
+const MAX_PEBBLES=400,MAX_BIG_PEBBLES=100,MAX_BUSHES=180,MAX_STICKS=180,MAX_FLINT=90,MAX_CHARCOAL=140;
 let frameCounter=0;
 function trimCache(map,limit,count){if(map.size<=limit)return;const it=map.keys();for(let i=0;i<count;i++){const k=it.next().value;if(k===undefined)break;map.delete(k)}}
 function getTile(x,y){const key=`${x},${y}`;let tile=tileCache.get(key);if(!tile){const shade=noise(x*.17,y*.17,SEED+300),elevation=noise(x*.015,y*.015,SEED+900),bedrock=noise(x*.05,y*.05,SEED+901),moisture=noise(x*.07,y*.07,SEED+902);const aspect=(x+y)%2<1?1:-1;const adjustedElev=elevation+aspect*noise(x*.03,y*.03,SEED+910)*.15;let type;if(moisture>.72)type='gleysol';else if(adjustedElev>.68)type=bedrock>.5?'regosol':'alpineRanker';else if(adjustedElev>.45)type=bedrock>.6?'rendzina':'podzol';else type='brownEarth';tile={type,shade,elevation:adjustedElev,aspect};trimCache(tileCache,10000,1000);tileCache.set(key,tile)}return tile}
@@ -67,7 +89,7 @@ function createEntity(type,x,y,data={}){const e={id:nextId++,type,x,y,vx:0,vy:0,
 let cameraShake={intensity:0,duration:0};
 function addCameraShake(intensity,duration){cameraShake.intensity=Math.max(cameraShake.intensity,intensity);cameraShake.duration=Math.max(cameraShake.duration,duration)}
 
-function treeShouldSpawn(tx,ty){const tile=getTile(tx,ty);if(tile.type==='gleysol')return false;if(!isVegetated(tile.type))return false;const treelimit=0.50+tile.aspect*0.04;if(tile.elevation>treelimit)return false;const treeDensity=noise(tx*.12,ty*.12,SEED+500),spacing=hash(tx,ty,803);return treeDensity>.62&&spacing>.5}
+function treeShouldSpawn(tx,ty){const tile=getTile(tx,ty),water=getWater(tx,ty);if(tile.type==='gleysol'||water.gleysol||water.river)return false;if(!isVegetated(tile.type))return false;const treelimit=0.50+tile.aspect*0.04;if(tile.elevation>treelimit)return false;const treeDensity=noise(tx*.12,ty*.12,SEED+500),spacing=hash(tx,ty,803);return treeDensity>.62&&spacing>.5}
 function getTreePlacement(tx,ty){const ox=(hash(tx,ty,801)-.5)*TILE*.6,oy=(hash(tx,ty,802)-.5)*TILE*.6;return{x:tx+.5+ox/TILE,y:ty+.5+oy/TILE}}
 function generateTreeEntityForTile(tx,ty){const key=`${tx},${ty}`;if(treeEntityCache.has(key))return;if(!treeShouldSpawn(tx,ty)){treeEntityCache.set(key,true);return}const pos=getTreePlacement(tx,ty);createEntity('tree',pos.x,pos.y,{seedVal:Math.floor(hash(tx,ty,999)*100000),radius:.25,tileX:tx,tileY:ty,solid:true,stickHarvested:false,stickYield:1+(hash(tx,ty,1001)>.68?1:0)});treeEntityCache.set(key,true)}
 
@@ -88,6 +110,8 @@ function generateStickEntityForTile(tx,ty){const key=`${tx},${ty}`;if(stickEntit
 
 function generateFlintForTile(tx,ty){const key=`${tx},${ty}`;if(flintEntityCache.has(key)||collectedFlintCache.has(key))return;const tile=getTile(tx,ty),water=getWater(tx,ty);const regionX=Math.floor(tx/3),regionY=Math.floor(ty/3);const regionHasFlint=hash(regionX,regionY,861)<0.15;const regionCellX=regionX*3+Math.floor(hash(regionX,regionY,865)*3);const regionCellY=regionY*3+Math.floor(hash(regionX,regionY,866)*3);if(!isBare(tile.type)||water.river||!regionHasFlint||tx!==regionCellX||ty!==regionCellY){flintEntityCache.set(key,true);return}const x=tx+.15+hash(tx,ty,862)*.7,y=ty+.15+hash(tx,ty,863)*.7;createEntity('flint',x,y,{tileX:tx,tileY:ty,radius:.13,seedVal:Math.floor(hash(tx,ty,864)*100000),sharp:true,collected:false});flintEntityCache.set(key,true)}
 
+function generateCharcoalForTile(tx,ty){const key=`${tx},${ty}`;if(charcoalEntityCache.has(key)||collectedCharcoalCache.has(key))return;const tile=getTile(tx,ty),water=getWater(tx,ty);if(water.river){charcoalEntityCache.set(key,true);return}const hasCharcoal=hash(tx,ty,922)<0.12;if(!hasCharcoal){charcoalEntityCache.set(key,true);return}const x=tx+.2+hash(tx,ty,923)*.6,y=ty+.2+hash(tx,ty,924)*.6;createEntity('charcoal',x,y,{tileX:tx,tileY:ty,radius:.12,seedVal:Math.floor(hash(tx,ty,925)*100000),collected:false});charcoalEntityCache.set(key,true)}
+
 function generatePebblesForTile(tx,ty){const key=`${tx},${ty}`;if(pebbleCache.has(key))return;const tile=getTile(tx,ty),water=getWater(tx,ty);if(!isBare(tile.type)||water.river){pebbleCache.set(key,true);return}const count=Math.floor(hash(tx,ty,850)*2.5)+1;for(let i=0;i<count;i++){const s=851+i*5,r=.08+hash(tx,ty,s+2)*.08,lx=hash(tx,ty,s)*(1-r*2)+r,ly=hash(tx,ty,s+1)*(1-r*2)+r;createEntity('pebble',tx+lx,ty+ly,{radius:r,tone:hash(tx,ty,s+3),light:hash(tx,ty,s+4),tileX:tx,tileY:ty,seed:Math.floor(hash(tx,ty,s+6)*100000)})}pebbleCache.set(key,true)}
 
 // Slightly larger loose stones are the only pebble-sized objects that can be collected.
@@ -107,7 +131,7 @@ function getBareBushSprite(seed){let s=bushSpriteCache.get('bare:'+seed);if(s)re
 function buildZombieSVG(phase,moving){const sh=moving?Math.sin(phase*Math.PI*2):0,leg=sh*18,arm=sh*35,tilt=sh*8,drop=moving?8:4,limb='#3f8a4c';return`<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="-64 -64 128 128"><defs><radialGradient id="zBody" cx="35%" cy="25%" r="80%"><stop offset="0%" stop-color="#77cf85"/><stop offset="100%" stop-color="#2e5c37"/></radialGradient><radialGradient id="zHead" cx="35%" cy="25%" r="80%"><stop offset="0%" stop-color="#6ec97e"/><stop offset="100%" stop-color="#2e5c37"/></radialGradient></defs><ellipse cx="0" cy="32" rx="18" ry="6" fill="rgba(0,0,0,.25)"/><g transform="rotate(${leg*.7} -6 6)"><rect x="-10" y="6" width="8" height="28" rx="4" fill="${limb}"/></g><g transform="rotate(${-leg*1.2} 6 6)"><rect x="2" y="4" width="8" height="30" rx="4" fill="${limb}"/></g><g transform="rotate(${arm*1.1} -16 ${-drop}) skewX(${sh*6})"><rect x="-20" y="${-12-drop}" width="7" height="28" rx="3.5" fill="${limb}"/></g><g transform="rotate(${tilt})"><rect x="-13" y="-18" width="26" height="36" rx="10" fill="url(#zBody)"/><rect x="-9" y="-6" width="5" height="10" rx="1" fill="#1c3a22" opacity=".6"/></g><g transform="rotate(${-arm*.9} 16 ${-drop+2}) skewX(${-sh*4})"><rect x="13" y="${-10-drop}" width="7" height="26" rx="3.5" fill="${limb}"/></g><g transform="rotate(${tilt*.6})"><circle cx="0" cy="-28" r="13" fill="url(#zHead)"/><circle cx="-4" cy="-29" r="1.6" fill="#ff5a4d"/><circle cx="4" cy="-29" r="1.6" fill="#ff5a4d"/></g></svg>`}
 const ZOMBIE_FRAME_COUNT=8,zombieFrames=[];for(let i=0;i<ZOMBIE_FRAME_COUNT;i++){const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildZombieSVG(i/ZOMBIE_FRAME_COUNT,true));zombieFrames.push(img)}const zombieIdleFrame=new Image();zombieIdleFrame.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildZombieSVG(0,false));function currentZombieSprite(e){if(!e.vx&&!e.vy)return zombieIdleFrame;return zombieFrames[Math.floor(e.animPhase*ZOMBIE_FRAME_COUNT)%ZOMBIE_FRAME_COUNT]}
 
-const player={x:0,y:0,vx:0,vy:0,hp:100,speed:.15,radius:.2,facingAngle:Math.PI/2,animPhase:0,moving:false,inventory:{fiber:0,thickStick:0,flint:0,bigPebble:0},target:null};
+const player={x:0,y:0,vx:0,vy:0,hp:100,speed:.15,radius:.2,facingAngle:Math.PI/2,animPhase:0,moving:false,inventory:{fiber:0,thickStick:0,flint:0,bigPebble:0,charcoal:0,cordage:0,knappedFlint:0,carvedShaft:0,shaft:0,flintKnife:0,stoneAxe:0,spear:0},campfires:[],selectedCampfire:0,placingCampfire:false,target:null};
 function buildPlayerSVG(phase,moving){const cyc=phase*Math.PI*2,sw=moving?Math.sin(cyc):0,la=sw*28,aa=-sw*32,bob=moving?Math.abs(Math.sin(cyc*2))*3.5:0,bt=moving?sw*4:0,hs=moving?-sw*3:0,limb='#bcd9c4';return`<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="-64 -64 128 128"><defs><radialGradient id="pBody" cx="35%" cy="30%" r="75%"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#cfe6d6"/></radialGradient><radialGradient id="pHead" cx="35%" cy="30%" r="75%"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#d6ebdc"/></radialGradient></defs><ellipse cx="${sw*2}" cy="32" rx="${20-Math.abs(sw)*2}" ry="7" fill="rgba(0,0,0,.35)"/><g transform="rotate(${la} -6 6) translate(0 ${-bob})"><rect x="-11" y="4" width="9" height="27" rx="4.5" fill="${limb}"/></g><g transform="rotate(${-la} 6 6) translate(0 ${-bob})"><rect x="2" y="4" width="9" height="27" rx="4.5" fill="${limb}"/></g><g transform="rotate(${-aa} -15 -4) translate(0 ${-bob})"><rect x="-19" y="-10" width="8" height="25" rx="4" fill="${limb}"/></g><g transform="rotate(${bt}) translate(0 ${-bob})"><rect x="-14" y="-19" width="28" height="34" rx="11" fill="url(#pBody)"/></g><g transform="rotate(${aa} 15 -4) translate(0 ${-bob})"><rect x="11" y="-10" width="8" height="25" rx="4" fill="${limb}"/></g><g transform="rotate(${hs} 0 ${-29-bob}) translate(0 ${-bob})"><circle cx="0" cy="-29" r="12.5" fill="url(#pHead)"/><circle cx="-4" cy="-30" r="1.4" fill="#1a2b20"/><circle cx="4" cy="-30" r="1.4" fill="#1a2b20"/></g></svg>`}
 const PLAYER_FRAME_COUNT=8,playerFrames=[];for(let i=0;i<PLAYER_FRAME_COUNT;i++){const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildPlayerSVG(i/PLAYER_FRAME_COUNT,true));playerFrames.push(img)}const playerIdleFrame=new Image();playerIdleFrame.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildPlayerSVG(0,false));function currentPlayerSprite(){if(!player.moving)return playerIdleFrame;return playerFrames[Math.floor(player.animPhase*PLAYER_FRAME_COUNT)%PLAYER_FRAME_COUNT]}
 
@@ -142,7 +166,12 @@ function hitEntityAtScreen(clientX,clientY){
   let best=null,bestScore=Infinity,bestPriority=-1;
 
   for(const ent of entities){
-    if(ent.type!=='bigPebble'&&ent.type!=='tree'&&ent.type!=='bush'&&ent.type!=='stick'&&ent.type!=='flint')continue;
+    if(ent.type!=='bigPebble'&&ent.type!=='tree'&&ent.type!=='bush'&&ent.type!=='stick'&&ent.type!=='flint'&&ent.type!=='charcoal')continue;
+    // Already-collected pickups stay in the entities array (until culled)
+    // but are invisible. Without this check their hit-circle can still
+    // steal a click meant for a nearby uncollected item, making things
+    // like flint seem impossible to pick up after the first one.
+    if((ent.type==='flint'||ent.type==='bigPebble'||ent.type==='stick'||ent.type==='charcoal')&&ent.collected)continue;
 
     const p=screenPointForEntity(ent);
     let distance;
@@ -156,10 +185,10 @@ function hitEntityAtScreen(clientX,clientY){
       distance=Math.hypot(x-p.x,y-p.y);
     }
 
-    const radius=ent.type==='stick'?46:ent.type==='bigPebble'?34:ent.type==='flint'?34:ent.type==='tree'?88:ent.type==='bush'?40:30;
+    const radius=ent.type==='stick'?46:ent.type==='bigPebble'?34:ent.type==='flint'?34:ent.type==='charcoal'?32:ent.type==='tree'?88:ent.type==='bush'?40:30;
     if(distance>radius)continue;
 
-    const priority=ent.type==='stick'?3:ent.type==='bigPebble'?2.8:ent.type==='flint'?2.5:ent.type==='tree'?2.2:ent.type==='bush'?2:0;
+    const priority=ent.type==='stick'?3:ent.type==='bigPebble'?2.8:ent.type==='flint'?2.5:ent.type==='charcoal'?2.5:ent.type==='tree'?2.2:ent.type==='bush'?2:0;
     // Distance to the actual click point decides the winner; priority only
     // acts as a small tiebreaker (a few px worth) so it can't override a
     // click that's clearly closer to a lower-priority object. Previously
@@ -181,6 +210,86 @@ function hitEntityAtScreen(clientX,clientY){
   return best;
 }
 
+// Two-stage chain modeled on real primitive technology:
+// 1) PROCESSING turns raw gathered material into a usable component
+//    (twisted cordage, a percussion-knapped flint edge, a scraped/
+//    fire-hardened haft) — see Hafting (en.wikipedia.org/wiki/Hafting)
+//    and Master Woodsman's primitive-skills documentation of knapping,
+//    pecking, and cordage-making.
+// 2) HAFTING/ASSEMBLY binds those components into a finished tool —
+//    a stone edge is next to useless until it's lashed to a handle;
+//    hafting is what turns a flake into an axe, knife, or spear.
+const RECIPES=[
+  {id:'campfire',name:'Campfire',stage:'Build',desc:'Gather stones and arrange them in a ring. Burn sticks as fuel to produce heat and charcoal.',cost:{thickStick:3,bigPebble:2},icon:'#e8a040',buildable:true},
+  {id:'cordage',name:'Cordage',stage:'Process',desc:'Twist plant fiber into two-ply cord for lashing.',cost:{fiber:4},icon:'#5bc46a'},
+  {id:'knappedFlint',name:'Knapped Flint Edge',stage:'Process',desc:'Percussion-flake a flint nodule with a hammerstone to raise a sharp edge.',cost:{flint:1,bigPebble:1},icon:'#cfd3d0'},
+  {id:'charcoal',name:'Charcoal (at campfire)',stage:'Process',desc:'Burn thick sticks in your campfire to produce glowing embers for fire-hardening.',cost:{thickStick:2},icon:'#4a4a48',requiresCampfire:true},
+  {id:'carvedShaft',name:'Carved Wooden Shaft',stage:'Process',desc:'Carve a straight stick into a tapered point using a flint blade.',cost:{thickStick:1,knappedFlint:1},icon:'#d4a574'},
+  {id:'shaft',name:'Fire-Hardened Shaft',stage:'Process',desc:'Hold a carved point over hot campfire embers to drive out moisture and char the surface.',cost:{carvedShaft:1,charcoal:1},icon:'#a85',requiresCampfire:true},
+  {id:'flintKnife',name:'Flint Knife',stage:'Haft',desc:'Lash a knapped edge to a short handle with cordage.',cost:{knappedFlint:1,shaft:1,cordage:1},icon:'#eef1ef'},
+  {id:'spear',name:'Spear',stage:'Haft',desc:'Haft a flint point onto a fire-hardened shaft, lashed and bound tight with cordage.',cost:{knappedFlint:1,shaft:1,cordage:2},icon:'#c96'},
+  {id:'stoneAxe',name:'Stone Axe (Celt)',stage:'Haft',desc:'Peck and grind a flint blank into an axehead, wedge it into a mortised shaft, and bind tight.',cost:{knappedFlint:2,shaft:1,cordage:2},icon:'#8a8880'}
+];
+function canAfford(cost){for(const k in cost)if((player.inventory[k]||0)<cost[k])return false;return true}
+function craftItem(id){
+  const recipe=RECIPES.find(r=>r.id===id);
+  if(!recipe||!canAfford(recipe.cost))return false;
+  if(recipe.requiresCampfire&&player.campfires.length===0)return false;
+  if(recipe.buildable){
+    for(const k in recipe.cost)player.inventory[k]-=recipe.cost[k];
+    player.placingCampfire=true;
+    closeCraftPanel();
+    createFloatingText(player.x,player.y-1,'Click to place campfire','#ffd76a');
+    return true;
+  }
+  for(const k in recipe.cost)player.inventory[k]-=recipe.cost[k];
+  addItem(id,1);
+  createFloatingText(player.x,player.y-1,`◆ ${recipe.name}`,'#ffd76a');
+  addCameraShake(.08,.2);
+  renderCraftPanel();
+  return true;
+}
+const craftPanel=document.getElementById('craftPanel');
+const craftList=document.getElementById('craftList');
+function renderCraftPanel(){
+  const stages=['Build','Process','Haft'];
+  let campfireSelector='';
+  if(player.campfires.length>0){
+    campfireSelector=`<div style="background:rgba(232,160,64,.15);padding:10px;margin-bottom:12px;border:1px solid #e8a040;border-radius:4px"><div style="font-size:11px;color:#fb2;margin-bottom:6px">SELECT CAMPFIRE:</div>${player.campfires.map((cf,i)=>`<div style="font-size:10px;color:#ccc;margin:4px 0;cursor:pointer;padding:4px;background:${player.selectedCampfire===i?'rgba(232,160,64,.3)':'transparent'};border:1px solid ${player.selectedCampfire===i?'#e8a040':'transparent'};border-radius:2px" onclick="player.selectedCampfire=${i};renderCraftPanel()">${i+1}. (${Math.round(cf.x)}, ${Math.round(cf.y)}) ⚡${Math.ceil(cf.fuel)}</div>`).join('')}</div>`;
+  }
+  craftList.innerHTML=campfireSelector+stages.map(stage=>{
+    const rows=RECIPES.filter(r=>r.stage===stage).map(r=>{
+      const afford=canAfford(r.cost);
+      const canCraft=afford&&(!r.requiresCampfire||player.campfires.length>0);
+      const costStr=Object.entries(r.cost).map(([k,v])=>{
+        const have=player.inventory[k]||0;
+        const short=have<v;
+        return `<span style="color:${short?'#f66':'#9f9'}">${v} ${k}${short?` (have ${have})`:''}</span>`;
+      }).join(', ');
+      const have=player.inventory[r.id]||0;
+      const warning=r.requiresCampfire&&player.campfires.length===0?'<div style="font-size:10px;color:#f99;margin-top:4px">⚠ Requires campfire</div>':'';
+      const campfireStatus=r.buildable&&player.campfires.length>0?`<div style="font-size:10px;color:#fb2;margin-top:4px">🔥 ${player.campfires.length} campfire(s)</div>`:'';
+      return `<div class="craftRecipe ${canCraft?'affordable':'locked'}" data-id="${r.id}">
+        <div><div class="rName">${r.name}</div><div class="rCost">${costStr}</div><div class="rDesc">${r.desc}</div>${warning}${campfireStatus}</div>
+        <div class="rHave">${have}</div>
+      </div>`;
+    }).join('');
+    const stageName=stage==='Build'?'🏗 Build':stage==='Process'?'① Process Raw Materials':'② Haft Finished Tools';
+    return `<div class="craftStageLabel">${stageName}</div>${rows}`;
+  }).join('');
+}
+function openCraftPanel(){renderCraftPanel();craftPanel.classList.add('open')}
+function closeCraftPanel(){craftPanel.classList.remove('open')}
+function toggleCraftPanel(){craftPanel.classList.contains('open')?closeCraftPanel():openCraftPanel()}
+craftList.addEventListener('click',e=>{
+  const row=e.target.closest('.craftRecipe');
+  if(!row)return;
+  craftItem(row.dataset.id);
+});
+document.getElementById('craftClose').addEventListener('click',closeCraftPanel);
+document.getElementById('craftButton').addEventListener('pointerdown',e=>{toggleCraftPanel();e.preventDefault()});
+addEventListener('keydown',e=>{if(e.key==='c'||e.key==='C')toggleCraftPanel()});
+
 const COLLECTION_RANGE=2.5;
 function interactTarget(){
   if(player.target){
@@ -192,7 +301,7 @@ function interactTarget(){
     if(t.type==='bigPebble'&&!t.collected){t.collected=true;addItem('bigPebble',1);createFloatingText(t.x,t.y-0.5,'◆ Pebble','#ffd');const pebbleKey=`${t.tileX},${t.tileY}`;bigPebbleCache.delete(pebbleKey);collectedBigPebbleCache.set(pebbleKey,true);return}
   }else{
     for(const e of entities){
-      if(e.type==='bigPebble'||e.type==='flint'||e.type==='stick'){
+      if(e.type==='bigPebble'||e.type==='flint'||e.type==='charcoal'||e.type==='stick'){
         const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy);
         if(d<COLLECTION_RANGE&&!e.collected){
           player.target=e;
@@ -200,6 +309,7 @@ function interactTarget(){
           setTimeout(()=>e.clicked=false,200);
           if(e.type==='bigPebble'){e.collected=true;addItem('bigPebble',1);createFloatingText(e.x,e.y-0.5,'◆ Pebble','#ffd');const pebbleKey=`${e.tileX},${e.tileY}`;bigPebbleCache.delete(pebbleKey);collectedBigPebbleCache.set(pebbleKey,true);return}
           if(e.type==='flint'){e.collected=true;addItem('flint',1);createFloatingText(e.x,e.y-0.5,'◆ Flint','#fff');const flintKey=`${e.tileX},${e.tileY}`;flintEntityCache.delete(flintKey);collectedFlintCache.set(flintKey,true);return}
+          if(e.type==='charcoal'){e.collected=true;addItem('charcoal',1);createFloatingText(e.x,e.y-0.5,'◆ Charcoal','#d8d8d8');const charcoalKey=`${e.tileX},${e.tileY}`;charcoalEntityCache.delete(charcoalKey);collectedCharcoalCache.set(charcoalKey,true);return}
           if(e.type==='stick'){e.collected=true;addItem('thickStick',1);createFloatingText(e.x,e.y-0.5,'◆ Stick','#8f8');const stickKey=`${e.tileX},${e.tileY}`;stickEntityCache.delete(stickKey);collectedStickCache.set(stickKey,true);return}
         }
       }
@@ -209,6 +319,14 @@ function interactTarget(){
 
 addEventListener('click',e=>{
   if(suppressNextClick){suppressNextClick=false;return}
+  if(player.placingCampfire){
+    const world=screenToWorld(e.clientX,e.clientY);
+    player.campfires.push({x:world.x,y:world.y,fuel:3,createdAt:performance.now()});
+    player.placingCampfire=false;
+    createFloatingText(world.x,world.y-1,'◆ Campfire','#e8a040');
+    addCameraShake(.1,.3);
+    return;
+  }
   const hit=hitEntityAtScreen(e.clientX,e.clientY);
   if(hit)interactTarget();
 });
@@ -242,9 +360,10 @@ canvas.addEventListener('pointerdown',e=>{
   }
 },{passive:false});
 
-function cullFarEntities(){let count=0;for(const e of entities)if(e.type==='pebble'||e.type==='tree'||e.type==='bush'||e.type==='stick'||e.type==='flint')count++;const limit=MAX_BIG_PEBBLES+MAX_BUSHES+MAX_STICKS+MAX_FLINT;if(count<=limit)return;const arr=[];for(let i=0;i<entities.length;i++){const e=entities[i];if(!['bigPebble','tree','bush','stick','flint'].includes(e.type))continue;const dx=e.x-player.x,dy=e.y-player.y;arr.push({i,d:dx*dx+dy*dy,e})}arr.sort((a,b)=>b.d-a.d);const remove=new Set();for(let i=0;i<Math.max(0,arr.length-limit);i++){const x=arr[i];remove.add(x.i);const k=`${x.e.tileX},${x.e.tileY}`;if(x.e.type==='pebble')pebbleCache.delete(k);else if(x.e.type==='tree')treeEntityCache.delete(k);else if(x.e.type==='bush')bushEntityCache.delete(k);else if(x.e.type==='stick')stickEntityCache.delete(k);else flintEntityCache.delete(k)}for(let i=entities.length-1;i>=0;i--)if(remove.has(i))entities.splice(i,1)}
+function cullFarEntities(){let count=0;for(const e of entities)if(e.type==='pebble'||e.type==='tree'||e.type==='bush'||e.type==='stick'||e.type==='flint'||e.type==='charcoal')count++;const limit=MAX_BIG_PEBBLES+MAX_BUSHES+MAX_STICKS+MAX_FLINT+MAX_CHARCOAL;if(count<=limit)return;const arr=[];for(let i=0;i<entities.length;i++){const e=entities[i];if(!['bigPebble','tree','bush','stick','flint','charcoal'].includes(e.type))continue;const dx=e.x-player.x,dy=e.y-player.y;arr.push({i,d:dx*dx+dy*dy,e})}arr.sort((a,b)=>b.d-a.d);const remove=new Set();for(let i=0;i<Math.max(0,arr.length-limit);i++){const x=arr[i];remove.add(x.i);const k=`${x.e.tileX},${x.e.tileY}`;if(x.e.type==='pebble')pebbleCache.delete(k);else if(x.e.type==='tree')treeEntityCache.delete(k);else if(x.e.type==='bush')bushEntityCache.delete(k);else if(x.e.type==='stick')stickEntityCache.delete(k);else if(x.e.type==='flint')flintEntityCache.delete(k);else if(x.e.type==='charcoal')charcoalEntityCache.delete(k)}for(let i=entities.length-1;i>=0;i--)if(remove.has(i))entities.splice(i,1)}
 
-function update(dt){cameraShake.duration=Math.max(0,cameraShake.duration-dt);if(cameraShake.duration<=0)cameraShake.intensity=0;for(let i=floatingTexts.length-1;i>=0;i--){floatingTexts[i].age+=dt;if(floatingTexts[i].age>floatingTexts[i].life)floatingTexts.splice(i,1)}const cols=viewportCols,rows=viewportRows,sx0=Math.floor(player.x-cols/2),sy0=Math.floor(player.y-rows/2);for(let ty=sy0-2;ty<sy0+rows+2;ty++)for(let tx=sx0-2;tx<sx0+cols+2;tx++){generatePebblesForTile(tx,ty);generateBigPebbleForTile(tx,ty);generateTreeEntityForTile(tx,ty);generateBushEntityForTile(tx,ty);generateStickEntityForTile(tx,ty);generateFlintForTile(tx,ty)}player.vx=player.vy=0;const mobileX=touchMove.active?touchMove.x:0,mobileY=touchMove.active?touchMove.y:0;if(keys.w||keys.W||keys.ArrowUp)player.vy-=player.speed;if(keys.s||keys.S||keys.ArrowDown)player.vy+=player.speed;if(keys.a||keys.A||keys.ArrowLeft)player.vx-=player.speed;if(keys.d||keys.D||keys.ArrowRight)player.vx+=player.speed;player.vx+=mobileX*player.speed;player.vy+=mobileY*player.speed;player.moving=player.vx!==0||player.vy!==0;if(player.moving){player.facingAngle=Math.atan2(player.vy,player.vx);player.animPhase=(player.animPhase+dt*.045)%1}const nextX=player.x+player.vx,nextY=player.y+player.vy;const nextWater=getWater(Math.floor(nextX),Math.floor(nextY));if(!nextWater.river){player.x=nextX;player.y=nextY}else{player.vx=player.vy=0}for(const e of entities){if(e.type==='tree'&&e.solid){const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy),min=player.radius+e.radius;if(d<min&&d>.001){const push=min-d+.01,a=Math.atan2(dy,dx);player.x+=Math.cos(a)*push;player.y+=Math.sin(a)*push}}if(e.type==='bush'&&e.harvested&&performance.now()>=e.regrowAt){e.harvested=false;e.regrowAt=0}}frameCounter=(frameCounter+1)%30;if(frameCounter===0)cullFarEntities();for(const e of entities)if(e.type==='zombie'){const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy);if(d<10){if(d>.1){e.vx=dx/d*.08;e.vy=dy/d*.08}e.aware=true}else{e.vx=e.vy=0;e.aware=false}e.x+=e.vx;e.y+=e.vy;if(e.vx||e.vy)e.animPhase=(e.animPhase+dt*.04)%1;else e.animPhase=0}}
+function update(dt){cameraShake.duration=Math.max(0,cameraShake.duration-dt);if(cameraShake.duration<=0)cameraShake.intensity=0;for(let i=floatingTexts.length-1;i>=0;i--){floatingTexts[i].age+=dt;if(floatingTexts[i].age>floatingTexts[i].life)floatingTexts.splice(i,1)}// Campfire fuel consumption: 1 stick burns away per 60 seconds of real time
+for(let i=player.campfires.length-1;i>=0;i--){player.campfires[i].fuel-=dt/60;if(player.campfires[i].fuel<=0)player.campfires.splice(i,1)}const cols=viewportCols,rows=viewportRows,sx0=Math.floor(player.x-cols/2),sy0=Math.floor(player.y-rows/2);for(let ty=sy0-2;ty<sy0+rows+2;ty++)for(let tx=sx0-2;tx<sx0+cols+2;tx++){generatePebblesForTile(tx,ty);generateBigPebbleForTile(tx,ty);generateTreeEntityForTile(tx,ty);generateBushEntityForTile(tx,ty);generateStickEntityForTile(tx,ty);generateFlintForTile(tx,ty)}player.vx=player.vy=0;const mobileX=touchMove.active?touchMove.x:0,mobileY=touchMove.active?touchMove.y:0;if(keys.w||keys.W||keys.ArrowUp)player.vy-=player.speed;if(keys.s||keys.S||keys.ArrowDown)player.vy+=player.speed;if(keys.a||keys.A||keys.ArrowLeft)player.vx-=player.speed;if(keys.d||keys.D||keys.ArrowRight)player.vx+=player.speed;player.vx+=mobileX*player.speed;player.vy+=mobileY*player.speed;player.moving=player.vx!==0||player.vy!==0;if(player.moving){player.facingAngle=Math.atan2(player.vy,player.vx);player.animPhase=(player.animPhase+dt*.045)%1}const nextX=player.x+player.vx,nextY=player.y+player.vy;const nextWater=getWater(Math.floor(nextX),Math.floor(nextY));if(!nextWater.river){player.x=nextX;player.y=nextY}else{player.vx=player.vy=0}for(const e of entities){if(e.type==='tree'&&e.solid){const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy),min=player.radius+e.radius;if(d<min&&d>.001){const push=min-d+.01,a=Math.atan2(dy,dx);player.x+=Math.cos(a)*push;player.y+=Math.sin(a)*push}}if(e.type==='bush'&&e.harvested&&performance.now()>=e.regrowAt){e.harvested=false;e.regrowAt=0}}frameCounter=(frameCounter+1)%30;if(frameCounter===0)cullFarEntities();for(const e of entities)if(e.type==='zombie'){const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy);if(d<10){if(d>.1){e.vx=dx/d*.08;e.vy=dy/d*.08}e.aware=true}else{e.vx=e.vy=0;e.aware=false}e.x+=e.vx;e.y+=e.vy;if(e.vx||e.vy)e.animPhase=(e.animPhase+dt*.04)%1;else e.animPhase=0}}
 
 // Visual "ground contact" offsets used ONLY for painter's-algorithm depth
 // sorting. Sprites are drawn centered on the entity's world (x,y), but a
@@ -265,10 +384,12 @@ const draw=[];for(const e of entities){const sx=Math.floor((e.x-cx+cols/2)*TILE)
   ctx.strokeStyle='rgba(120,82,46,.65)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-len*.25,-1);ctx.lineTo(len*.32,-2);ctx.stroke();
   // Small broken twig.
   ctx.strokeStyle='#432b19';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(len*.15,-.5);ctx.lineTo(len*.27,-6);ctx.stroke();
-  ctx.restore();if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,Math.max(10,e.radius*TILE+6),0,Math.PI*2);ctx.stroke()}}});else if(e.type==='bigPebble')draw.push({y:e.y,render:()=>{if(e.collected)return;const r=Math.floor(e.radius*TILE);ctx.save();ctx.fillStyle=e.tone>.62?'#8a8880':e.tone>.3?'#aaa69d':'#6f6d67';ctx.beginPath();ctx.ellipse(sx,sy,r*1.18,r*.92,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(225,222,214,.6)';ctx.beginPath();ctx.ellipse(sx-r*.28,sy-r*.3,r*.38,r*.22,-.2,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(55,52,48,.65)';ctx.lineWidth=1;ctx.stroke();if(e.clicked){ctx.strokeStyle='#ff0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+7,0,Math.PI*2);ctx.stroke()};ctx.restore()}});else if(e.type==='flint')draw.push({y:e.y,render:()=>{if(e.collected)return;const ang=e.seedVal%360*Math.PI/180;ctx.save();ctx.translate(sx,sy);ctx.rotate(ang);ctx.fillStyle='#cfd3d0';ctx.beginPath();ctx.moveTo(-7,2);ctx.lineTo(-3,-5);ctx.lineTo(3,-7);ctx.lineTo(8,-2);ctx.lineTo(5,4);ctx.lineTo(-2,6);ctx.closePath();ctx.fill();ctx.fillStyle='#eef1ef';ctx.beginPath();ctx.moveTo(-3,-5);ctx.lineTo(3,-7);ctx.lineTo(1,-1);ctx.lineTo(-2,2);ctx.closePath();ctx.fill();ctx.fillStyle='rgba(80,90,90,.55)';ctx.fillRect(-2,1,5,2);ctx.restore();if(e.clicked){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,11,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='pebble')draw.push({y:e.y,render:()=>{const r=Math.floor(e.radius*TILE);ctx.fillStyle=e.tone>.65?'rgba(100,95,85,.8)':e.tone>.35?'rgba(140,135,125,.8)':'rgba(180,175,165,.7)';ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();if(e.light>.5){ctx.fillStyle='rgba(220,215,205,.5)';ctx.beginPath();ctx.arc(sx-r*.3,sy-r*.3,Math.max(1,r*.35),0,Math.PI*2);ctx.fill()}if(e.clicked){ctx.strokeStyle='#ff0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+3,0,Math.PI*2);ctx.stroke()}}})}
+  ctx.restore();if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,Math.max(10,e.radius*TILE+6),0,Math.PI*2);ctx.stroke()}}});else if(e.type==='bigPebble')draw.push({y:e.y,render:()=>{if(e.collected)return;const r=Math.floor(e.radius*TILE);ctx.save();ctx.fillStyle=e.tone>.62?'#8a8880':e.tone>.3?'#aaa69d':'#6f6d67';ctx.beginPath();ctx.ellipse(sx,sy,r*1.18,r*.92,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(225,222,214,.6)';ctx.beginPath();ctx.ellipse(sx-r*.28,sy-r*.3,r*.38,r*.22,-.2,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(55,52,48,.65)';ctx.lineWidth=1;ctx.stroke();if(e.clicked){ctx.strokeStyle='#ff0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+7,0,Math.PI*2);ctx.stroke()};ctx.restore()}});else if(e.type==='flint')draw.push({y:e.y,render:()=>{if(e.collected)return;const ang=e.seedVal%360*Math.PI/180;ctx.save();ctx.translate(sx,sy);ctx.rotate(ang);ctx.fillStyle='#cfd3d0';ctx.beginPath();ctx.moveTo(-7,2);ctx.lineTo(-3,-5);ctx.lineTo(3,-7);ctx.lineTo(8,-2);ctx.lineTo(5,4);ctx.lineTo(-2,6);ctx.closePath();ctx.fill();ctx.fillStyle='#eef1ef';ctx.beginPath();ctx.moveTo(-3,-5);ctx.lineTo(3,-7);ctx.lineTo(1,-1);ctx.lineTo(-2,2);ctx.closePath();ctx.fill();ctx.fillStyle='rgba(80,90,90,.55)';ctx.fillRect(-2,1,5,2);ctx.restore();if(e.clicked){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,11,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='charcoal')draw.push({y:e.y,render:()=>{if(e.collected)return;const r=Math.floor(e.radius*TILE);ctx.fillStyle='#4a4a48';ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();ctx.fillStyle='#2a2a28';ctx.beginPath();ctx.arc(sx-r*.35,sy-r*.35,Math.max(1,r*.35),0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(100,100,100,.4)';ctx.beginPath();ctx.arc(sx+r*.25,sy+r*.2,Math.max(1,r*.25),0,Math.PI*2);ctx.fill();if(e.clicked){ctx.strokeStyle='#ddd';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+6,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='pebble')draw.push({y:e.y,render:()=>{const r=Math.floor(e.radius*TILE);ctx.fillStyle=e.tone>.65?'rgba(100,95,85,.8)':e.tone>.35?'rgba(140,135,125,.8)':'rgba(180,175,165,.7)';ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();if(e.light>.5){ctx.fillStyle='rgba(220,215,205,.5)';ctx.beginPath();ctx.arc(sx-r*.3,sy-r*.3,Math.max(1,r*.35),0,Math.PI*2);ctx.fill()}if(e.clicked){ctx.strokeStyle='#ff0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+3,0,Math.PI*2);ctx.stroke()}}})}
 const px=Math.floor((player.x-cx+cols/2)*TILE),py=Math.floor((player.y-cy+rows/2)*TILE);draw.push({y:player.y,render:()=>{const sp=currentPlayerSprite(),size=TILE*1.7;if(sp.complete&&sp.naturalWidth)ctx.drawImage(sp,Math.floor(px+TILE/2-size/2),Math.floor(py+TILE/2-size/2),size,size);else{ctx.fillStyle='#0f0';ctx.fillRect(px+6,py+6,TILE-12,TILE-12)}}});
+for(const campfire of player.campfires){const csx=Math.floor((campfire.x-cx+cols/2)*TILE),csy=Math.floor((campfire.y-cy+rows/2)*TILE);draw.push({y:campfire.y,render:()=>{ctx.fillStyle='rgba(232,160,64,.4)';ctx.beginPath();ctx.arc(csx,csy,TILE*1.2,0,Math.PI*2);ctx.fill();const flame=Math.sin(time*3+campfire.fuel)*.5+.5;ctx.fillStyle=`rgba(255,140,0,${.6+flame*.2})`;ctx.beginPath();ctx.arc(csx,csy-4,6,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(255,200,0,.8)';ctx.beginPath();ctx.arc(csx,csy-2,3,0,Math.PI*2);ctx.fill();ctx.fillStyle='#ccc';ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(`⚡${Math.ceil(campfire.fuel)}`,csx,csy+TILE)}})}
+if(player.placingCampfire){const mx=Math.floor((player.x-cx+cols/2)*TILE),my=Math.floor((player.y-cy+rows/2)*TILE);ctx.strokeStyle='#e8a040';ctx.lineWidth=2;ctx.setLineDash([4,4]);ctx.beginPath();ctx.arc(mx,my,TILE*1.3,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='rgba(232,160,64,.2)';ctx.beginPath();ctx.arc(mx,my,TILE*1.3,0,Math.PI*2);ctx.fill();ctx.fillStyle='#e8a040';ctx.font='bold 12px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Click to place',mx,my)}
 for(const e of entities){
-  if((e.type==='bigPebble'||e.type==='flint'||e.type==='stick')&&!e.collected){
+  if((e.type==='bigPebble'||e.type==='flint'||e.type==='stick'||e.type==='charcoal')&&!e.collected){
     const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy);
     if(d<COLLECTION_RANGE){
       const sx=Math.floor((e.x-cx+cols/2)*TILE),sy=Math.floor((e.y-cy+rows/2)*TILE);
@@ -288,12 +409,15 @@ for(const e of entities){
 }
 draw.sort((a,b)=>a.y-b.y);for(const o of draw)o.render();for(const ft of floatingTexts){const progress=ft.age/ft.life,alpha=Math.max(0,1-progress),rise=progress*TILE*.8;ctx.save();ctx.globalAlpha=alpha;ctx.fillStyle=ft.color;ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.textBaseline='middle';const sx=Math.floor((ft.x-cx+cols/2)*TILE),sy=Math.floor((ft.y-cy+rows/2)*TILE+rise);ctx.fillText(ft.text,sx,sy);ctx.restore()}if(vignetteCanvas)ctx.drawImage(vignetteCanvas,0,0);ctx.translate(-shakeX,-shakeY)}
 
-let hudTimer=0;function updateHUD(ms=0){hudTimer+=ms;if(hudTimer<100)return;hudTimer=0;let z=0,b=0;for(const e of entities){if(e.type==='zombie')z++;if(e.type==='bush'&&!e.harvested)b++}const t=player.target?player.target.type:'—';const pos=`${Math.round(player.x)}, ${Math.round(player.y)}`;const soilDef=SOIL_DEFS[getTile(Math.floor(player.x),Math.floor(player.y)).type];const soilName=soilDef?soilDef.name:'—';const fiberIcon=`<svg width="20" height="20" viewBox="0 0 64 64" style="display:inline-block;margin-right:6px;vertical-align:middle"><circle cx="32" cy="32" r="10" fill="#5bc46a"/></svg>`;const stickIcon=`<svg width="20" height="20" viewBox="0 0 64 64" style="display:inline-block;margin-right:6px;vertical-align:middle"><g transform="rotate(-30 32 32)"><rect x="28" y="16" width="8" height="32" rx="4" fill="#664326"/></g></svg>`;const pebbleIcon=`<svg width="20" height="20" viewBox="0 0 64 64" style="display:inline-block;margin-right:6px;vertical-align:middle"><ellipse cx="32" cy="32" rx="10" ry="8" fill="#aaa69d"/></svg>`;const flintIcon=`<svg width="20" height="20" viewBox="0 0 64 64" style="display:inline-block;margin-right:6px;vertical-align:middle"><polygon points="16,48 24,16 36,12 48,28 40,56 20,52" fill="#cfd3d0"/></svg>`;hud.innerHTML=`<div style="background:rgba(0,0,0,.75);padding:14px;border:2px solid #0f0;border-radius:4px;font-size:16px;line-height:2.2;font-family:monospace;font-weight:bold">
+let hudTimer=0;let hudVisible=true;const hudToggle=document.getElementById('hudToggle');function toggleHud(){hudVisible=!hudVisible;if(hudVisible){hud.classList.remove('hidden')}else{hud.classList.add('hidden')}}hudToggle.addEventListener('click',toggleHud);addEventListener('keydown',e=>{if(e.key==='i'||e.key==='I')toggleHud()});function updateHUD(ms=0){hudTimer+=ms;if(hudTimer<100)return;hudTimer=0;let z=0,b=0;for(const e of entities){if(e.type==='zombie')z++;if(e.type==='bush'&&!e.harvested)b++}const t=player.target?player.target.type:'—';const pos=`${Math.round(player.x)}, ${Math.round(player.y)}`;const soilDef=SOIL_DEFS[getTile(Math.floor(player.x),Math.floor(player.y)).type];const soilName=soilDef?soilDef.name:'—';const fiberIcon=`<svg width="20" height="20" viewBox="0 0 64 64" style="display:inline-block;margin-right:6px;vertical-align:middle"><circle cx="32" cy="32" r="10" fill="#5bc46a"/></svg>`;const stickIcon=`<svg width="20" height="20" viewBox="0 0 64 64" style="display:inline-block;margin-right:6px;vertical-align:middle"><g transform="rotate(-30 32 32)"><rect x="28" y="16" width="8" height="32" rx="4" fill="#664326"/></g></svg>`;const pebbleIcon=`<svg width="20" height="20" viewBox="0 0 64 64" style="display:inline-block;margin-right:6px;vertical-align:middle"><ellipse cx="32" cy="32" rx="10" ry="8" fill="#aaa69d"/></svg>`;const flintIcon=`<svg width="20" height="20" viewBox="0 0 64 64" style="display:inline-block;margin-right:6px;vertical-align:middle"><polygon points="16,48 24,16 36,12 48,28 40,56 20,52" fill="#cfd3d0"/></svg>`;hud.innerHTML=`<div style="background:rgba(0,0,0,.75);padding:14px;border:2px solid #0f0;border-radius:4px;font-size:16px;line-height:2.2;font-family:monospace;font-weight:bold">
 <div style="color:#0f0;margin-bottom:10px;font-weight:bold;font-size:18px">◆ INVENTORY ◆</div>
 <div>${fiberIcon}<span style="color:#8f8">Fiber: ${player.inventory.fiber||0}</span></div>
 <div>${stickIcon}<span style="color:#a85">Sticks: ${player.inventory.thickStick||0}</span></div>
 <div>${pebbleIcon}<span style="color:#aaa">Pebbles: ${player.inventory.bigPebble||0}</span></div>
 <div>${flintIcon}<span style="color:#fff">Flint: ${player.inventory.flint||0}</span></div>
+<div><svg width="20" height="20" viewBox="0 0 20 20" style="display:inline-block;margin-right:6px;vertical-align:middle"><circle cx="10" cy="10" r="6" fill="#5a5a58"/><circle cx="8" cy="8" r="2" fill="#3a3a38"/></svg><span style="color:#d8d8d8">Charcoal: ${player.inventory.charcoal||0}</span></div>
+${(()=>{const comps=RECIPES.filter(r=>r.stage==='Process'&&(player.inventory[r.id]||0)>0);if(!comps.length)return'';return `<div style="margin-top:8px;border-top:1px solid rgba(0,255,0,.3);padding-top:8px;font-size:12px">`+comps.map(r=>`<div style="color:#cde">${r.name}: ${player.inventory[r.id]}</div>`).join('')+`</div>`})()}
+${(()=>{const tools=RECIPES.filter(r=>r.stage==='Haft'&&(player.inventory[r.id]||0)>0);if(!tools.length)return'';return `<div style="margin-top:8px;border-top:1px solid rgba(0,255,0,.3);padding-top:8px">`+tools.map(r=>`<div style="color:#ffd76a">◆ ${r.name}: ${player.inventory[r.id]}</div>`).join('')+`</div>`})()}
 <div style="margin-top:10px;border-top:1px solid #0f0;padding-top:10px;color:#0f0;font-size:12px;font-weight:normal">
 POS: ${pos} | HP: ${player.hp}<br>
 SOIL: ${soilName}<br>
