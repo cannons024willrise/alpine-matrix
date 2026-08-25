@@ -565,13 +565,6 @@ function utilitySlotHTML(side,itemId){
 }
 function renderHotbar(){
   const emptySlot=(attrs,title)=>`<div class="mc-slot" ${attrs} title="${title}"><svg viewBox="0 0 24 24" style="opacity:.3"><circle cx="12" cy="12" r="8" fill="#999"/></svg></div>`;
-  const carryCapacity=getCarrySlotCount();
-  ensureCarrySlots();
-  const carryHtml=Array.from({length:carryCapacity},(_,idx)=>hotbarSlots[idx]||'').map((itemId,idx)=>{
-    if(!itemId)return emptySlot(`data-hotbar-idx="${idx}"`,`Empty carry slot ${idx+1}`);
-    const recipe=RECIPES.find(r=>r.id===itemId);
-    return mcSlotHTML({id:itemId,kind:ITEM_ICON_KIND[itemId]||'gem',color:recipe?recipe.icon:null,count:player.inventory[itemId]||0,selected:idx===selectedCarrySlot,locked:false,extraClass:'carry-slot'});
-  }).join('');
   const handHtml=handSlots.map((itemId,idx)=>{
     if(!itemId)return emptySlot(`data-hand-idx="${idx}"`,`Empty hand slot ${idx+1}`);
     const recipe=RECIPES.find(r=>r.id===itemId);
@@ -579,18 +572,9 @@ function renderHotbar(){
   }).join('');
   hotbar.innerHTML=`
     <div class="hotbar-utility-group">${utilitySlotHTML('armor',utilitySlots.armor)}</div>
-    <div class="hotbar-main hotbar-carry-group">${carryHtml}</div>
     <div class="hotbar-main hotbar-hand-group">${handHtml}</div>
     <div class="hotbar-utility-group">${utilitySlotHTML('backpack',utilitySlots.backpack)}</div>`;
 
-  hotbar.querySelectorAll('[data-hotbar-idx]').forEach(slot=>slot.addEventListener('click',e=>{
-    e.stopPropagation();
-    const idx=+slot.dataset.hotbarIdx;
-    if(e.shiftKey){dropItem(idx,true);return;}
-    selectedCarrySlot=idx;
-    renderHotbar();
-    renderInventoryHotbar();
-  }));
   hotbar.querySelectorAll('[data-hand-idx]').forEach(slot=>slot.addEventListener('click',e=>{
     e.stopPropagation();
     const idx=+slot.dataset.handIdx;
