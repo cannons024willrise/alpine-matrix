@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>BASE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
 html,body{width:100%;height:100%;overflow:hidden;touch-action:none;overscroll-behavior:none}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -19,21 +21,50 @@ canvas{display:block;image-rendering:pixelated}
 #craftButton{position:absolute;right:max(30px,env(safe-area-inset-right));bottom:max(122px,calc(env(safe-area-inset-bottom) + 94px));width:62px;height:62px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(70,55,0,.45);color:#ffe9a8;font:700 11px monospace;pointer-events:auto;touch-action:none}
 #craftHint{position:fixed;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));font-size:11px;color:#0f0;background:rgba(0,0,0,.6);border:1px solid #0f0;border-radius:4px;padding:6px 10px;z-index:10;text-shadow:1px 1px #000}
 @media (pointer:coarse), (max-width:700px){#mobileControls{display:block}#hud{font-size:11px}#craftHint{display:none}}
+
+/* ---- Minecraft-style UI kit ---- */
+.mc-panel{background:#c6c6c6;box-shadow:inset 2px 2px 0 0 #fff,inset -2px -2px 0 0 #555,0 0 0 2px #000;position:relative}
+.mc-slot{width:44px;height:44px;background:#8b8b8b;box-shadow:inset 2px 2px 0 0 #373737,inset -2px -2px 0 0 #fbfbfb,0 0 0 2px #000;display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;pointer-events:auto;flex:0 0 auto}
+.mc-slot.small{width:34px;height:34px}
+.mc-slot:hover{background:#9d9d9d}
+.mc-slot.locked{filter:grayscale(.65) brightness(.6);cursor:default}
+.mc-slot.selected{box-shadow:inset 2px 2px 0 0 #373737,inset -2px -2px 0 0 #fbfbfb,0 0 0 2px #fff,0 0 0 4px #000}
+.mc-slot img,.mc-slot svg{width:26px;height:26px;pointer-events:none;image-rendering:pixelated}
+.mc-slot.small svg{width:20px;height:20px}
+.mc-count{position:absolute;bottom:1px;right:2px;font:9px/1 'Press Start 2P',monospace;color:#fff;text-shadow:1px 1px 0 #000,-1px 0 0 #000,0 -1px 0 #000,1px -1px 0 #000;pointer-events:none}
+.mc-btn{background:#7d7d7d;box-shadow:inset 2px 2px 0 0 #b1b1b1,inset -2px -2px 0 0 #3c3c3c,0 0 0 2px #000;color:#fff;text-shadow:1px 1px #000;padding:10px 14px;cursor:pointer;font-family:'Press Start 2P',monospace;font-size:10px;border:none;width:100%;pointer-events:auto}
+.mc-btn:hover:not(.disabled){filter:brightness(1.15)}
+.mc-btn:active:not(.disabled){box-shadow:inset -2px -2px 0 0 #b1b1b1,inset 2px 2px 0 0 #3c3c3c,0 0 0 2px #000}
+.mc-btn.disabled{opacity:.5;cursor:default;background:#6a3030}
+.mc-tab{background:#8b8b8b;box-shadow:inset 2px 2px 0 0 #fff,inset -2px -2px 0 0 #555,0 0 0 2px #000;padding:7px 10px;font-size:9px;font-family:'Press Start 2P',monospace;color:#e8e8e8;text-shadow:1px 1px #000;cursor:pointer;border:none;pointer-events:auto}
+.mc-tab.active{background:#c6c6c6;color:#111;text-shadow:none;box-shadow:inset 2px 2px 0 0 #fff,inset -2px -2px 0 0 #8f8f8f,0 0 0 2px #000}
 #craftPanel{display:none;position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.75);align-items:center;justify-content:center}
 #craftPanel.open{display:flex}
-#craftPanelInner{width:min(420px,92vw);max-height:80vh;overflow-y:auto;background:rgba(6,14,6,.96);border:2px solid #0f0;border-radius:6px;padding:16px;font-family:monospace;color:#0f0}
-#craftPanelInner h2{font-size:16px;margin-bottom:12px;letter-spacing:1px}
-#craftClose{position:absolute;top:10px;right:12px;background:none;border:none;color:#0f0;font:700 18px monospace;cursor:pointer;pointer-events:auto}
-.craftRecipe{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;margin-bottom:8px;border:1px solid rgba(0,255,0,.3);border-radius:4px;cursor:pointer;pointer-events:auto}
-.craftRecipe.affordable{border-color:#0f0;background:rgba(0,255,0,.08)}
-.craftRecipe.affordable:active{background:rgba(0,255,0,.22)}
-.craftRecipe.locked{opacity:.45;cursor:default}
-.craftRecipe .rName{font-weight:700;font-size:13px;margin-bottom:4px}
-.craftRecipe .rCost{font-size:11px;color:#9f9}
-.craftRecipe .rDesc{font-size:10px;color:#8a8;margin-top:4px;line-height:1.4;max-width:260px}
-.craftRecipe .rHave{font-size:14px;font-weight:700;min-width:34px;text-align:center}
-.craftStageLabel{font-size:11px;letter-spacing:1px;color:#ffd76a;margin:14px 0 8px;text-transform:uppercase}
-.craftStageLabel:first-child{margin-top:0}
+#craftPanelInner{display:flex;flex-direction:column;width:min(400px,92vw);max-height:86vh;font-family:monospace;color:#222}
+.mc-titlebar{flex:0 0 auto;background:#373737;color:#fff;font-family:'Press Start 2P',monospace;font-size:11px;padding:12px 34px 12px 12px;text-shadow:1px 1px #000;letter-spacing:1px}
+.mc-close{position:absolute;top:8px;right:8px;width:24px;height:24px;background:#a03030;box-shadow:inset 2px 2px 0 0 #d66,inset -2px -2px 0 0 #601515,0 0 0 2px #000;color:#fff;font:700 12px monospace;cursor:pointer;border:none;z-index:2;pointer-events:auto}
+.mc-close:hover{filter:brightness(1.2)}
+.mc-campfire-row{flex:0 0 auto;padding:8px 10px 0;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.mc-camp-label{font-size:10px;color:#333;letter-spacing:1px}
+.mc-camp-slots{display:flex;gap:4px}
+.mc-tabs{flex:0 0 auto;display:flex;gap:2px;padding:8px 10px 0}
+.mc-scroll{flex:1 1 auto;overflow-y:auto;min-height:140px;background:#bcbcbc;box-shadow:inset 0 2px 0 0 #8f8f8f;display:flex;flex-direction:column}
+#stageTabs{flex:0 0 auto;display:flex;gap:2px;padding:8px 10px 0;margin:0}
+.mc-grid{display:grid;grid-template-columns:repeat(auto-fill,44px);gap:4px;padding:10px;justify-content:center}
+.mc-detail{flex:0 0 auto;padding:12px;border-top:2px solid #000;background:#b7b7b7}
+.mc-detail-empty{font-size:11px;color:#555;text-align:center;padding:8px 0}
+.mc-detail-name{font-family:'Press Start 2P',monospace;font-size:11px;color:#111;margin-bottom:8px}
+.mc-detail-desc{font-size:11px;color:#333;line-height:1.5;margin-bottom:10px}
+.mc-recipe-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.mc-ing{display:flex;flex-direction:column;align-items:center;gap:2px}
+.mc-ing-have{font-size:9px;color:#333}
+.mc-ing-have.short{color:#a00;font-weight:700}
+.mc-arrow{font-size:20px;color:#333;font-weight:700}
+.mc-warning{font-size:10px;color:#a00;margin-bottom:8px}
+#hotbar{position:fixed;left:50%;transform:translateX(-50%);bottom:0;display:flex;gap:4px;padding:6px;background:rgba(0,0,0,.5);z-index:12;pointer-events:auto;width:156px;justify-content:center;margin:0;border-top:2px solid #333}
+#hotbar .mc-slot{cursor:pointer}
+#hotbar .mc-slot:hover{background:#9d9d9d}
+@media (pointer:coarse), (max-width:700px){#hotbar{bottom:0}}
 </style>
 </head>
 <body>
@@ -41,7 +72,18 @@ canvas{display:block;image-rendering:pixelated}
 <div id="hud"></div>
 <button id="hudToggle" type="button">◆</button>
 <div id="craftHint">[C] Crafting</div>
-<div id="craftPanel"><div id="craftPanelInner" style="position:relative"><button id="craftClose" type="button">✕</button><h2>◆ CRAFTING ◆</h2><div id="craftList"></div></div></div>
+<div id="hotbar"></div>
+<div id="craftPanel"><div id="craftPanelInner" class="mc-panel">
+  <button id="craftClose" class="mc-close" type="button">✕</button>
+  <div class="mc-titlebar" id="panelTitle">CRAFTING</div>
+  <div id="campfireSelectorRow" class="mc-campfire-row"></div>
+  <div class="mc-tabs" id="panelTabs">
+    <button class="mc-tab active" data-panel="crafting" type="button">Craft</button>
+    <button class="mc-tab" data-panel="inventory" type="button">Inventory</button>
+  </div>
+  <div class="mc-scroll" id="panelScroll"><div class="mc-grid" id="craftGrid"></div></div>
+  <div class="mc-detail" id="craftDetail"><div class="mc-detail-empty">Select an item to craft</div></div>
+</div></div>
 <div id="mobileControls"><div id="joystick"><div id="joystickKnob"></div></div><button id="craftButton" type="button">CRAFT</button><button id="actionButton" type="button">ACT</button></div>
 <script>
 const canvas=document.getElementById('game');
@@ -208,6 +250,25 @@ const RECIPES=[
   {id:'spear',name:'Spear',stage:'Haft',desc:'Haft a flint point onto a fire-hardened shaft, lashed and bound tight with cordage.',cost:{knappedFlint:1,shaft:1,cordage:2},icon:'#c96'},
   {id:'stoneAxe',name:'Stone Axe (Celt)',stage:'Haft',desc:'Peck and grind a flint blank into an axehead, wedge it into a mortised shaft, and bind tight.',cost:{knappedFlint:2,shaft:1,cordage:2},icon:'#8a8880'}
 ];
+const ITEM_ICON_KIND={fiber:'fiber',thickStick:'stick',bigPebble:'pebble',flint:'flint',charcoal:'charcoal',cordage:'coil',knappedFlint:'flint',carvedShaft:'stick',shaft:'stick',flintKnife:'tool',spear:'tool',stoneAxe:'tool',campfire:'flame'};
+const ITEM_NAMES={fiber:'Fiber',thickStick:'Thick Stick',bigPebble:'Pebble',flint:'Flint',charcoal:'Charcoal'};
+function itemDisplayName(id){const r=RECIPES.find(x=>x.id===id);return r?r.name:(ITEM_NAMES[id]||id)}
+function itemIconSVG(kind,color){
+  switch(kind){
+    case'fiber':return`<svg viewBox="0 0 24 24"><g stroke="#3b3225" stroke-width="1.3" stroke-linecap="round" fill="none"><path d="M12 20 L11 12"/><path d="M12 20 L14.5 9"/><path d="M12 20 L8.5 12.5"/></g><circle cx="11" cy="11" r="2.6" fill="#2e6631"/><circle cx="14.5" cy="9" r="2.3" fill="#3f7f3d"/><circle cx="8.5" cy="12.5" r="2.1" fill="#214c27"/><circle cx="12.5" cy="7.3" r="1.8" fill="#315f35"/></svg>`;
+    case'stick':return`<svg viewBox="0 0 24 24"><g transform="rotate(-18 12 12)"><path d="M3 15 L9 13.5 L15 12 L21 10" stroke="#352416" stroke-width="4" stroke-linecap="round" fill="none"/><path d="M4 13 L10 12 L16 10.5 L20 9" stroke="#664326" stroke-width="2.2" stroke-linecap="round" fill="none"/><path d="M14 11 L16.5 5" stroke="#432b19" stroke-width="2" stroke-linecap="round" fill="none"/></g></svg>`;
+    case'pebble':return`<svg viewBox="0 0 24 24"><ellipse cx="12" cy="13" rx="9" ry="7" fill="#aaa69d" stroke="rgba(55,52,48,.65)" stroke-width=".6"/><ellipse cx="9.7" cy="10.6" rx="3" ry="1.8" fill="rgba(225,222,214,.65)"/></svg>`;
+    case'flint':return`<svg viewBox="0 0 24 24"><polygon points="5,14 9,7 15,5 20,10 17,16 10,18" fill="#cfd3d0"/><polygon points="9,7 15,5 13,11 10,14" fill="#eef1ef"/><rect x="10" y="13" width="5" height="2" fill="rgba(80,90,90,.55)"/></svg>`;
+    case'charcoal':return`<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="#4a4a48"/><circle cx="9.2" cy="9.2" r="2.8" fill="#2a2a28"/><circle cx="14" cy="13.6" r="2" fill="rgba(100,100,100,.4)"/></svg>`;
+    case'coil':return`<svg viewBox="0 0 24 24"><path d="M4 16 Q4 6 12 6 Q20 6 20 14 Q20 20 13 20" stroke="#c99a55" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M5.5 15 Q5.5 8 12 8" stroke="#8a6636" stroke-width="1.3" fill="none" stroke-linecap="round"/></svg>`;
+    case'flame':return`<svg viewBox="0 0 24 24"><path d="M12 2C9 8 5 9 5 15a7 7 0 0014 0c0-4-2-5-3-8 0 3-2 4-2 1 0-2-1-4-2-6z" fill="#ff8c00"/><path d="M12 22a5 5 0 01-5-5c0-3 2-3.5 2.5-6 .5 2 2 2 2 4a2 2 0 004 0c1-2 0-4-1-6 2 2 2.5 4 2.5 8a5 5 0 01-5 5z" fill="#ffc800" opacity=".75"/></svg>`;
+    case'tool':return`<svg viewBox="0 0 24 24"><rect x="10.5" y="10" width="3" height="13" rx="1" fill="#352416" transform="rotate(45 12 16)"/><rect x="11.1" y="10.5" width="1" height="12" rx=".5" fill="#664326" transform="rotate(45 12 16)"/><polygon points="4,4 12,4 14,10 6,12" fill="#cfd3d0"/><polygon points="4,4 12,4 8,8" fill="#eef1ef"/></svg>`;
+    default:return`<svg viewBox="0 0 24 24"><polygon points="12,3 20,9 16,21 8,21 4,9" fill="${color||'#8a8880'}"/><polygon points="12,3 20,9 12,12" fill="rgba(255,255,255,.35)"/></svg>`;
+  }
+}
+function mcSlotHTML({id,kind,color,count,locked,selected,extraClass}){
+  return `<div class="mc-slot${extraClass?' '+extraClass:''}${locked?' locked':''}${selected?' selected':''}" data-id="${id}" title="${itemDisplayName(id)}">${itemIconSVG(kind,color)}${count?`<span class="mc-count">${count}</span>`:''}</div>`;
+}
 function canAfford(cost){for(const k in cost)if((player.inventory[k]||0)<cost[k])return false;return true}
 function craftItem(id){
   const recipe=RECIPES.find(r=>r.id===id);
@@ -227,45 +288,141 @@ function craftItem(id){
   return true;
 }
 const craftPanel=document.getElementById('craftPanel');
-const craftList=document.getElementById('craftList');
-function renderCraftPanel(){
-  const stages=['Build','Process','Haft'];
-  let campfireSelector='';
-  if(player.campfires.length>0){
-    campfireSelector=`<div style="background:rgba(232,160,64,.15);padding:10px;margin-bottom:12px;border:1px solid #e8a040;border-radius:4px"><div style="font-size:11px;color:#fb2;margin-bottom:6px">SELECT CAMPFIRE:</div>${player.campfires.map((cf,i)=>`<div style="font-size:10px;color:#ccc;margin:4px 0;cursor:pointer;padding:4px;background:${player.selectedCampfire===i?'rgba(232,160,64,.3)':'transparent'};border:1px solid ${player.selectedCampfire===i?'#e8a040':'transparent'};border-radius:2px" onclick="player.selectedCampfire=${i};renderCraftPanel()">${i+1}. (${Math.round(cf.x)}, ${Math.round(cf.y)}) ⚡${Math.ceil(cf.fuel)}</div>`).join('')}</div>`;
-  }
-  craftList.innerHTML=campfireSelector+stages.map(stage=>{
-    const rows=RECIPES.filter(r=>r.stage===stage).map(r=>{
-      const afford=canAfford(r.cost);
-      const canCraft=afford&&(!r.requiresCampfire||player.campfires.length>0);
-      const costStr=Object.entries(r.cost).map(([k,v])=>{
-        const have=player.inventory[k]||0;
-        const short=have<v;
-        return `<span style="color:${short?'#f66':'#9f9'}">${v} ${k}${short?` (have ${have})`:''}</span>`;
-      }).join(', ');
-      const have=player.inventory[r.id]||0;
-      const warning=r.requiresCampfire&&player.campfires.length===0?'<div style="font-size:10px;color:#f99;margin-top:4px">⚠ Requires campfire</div>':'';
-      const campfireStatus=r.buildable&&player.campfires.length>0?`<div style="font-size:10px;color:#fb2;margin-top:4px">🔥 ${player.campfires.length} campfire(s)</div>`:'';
-      return `<div class="craftRecipe ${canCraft?'affordable':'locked'}" data-id="${r.id}">
-        <div><div class="rName">${r.name}</div><div class="rCost">${costStr}</div><div class="rDesc">${r.desc}</div>${warning}${campfireStatus}</div>
-        <div class="rHave">${have}</div>
-      </div>`;
-    }).join('');
-    const stageName=stage==='Build'?'🏗 Build':stage==='Process'?'① Process Raw Materials':'② Haft Finished Tools';
-    return `<div class="craftStageLabel">${stageName}</div>${rows}`;
+const craftGrid=document.getElementById('craftGrid');
+const craftDetail=document.getElementById('craftDetail');
+const campfireSelectorRow=document.getElementById('campfireSelectorRow');
+const hotbar=document.getElementById('hotbar');
+const panelScroll=document.getElementById('panelScroll');
+const panelTitle=document.getElementById('panelTitle');
+let activeStage='Build',selectedRecipeId=null,activePanel='crafting';
+function renderInventoryPanel(){
+  const allItems=['fiber','thickStick','bigPebble','flint','charcoal','cordage','knappedFlint','carvedShaft','shaft','flintKnife','spear','stoneAxe'];
+  const items=allItems.filter(k=>(player.inventory[k]||0)>0).sort((a,b)=>(player.inventory[b]||0)-(player.inventory[a]||0));
+  craftGrid.innerHTML=items.map(k=>{
+    const recipe=RECIPES.find(r=>r.id===k);
+    return mcSlotHTML({id:k,kind:ITEM_ICON_KIND[k]||'gem',color:recipe?recipe.icon:null,count:player.inventory[k]||0,locked:false,selected:false});
   }).join('');
+  
+  const totalCount=items.length;
+  const totalItems=items.reduce((sum,k)=>sum+(player.inventory[k]||0),0);
+  craftDetail.innerHTML=items.length===0?'<div class="mc-detail-empty">Your inventory is empty</div>':`<div class="mc-detail-name">Inventory</div><div class="mc-detail-desc">${totalCount} item type(s)<br>${totalItems} total item(s)</div>`;
 }
-function openCraftPanel(){renderCraftPanel();craftPanel.classList.add('open')}
+function renderCraftPanel(){
+  if(player.campfires.length>0){
+    campfireSelectorRow.innerHTML=`<div class="mc-camp-label">CAMPFIRE</div><div class="mc-camp-slots">${player.campfires.map((cf,i)=>`<div class="mc-slot small${player.selectedCampfire===i?' selected':''}" data-campfire="${i}" title="(${Math.round(cf.x)}, ${Math.round(cf.y)}) fuel ${Math.ceil(cf.fuel)}">${itemIconSVG('flame','#e8a040')}</div>`).join('')}</div>`;
+  }else{
+    campfireSelectorRow.innerHTML='';
+  }
+  const stageTabs=`<div class="mc-tabs" id="stageTabs">
+    <button class="mc-tab${activeStage==='Build'?' active':''}" data-stage="Build" type="button">Build</button>
+    <button class="mc-tab${activeStage==='Process'?' active':''}" data-stage="Process" type="button">Process</button>
+    <button class="mc-tab${activeStage==='Haft'?' active':''}" data-stage="Haft" type="button">Haft</button>
+  </div>`;
+  panelScroll.innerHTML=stageTabs+'<div class="mc-grid" id="craftGrid"></div>';
+  const craftGrid=document.getElementById('craftGrid');
+  const recipes=RECIPES.filter(r=>r.stage===activeStage);
+  craftGrid.innerHTML=recipes.map(r=>{
+    const afford=canAfford(r.cost);
+    const canCraft=afford&&(!r.requiresCampfire||player.campfires.length>0);
+    const have=player.inventory[r.id]||0;
+    return mcSlotHTML({id:r.id,kind:ITEM_ICON_KIND[r.id]||'gem',color:r.icon,count:have>0?have:'',locked:!canCraft,selected:selectedRecipeId===r.id});
+  }).join('');
+  craftGrid.addEventListener('click',e=>{
+    const slot=e.target.closest('.mc-slot');
+    if(!slot)return;
+    const itemId=slot.dataset.id;
+    if(e.shiftKey){
+      hotbarSlots[selectedHotbarSlot]=itemId;
+      renderHotbar();
+      return;
+    }
+    selectedRecipeId=itemId;
+    renderCraftPanel();
+  });
+  renderCraftDetail();
+  renderHotbar();
+}
+function renderCraftDetail(){
+  const r=RECIPES.find(x=>x.id===selectedRecipeId);
+  if(!r){craftDetail.innerHTML='<div class="mc-detail-empty">Select an item to craft</div>';return}
+  const afford=canAfford(r.cost);
+  const canCraft=afford&&(!r.requiresCampfire||player.campfires.length>0);
+  const ingredientSlots=Object.entries(r.cost).map(([k,v])=>{
+    const have=player.inventory[k]||0;
+    const short=have<v;
+    return `<div class="mc-ing">${mcSlotHTML({id:k,kind:ITEM_ICON_KIND[k]||'gem',count:v,locked:short})}<div class="mc-ing-have ${short?'short':''}">${have}/${v}</div></div>`;
+  }).join('');
+  const warning=r.requiresCampfire&&player.campfires.length===0?'<div class="mc-warning">⚠ Requires a campfire nearby</div>':'';
+  craftDetail.innerHTML=`
+    <div class="mc-detail-name">${r.name}</div>
+    <div class="mc-detail-desc">${r.desc}</div>
+    <div class="mc-recipe-row">${ingredientSlots}<div class="mc-arrow">→</div>${mcSlotHTML({id:r.id,kind:ITEM_ICON_KIND[r.id]||'gem',color:r.icon,count:''})}</div>
+    ${warning}
+    <button class="mc-btn${canCraft?'':' disabled'}" id="craftGo" type="button">${r.buildable?'SELECT PLACEMENT':'CRAFT'}</button>
+  `;
+}
+let hotbarSlots=['','',''];
+let selectedHotbarSlot=0;
+function renderHotbar(){
+  hotbar.innerHTML=hotbarSlots.map((itemId,idx)=>{
+    if(!itemId)return '<div class="mc-slot" data-hotbar-idx="'+idx+'" title="Empty slot"><svg viewBox="0 0 24 24" style="opacity:.3"><circle cx="12" cy="12" r="8" fill="#999"/></svg></div>';
+    const recipe=RECIPES.find(r=>r.id===itemId);
+    const selected=idx===selectedHotbarSlot;
+    return mcSlotHTML({id:itemId,kind:ITEM_ICON_KIND[itemId]||'gem',color:recipe?recipe.icon:null,count:player.inventory[itemId]||0,selected,extraClass:'',locked:false});
+  }).join('');
+  hotbar.querySelectorAll('[data-hotbar-idx]').forEach((slot,idx)=>{
+    slot.addEventListener('click',()=>{selectedHotbarSlot=idx;renderHotbar()});
+  });
+}
+function openCraftPanel(){
+  if(activePanel==='crafting'){
+    panelTitle.textContent='CRAFTING';
+    campfireSelectorRow.style.display='flex';
+    renderCraftPanel();
+  }else{
+    panelTitle.textContent='INVENTORY';
+    campfireSelectorRow.style.display='none';
+    renderInventoryPanel();
+  }
+  craftPanel.classList.add('open');
+}
 function closeCraftPanel(){craftPanel.classList.remove('open')}
 function toggleCraftPanel(){craftPanel.classList.contains('open')?closeCraftPanel():openCraftPanel()}
-craftList.addEventListener('click',e=>{
-  const row=e.target.closest('.craftRecipe');
-  if(!row)return;
-  craftItem(row.dataset.id);
+campfireSelectorRow.addEventListener('click',e=>{
+  const slot=e.target.closest('[data-campfire]');
+  if(!slot)return;
+  player.selectedCampfire=+slot.dataset.campfire;
+  renderCraftPanel();
+});
+craftDetail.addEventListener('click',e=>{
+  if(e.target.id==='craftGo'&&!e.target.classList.contains('disabled'))craftItem(selectedRecipeId);
+});
+document.getElementById('panelTabs').addEventListener('click',e=>{
+  const tab=e.target.closest('.mc-tab');
+  if(!tab)return;
+  if(tab.dataset.panel){
+    activePanel=tab.dataset.panel;
+    document.querySelectorAll('#panelTabs .mc-tab').forEach(t=>t.classList.toggle('active',t===tab));
+    selectedRecipeId=null;
+    openCraftPanel();
+    return;
+  }
+  if(tab.dataset.stage){
+    activeStage=tab.dataset.stage;
+    document.querySelectorAll('#stageTabs .mc-tab').forEach(t=>t.classList.toggle('active',t===tab));
+    selectedRecipeId=null;
+    renderCraftPanel();
+  }
 });
 document.getElementById('craftClose').addEventListener('click',closeCraftPanel);
 document.getElementById('craftButton').addEventListener('pointerdown',e=>{toggleCraftPanel();e.preventDefault()});
-addEventListener('keydown',e=>{if(e.key==='c'||e.key==='C')toggleCraftPanel()});
+addEventListener('keydown',e=>{
+  if(e.key==='c'||e.key==='C'||e.key==='e'||e.key==='E')toggleCraftPanel();
+  if(e.key==='1')selectedHotbarSlot=0;
+  if(e.key==='2')selectedHotbarSlot=1;
+  if(e.key==='3')selectedHotbarSlot=2;
+  renderHotbar();
+});
 
 const COLLECTION_RANGE=2.5;
 function interactTarget(){
@@ -397,21 +554,12 @@ for(const e of entities){
 }
 draw.sort((a,b)=>a.y-b.y);for(const o of draw)o.render();for(const ft of floatingTexts){const progress=ft.age/ft.life,alpha=Math.max(0,1-progress),rise=progress*TILE*.8;ctx.save();ctx.globalAlpha=alpha;ctx.fillStyle=ft.color;ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.textBaseline='middle';const sx=Math.floor((ft.x-cx+cols/2)*TILE),sy=Math.floor((ft.y-cy+rows/2)*TILE+rise);ctx.fillText(ft.text,sx,sy);ctx.restore()}if(vignetteCanvas)ctx.drawImage(vignetteCanvas,0,0);ctx.translate(-shakeX,-shakeY)}
 
-let hudTimer=0;let hudVisible=true;const hudToggle=document.getElementById('hudToggle');function toggleHud(){hudVisible=!hudVisible;if(hudVisible){hud.classList.remove('hidden')}else{hud.classList.add('hidden')}}hudToggle.addEventListener('click',toggleHud);addEventListener('keydown',e=>{if(e.key==='i'||e.key==='I')toggleHud()});function updateHUD(ms=0){hudTimer+=ms;if(hudTimer<100)return;hudTimer=0;let z=0,b=0;for(const e of entities){if(e.type==='zombie')z++;if(e.type==='bush'&&!e.harvested)b++}const t=player.target?player.target.type:'—';const pos=`${Math.round(player.x)}, ${Math.round(player.y)}`;const soilDef=SOIL_DEFS[getTile(Math.floor(player.x),Math.floor(player.y)).type];const soilName=soilDef?soilDef.name:'—';const fiberIcon=`<svg width="20" height="20" viewBox="0 0 64 64" style="display:inline-block;margin-right:6px;vertical-align:middle"><circle cx="32" cy="32" r="10" fill="#5bc46a"/></svg>`;const stickIcon=`<svg width="20" height="20" viewBox="0 0 64 64" style="display:inline-block;margin-right:6px;vertical-align:middle"><g transform="rotate(-30 32 32)"><rect x="28" y="16" width="8" height="32" rx="4" fill="#664326"/></g></svg>`;const pebbleIcon=`<svg width="20" height="20" viewBox="0 0 64 64" style="display:inline-block;margin-right:6px;vertical-align:middle"><ellipse cx="32" cy="32" rx="10" ry="8" fill="#aaa69d"/></svg>`;const flintIcon=`<svg width="20" height="20" viewBox="0 0 64 64" style="display:inline-block;margin-right:6px;vertical-align:middle"><polygon points="16,48 24,16 36,12 48,28 40,56 20,52" fill="#cfd3d0"/></svg>`;hud.innerHTML=`<div style="background:rgba(0,0,0,.75);padding:14px;border:2px solid #0f0;border-radius:4px;font-size:16px;line-height:2.2;font-family:monospace;font-weight:bold">
-<div style="color:#0f0;margin-bottom:10px;font-weight:bold;font-size:18px">◆ INVENTORY ◆</div>
-<div>${fiberIcon}<span style="color:#8f8">Fiber: ${player.inventory.fiber||0}</span></div>
-<div>${stickIcon}<span style="color:#a85">Sticks: ${player.inventory.thickStick||0}</span></div>
-<div>${pebbleIcon}<span style="color:#aaa">Pebbles: ${player.inventory.bigPebble||0}</span></div>
-<div>${flintIcon}<span style="color:#fff">Flint: ${player.inventory.flint||0}</span></div>
-<div><svg width="20" height="20" viewBox="0 0 20 20" style="display:inline-block;margin-right:6px;vertical-align:middle"><circle cx="10" cy="10" r="6" fill="#5a5a58"/><circle cx="8" cy="8" r="2" fill="#3a3a38"/></svg><span style="color:#d8d8d8">Charcoal: ${player.inventory.charcoal||0}</span></div>
-${(()=>{const comps=RECIPES.filter(r=>r.stage==='Process'&&(player.inventory[r.id]||0)>0);if(!comps.length)return'';return `<div style="margin-top:8px;border-top:1px solid rgba(0,255,0,.3);padding-top:8px;font-size:12px">`+comps.map(r=>`<div style="color:#cde">${r.name}: ${player.inventory[r.id]}</div>`).join('')+`</div>`})()}
-${(()=>{const tools=RECIPES.filter(r=>r.stage==='Haft'&&(player.inventory[r.id]||0)>0);if(!tools.length)return'';return `<div style="margin-top:8px;border-top:1px solid rgba(0,255,0,.3);padding-top:8px">`+tools.map(r=>`<div style="color:#ffd76a">◆ ${r.name}: ${player.inventory[r.id]}</div>`).join('')+`</div>`})()}
-<div style="margin-top:10px;border-top:1px solid #0f0;padding-top:10px;color:#0f0;font-size:12px;font-weight:normal">
-POS: ${pos} | HP: ${player.hp}<br>
-SOIL: ${soilName}<br>
-TARGET: ${t} | ENTITIES: ${entities.length}
-</div>
-</div>`}
+let hudTimer=0;let hudVisible=true;const hudToggle=document.getElementById('hudToggle');function toggleHud(){hudVisible=!hudVisible;if(hudVisible){hud.classList.remove('hidden')}else{hud.classList.add('hidden')}}hudToggle.addEventListener('click',toggleHud);addEventListener('keydown',e=>{if(e.key==='i'||e.key==='I')toggleHud()});function updateHUD(ms=0){hudTimer+=ms;if(hudTimer<100)return;hudTimer=0;let z=0,b=0;for(const e of entities){if(e.type==='zombie')z++;if(e.type==='bush'&&!e.harvested)b++}const t=player.target?player.target.type:'—';const pos=`${Math.round(player.x)}, ${Math.round(player.y)}`;const soilDef=SOIL_DEFS[getTile(Math.floor(player.x),Math.floor(player.y)).type];const soilName=soilDef?soilDef.name:'—';hud.innerHTML=`<div style="background:rgba(0,0,0,.75);padding:14px;border:2px solid #0f0;border-radius:4px;font-size:13px;line-height:1.8;font-family:monospace;font-weight:bold">
+<div style="color:#0f0;margin-bottom:8px;font-weight:bold;font-size:15px">◆ STATUS ◆</div>
+<div>POS: ${pos} | HP: ${player.hp}</div>
+<div>SOIL: ${soilName}</div>
+<div>TARGET: ${t} | ENTITIES: ${entities.length}</div>
+</div>`;renderHotbar()}
 for(let i=0;i<5;i++)createEntity('zombie',Math.random()*20-10,Math.random()*20-10);
 let last=performance.now();function loop(){const now=performance.now(),raw=Math.min(now-last,100),dt=raw/16.67;last=now;update(dt);render();updateHUD(raw);requestAnimationFrame(loop)}loop();
 </script>
