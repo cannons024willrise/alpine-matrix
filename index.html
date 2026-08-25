@@ -91,9 +91,9 @@ canvas{display:block;image-rendering:pixelated}
 #inventoryInner .mc-detail{margin-top:8px}
 .inv-hotbar{margin-top:10px;background:#b7b7b7;padding:8px;box-shadow:inset 2px 2px #8f8f8f,inset -2px -2px #eee,0 0 0 2px #000}
 .inv-hotbar-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-family:'Press Start 2P',monospace;font-size:8px;color:#222}
-.inv-hotbar-grid{display:flex;gap:5px;justify-content:center;align-items:center;flex-wrap:wrap}.inv-hotbar-grid .mc-slot{width:44px;height:44px}
+.inv-hotbar-grid{display:flex;gap:12px;justify-content:center;align-items:stretch;flex-wrap:wrap}.inv-hotbar-section{display:flex;flex-direction:column;align-items:center;gap:5px}.inv-hotbar-section.carry{padding:0 4px}.inv-hotbar-section.hands{padding:0 4px}.inv-hotbar-label{font:8px/1 'Press Start 2P',monospace;color:#222;text-align:center;white-space:nowrap}.inv-hotbar-slots{display:flex;gap:5px;justify-content:center;align-items:center}.inv-hotbar-grid .mc-slot{width:44px;height:44px}
 .inv-note{margin-top:7px;text-align:center;font-size:9px;color:#555}.mc-carry-locked{opacity:.55}
-@media(max-width:620px){#inventoryInner{width:96vw;max-height:92vh}.inv-player-card{padding:6px}.inv-model{font-size:34px}.craft-integrated-scroll{max-height:220px}.inv-hotbar-grid{display:flex;gap:5px;justify-content:center;align-items:center;flex-wrap:wrap}.inv-hotbar-grid .mc-slot{width:40px;height:40px}.inv-hotbar-grid .hotbar-utility .mc-slot{width:40px;height:40px}}
+@media(max-width:620px){#inventoryInner{width:96vw;max-height:92vh}.inv-player-card{padding:6px}.inv-model{font-size:34px}.craft-integrated-scroll{max-height:220px}.inv-hotbar-grid{display:flex;gap:8px;justify-content:center;align-items:stretch;flex-wrap:wrap}.inv-hotbar-grid .mc-slot{width:40px;height:40px}.inv-hotbar-slots{gap:4px}.inv-hotbar-label{font-size:7px}}
 .armor-slot{background:#7a7a7a;box-shadow:inset 2px 2px 0 0 #222,inset -2px -2px 0 0 #ddd,0 0 0 2px #000}
 </style>
 </head>
@@ -124,7 +124,7 @@ canvas{display:block;image-rendering:pixelated}
       <div class="inv-hotbar">
         <div class="inv-hotbar-title"><span>EQUIPMENT / HANDS / CARRY</span><span id="hotbarCapacityLabel">0 / 3 carry</span></div>
         <div id="inventoryHotbarGrid" class="inv-hotbar-grid"></div>
-        <div class="inv-note">Three dedicated carry slots. Basket/Backpack has its own slot.</div>
+        <div class="inv-note">Three base carry slots. Basket/Backpack adds 5 more carry slots.</div>
       </div>
     </div>
   </div>
@@ -227,15 +227,19 @@ const HAND_SLOT_COUNT=2;
 const CARRY_SLOT_COUNT=3;
 const BACKPACK_SLOT='basket';
 const HAND_ITEMS=new Set(['flintKnife','spear','stoneAxe','knappedFlint','carvedShaft','shaft']);
-const BASE_CARRY_SLOTS=CARRY_SLOT_COUNT;
-const MAX_CARRY_SLOTS=CARRY_SLOT_COUNT;
+const BASE_CARRY_SLOTS=3;
+const BASKET_EXTRA_CARRY_SLOTS=5;
+const BASKET_CARRY_TOTAL=BASE_CARRY_SLOTS+BASKET_EXTRA_CARRY_SLOTS;
+function hasBasket(){return player.inventory.basket>0||utilitySlots.backpack==='basket'}
+function getCarrySlotCount(){return hasBasket()?BASKET_CARRY_TOTAL:BASE_CARRY_SLOTS}
+function ensureCarrySlots(){const target=getCarrySlotCount();while(hotbarSlots.length<target)hotbarSlots.push('');}
 const STACK_LIMITS={stalkFiber:8,thickStick:3,bigPebble:3,flint:4,charcoal:3,cordage:4,basket:1,knappedFlint:2,carvedShaft:1,shaft:1,flintKnife:1,spear:1,stoneAxe:1,armor:1,campfire:1};
-let hotbarSlots=Array(CARRY_SLOT_COUNT).fill('');
+let hotbarSlots=Array(BASE_CARRY_SLOTS).fill('');
 let handSlots=Array(HAND_SLOT_COUNT).fill('');
 const utilitySlots={armor:'',backpack:''};
 let selectedHandSlot=0;
 let selectedCarrySlot=0;
-function getHotbarCapacity(){return CARRY_SLOT_COUNT}
+function getHotbarCapacity(){return getCarrySlotCount()}
 function inventoryUsedSlots(){return hotbarSlots.filter(Boolean).length}
 function itemStackLimit(name){return STACK_LIMITS[name]||1}
 function slotArrayForItem(name){
@@ -257,6 +261,7 @@ function addItem(name,amount=1){
     if(slot===-1)return false;
     handSlots[slot]=name;
   } else {
+    ensureCarrySlots();
     slot=hotbarSlots.indexOf(name);
     if(slot===-1)slot=hotbarSlots.indexOf('');
     if(slot===-1)return false;
@@ -384,8 +389,8 @@ function recipeCanCraft(recipe){
   if(recipe.buildable)return true;
   const existing=player.inventory[recipe.id]||0;
   if(existing>0)return true;
-  if(HAND_ITEMS.has(recipe.id))return handSlots.includes('')||inventoryUsedSlots()<CARRY_SLOT_COUNT;
-  return inventoryUsedSlots()<CARRY_SLOT_COUNT;
+  if(HAND_ITEMS.has(recipe.id))return handSlots.includes('')||inventoryUsedSlots()<getHotbarCapacity();
+  return inventoryUsedSlots()<getHotbarCapacity();
 }
 
 function maxCraftBatch(id){
@@ -421,10 +426,12 @@ function craftItem(id, maxBatch=false){
     const resultLimit=itemStackLimit(id);
 
     if(id==='basket'){
-      if(currentResult>0||utilitySlots.backpack)return;
+      if(hasBasket())break;
+      if(!canAfford(recipe.cost))break;
       if(!validateAndConsume(recipe.cost))break;
       player.inventory.basket=1;
       utilitySlots.backpack='basket';
+      ensureCarrySlots();
       craftedCount=1;
       break;
     }
@@ -542,7 +549,7 @@ function renderCraftDetail(){
   const afford=canAfford(r.cost);
   const isBasketMaxed=r.id==='basket'&&(player.inventory.basket||0)>=1;
   const canCraft=recipeCanCraft(r);
-  const hasCarryRoom=(r.id==='basket'||r.id==='armor'||HAND_ITEMS.has(r.id))||(player.inventory[r.id]||0)>0||inventoryUsedSlots()<CARRY_SLOT_COUNT;
+  const hasCarryRoom=(r.id==='basket'||r.id==='armor'||HAND_ITEMS.has(r.id))||(player.inventory[r.id]||0)>0||inventoryUsedSlots()<getHotbarCapacity();
   const ingredientSlots=Object.entries(r.cost).map(([k,v])=>{const have=player.inventory[k]||0,short=have<v;return `<div class="mc-ing">${mcSlotHTML({id:k,kind:ITEM_ICON_KIND[k]||'gem',count:v,locked:short})}<div class="mc-ing-have ${short?'short':''}">${have}/${v}</div></div>`}).join('');
   const warning=r.requiresCampfire&&player.campfires.length===0?'<div class="mc-warning">⚠ Requires a campfire nearby</div>':'';
   const basketWarning=isBasketMaxed?'<div class="mc-warning">⚠ You can only have one Basket!</div>':'';
@@ -558,7 +565,9 @@ function utilitySlotHTML(side,itemId){
 }
 function renderHotbar(){
   const emptySlot=(attrs,title)=>`<div class="mc-slot" ${attrs} title="${title}"><svg viewBox="0 0 24 24" style="opacity:.3"><circle cx="12" cy="12" r="8" fill="#999"/></svg></div>`;
-  const carryHtml=hotbarSlots.map((itemId,idx)=>{
+  const carryCapacity=getCarrySlotCount();
+  ensureCarrySlots();
+  const carryHtml=Array.from({length:carryCapacity},(_,idx)=>hotbarSlots[idx]||'').map((itemId,idx)=>{
     if(!itemId)return emptySlot(`data-hotbar-idx="${idx}"`,`Empty carry slot ${idx+1}`);
     const recipe=RECIPES.find(r=>r.id===itemId);
     return mcSlotHTML({id:itemId,kind:ITEM_ICON_KIND[itemId]||'gem',color:recipe?recipe.icon:null,count:player.inventory[itemId]||0,selected:idx===selectedCarrySlot,locked:false,extraClass:'carry-slot'});
@@ -598,14 +607,16 @@ function renderHotbar(){
   }));
 }
 function renderInventoryHotbar(){
-  const carryHtml=hotbarSlots.map((itemId,idx)=>itemId
+  const carryCapacity=getCarrySlotCount();
+  ensureCarrySlots();
+  const carryHtml=Array.from({length:carryCapacity},(_,idx)=>hotbarSlots[idx]||'').map((itemId,idx)=>itemId
     ?mcSlotHTML({id:itemId,kind:ITEM_ICON_KIND[itemId]||'gem',color:(RECIPES.find(r=>r.id===itemId)||{}).icon,count:player.inventory[itemId]||0,selected:idx===selectedCarrySlot,locked:false})
     :'<div class="mc-slot"></div>').join('');
   const handHtml=handSlots.map((itemId,idx)=>itemId
     ?mcSlotHTML({id:itemId,kind:ITEM_ICON_KIND[itemId]||'gem',color:(RECIPES.find(r=>r.id===itemId)||{}).icon,count:player.inventory[itemId]||0,selected:idx===selectedHandSlot,locked:false})
     :'<div class="mc-slot"></div>').join('');
-  inventoryHotbarGrid.innerHTML=`<div class="hotbar-utility-group">${utilitySlotHTML('armor',utilitySlots.armor)}</div><div class="hotbar-main hotbar-carry-group">${carryHtml}</div><div class="hotbar-main hotbar-hand-group">${handHtml}</div><div class="hotbar-utility-group">${utilitySlotHTML('backpack',utilitySlots.backpack)}</div>`;
-  document.getElementById('hotbarCapacityLabel').textContent=`${inventoryUsedSlots()} / ${CARRY_SLOT_COUNT} carry`;
+  inventoryHotbarGrid.innerHTML=`<div class="inv-hotbar-section"><div class="inv-hotbar-label">ARMOR</div><div class="inv-hotbar-slots">${utilitySlotHTML('armor',utilitySlots.armor)}</div></div><div class="inv-hotbar-section carry"><div class="inv-hotbar-label">CARRY</div><div class="inv-hotbar-slots">${carryHtml}</div></div><div class="inv-hotbar-section hands"><div class="inv-hotbar-label">HANDS</div><div class="inv-hotbar-slots">${handHtml}</div></div><div class="inv-hotbar-section"><div class="inv-hotbar-label">BACKPACK</div><div class="inv-hotbar-slots">${utilitySlotHTML('backpack',utilitySlots.backpack)}</div></div>`;
+  document.getElementById('hotbarCapacityLabel').textContent=`${inventoryUsedSlots()} / ${getCarrySlotCount()} carry${hasBasket()?' (+5 basket bonus)':''}`;
   inventoryHotbarGrid.querySelectorAll('[data-utility-side]').forEach(wrapper=>wrapper.addEventListener('click',e=>{
     e.stopPropagation();
     if(wrapper.dataset.utilitySide==='armor')quickEquipArmor();
@@ -652,7 +663,7 @@ addEventListener('keydown',e=>{
     if(inventoryScreen.classList.contains('open'))renderInventoryHotbar();
   }
   if(e.key==='q'||e.key==='Q'){
-    if(selectedCarrySlot>=0&&selectedCarrySlot<CARRY_SLOT_COUNT) dropItem(selectedCarrySlot,e.ctrlKey);
+    if(selectedCarrySlot>=0&&selectedCarrySlot<getHotbarCapacity()) dropItem(selectedCarrySlot,e.ctrlKey);
   }
 });
 
