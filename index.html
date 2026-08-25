@@ -90,7 +90,7 @@ canvas{display:block;image-rendering:pixelated}
 .craft-integrated-scroll{background:#bcbcbc;max-height:260px;overflow:auto;box-shadow:inset 0 2px #8f8f8f;margin-top:8px}.craft-integrated-scroll .mc-grid{grid-template-columns:repeat(auto-fill,44px)}
 #inventoryInner .mc-detail{margin-top:8px}
 .inv-hotbar{margin-top:10px;background:#b7b7b7;padding:8px;box-shadow:inset 2px 2px #8f8f8f,inset -2px -2px #eee,0 0 0 2px #000}
-.inv-hotbar-title{display:flex;justify-space-between;align-items:center;margin-bottom:6px;font-family:'Press Start 2P',monospace;font-size:8px;color:#222}
+.inv-hotbar-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-family:'Press Start 2P',monospace;font-size:8px;color:#222}
 .inv-hotbar-grid{display:flex;gap:12px;justify-content:center;align-items:stretch;flex-wrap:wrap}.inv-hotbar-section{display:flex;flex-direction:column;align-items:center;gap:5px}.inv-hotbar-section.carry{padding:0 4px}.inv-hotbar-section.hands{padding:0 4px}.inv-hotbar-label{font:8px/1 'Press Start 2P',monospace;color:#222;text-align:center;white-space:nowrap}.inv-hotbar-slots{display:flex;gap:5px;justify-content:center;align-items:center}.inv-hotbar-grid .mc-slot{width:44px;height:44px}
 .inv-note{margin-top:7px;text-align:center;font-size:9px;color:#555}.mc-carry-locked{opacity:.55}
 @media(max-width:620px){#inventoryInner{width:96vw;max-height:92vh}.inv-player-card{padding:6px}.inv-model{font-size:34px}.craft-integrated-scroll{max-height:220px}.inv-hotbar-grid{display:flex;gap:8px;justify-content:center;align-items:stretch;flex-wrap:wrap}.inv-hotbar-grid .mc-slot{width:40px;height:40px}.inv-hotbar-slots{gap:4px}.inv-hotbar-label{font-size:7px}}
@@ -216,7 +216,7 @@ function getBareBushSprite(seed){let s=bushSpriteCache.get('bare:'+seed);if(s)re
 function buildZombieSVG(phase,moving){const sh=moving?Math.sin(phase*Math.PI*2):0,leg=sh*18,arm=sh*35,tilt=sh*8,drop=moving?8:4,limb='#3f8a4c';return`<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="-64 -64 128 128"><defs><radialGradient id="zBody" cx="35%" cy="25%" r="80%"><stop offset="0%" stop-color="#77cf85"/><stop offset="100%" stop-color="#2e5c37"/></radialGradient><radialGradient id="zHead" cx="35%" cy="25%" r="80%"><stop offset="0%" stop-color="#6ec97e"/><stop offset="100%" stop-color="#2e5c37"/></radialGradient></defs><ellipse cx="0" cy="32" rx="18" ry="6" fill="rgba(0,0,0,.25)"/><g transform="rotate(${leg*.7} -6 6)"><rect x="-10" y="6" width="8" height="28" rx="4" fill="${limb}"/></g><g transform="rotate(${-leg*1.2} 6 6)"><rect x="2" y="4" width="8" height="30" rx="4" fill="${limb}"/></g><g transform="rotate(${arm*1.1} -16 ${-drop}) skewX(${sh*6})"><rect x="-20" y="${-12-drop}" width="7" height="28" rx="3.5" fill="${limb}"/></g><g transform="rotate(${tilt})"><rect x="-13" y="-18" width="26" height="36" rx="10" fill="url(#zBody)"/><rect x="-9" y="-6" width="5" height="10" rx="1" fill="#1c3a22" opacity=".6"/></g><g transform="rotate(${-arm*.9} 16 ${-drop+2}) skewX(${-sh*4})"><rect x="13" y="${-10-drop}" width="7" height="26" rx="3.5" fill="${limb}"/></g><g transform="rotate(${tilt*.6})"><circle cx="0" cy="-28" r="13" fill="url(#zHead)"/><circle cx="-4" cy="-29" r="1.6" fill="#ff5a4d"/><circle cx="4" cy="-29" r="1.6" fill="#ff5a4d"/></g></svg>`}
 const ZOMBIE_FRAME_COUNT=8,zombieFrames=[];for(let i=0;i<ZOMBIE_FRAME_COUNT;i++){const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildZombieSVG(i/ZOMBIE_FRAME_COUNT,true));zombieFrames.push(img)}const zombieIdleFrame=new Image();zombieIdleFrame.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildZombieSVG(0,false));function currentZombieSprite(e){if(!e.vx&&!e.vy)return zombieIdleFrame;return zombieFrames[Math.floor(e.animPhase*ZOMBIE_FRAME_COUNT)%ZOMBIE_FRAME_COUNT]}
 
-const player={x:0,y:0,vx:0,vy:0,hp:100,speed:.15,radius:.2,facingAngle:Math.PI/2,animPhase:0,moving:false,inventory:{stalkFiber:0,thickStick:0,flint:0,bigPebble:0,charcoal:0,cordage:0,basket:0,knappedFlint:0,carvedShaft:0,shaft:0,flintKnife:0,spear:0,armor:0,campfire:0},armorEquipped:false,campfires:[],selectedCampfire:0,placingRecipeId:null,target:null};
+const player={x:0,y:0,vx:0,vy:0,hp:100,speed:.15,radius:.2,facingAngle:Math.PI/2,animPhase:0,moving:false,inventory:{stalkFiber:0,thickStick:0,flint:0,bigPebble:0,charcoal:0,cordage:0,basket:0,knappedFlint:0,carvedShaft:0,shaft:0,flintKnife:0,spear:0,stoneAxe:0,armor:0,campfire:0},armorEquipped:false,campfires:[],selectedCampfire:0,placingRecipeId:null,target:null};
 function buildPlayerSVG(phase,moving){const cyc=phase*Math.PI*2,sw=moving?Math.sin(cyc):0,la=sw*28,aa=-sw*32,bob=moving?Math.abs(Math.sin(cyc*2))*3.5:0,bt=moving?sw*4:0,hs=moving?-sw*3:0,limb='#bcd9c4',armorColor='#8a8880';return`<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="-64 -64 128 128"><defs><radialGradient id="pBody" cx="35%" cy="30%" r="75%"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#cfe6d6"/></radialGradient><radialGradient id="pHead" cx="35%" cy="30%" r="75%"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#d6ebdc"/></radialGradient></defs><ellipse cx="${sw*2}" cy="32" rx="${20-Math.abs(sw)*2}" ry="7" fill="rgba(0,0,0,.35)"/><g transform="rotate(${la} -6 6) translate(0 ${-bob})"><rect x="-11" y="4" width="9" height="27" rx="4.5" fill="${limb}"/></g><g transform="rotate(${-la} 6 6) translate(0 ${-bob})"><rect x="2" y="4" width="9" height="27" rx="4.5" fill="${limb}"/></g><g transform="rotate(${-aa} -15 -4) translate(0 ${-bob})"><rect x="-19" y="-10" width="8" height="25" rx="4" fill="${limb}"/></g><g transform="rotate(${bt}) translate(0 ${-bob})"><rect x="-14" y="-19" width="28" height="34" rx="11" fill="${player.armorEquipped?armorColor:'url(#pBody)'}"/></g><g transform="rotate(${aa} 15 -4) translate(0 ${-bob})"><rect x="11" y="-10" width="8" height="25" rx="4" fill="${limb}"/></g><g transform="rotate(${hs} 0 ${-29-bob}) translate(0 ${-bob})"><circle cx="0" cy="-29" r="12.5" fill="url(#pHead)"/><circle cx="-4" cy="-30" r="1.4" fill="#1a2b20"/><circle cx="4" cy="-30" r="1.4" fill="#1a2b20"/></g></svg>`}
 const PLAYER_FRAME_COUNT=8,playerFrames=[];for(let i=0;i<PLAYER_FRAME_COUNT;i++){const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildPlayerSVG(i/PLAYER_FRAME_COUNT,true));playerFrames.push(img)}const playerIdleFrame=new Image();playerIdleFrame.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildPlayerSVG(0,false));function currentPlayerSprite(){if(!player.moving)return playerIdleFrame;return playerFrames[Math.floor(player.animPhase*PLAYER_FRAME_COUNT)%PLAYER_FRAME_COUNT]}
 
@@ -258,8 +258,15 @@ function addItem(name,amount=1){
   else if(HAND_ITEMS.has(name)){
     slot=handSlots.indexOf(name);
     if(slot===-1) slot=handSlots.indexOf('');
-    if(slot===-1)return false;
-    handSlots[slot]=name;
+    if(slot===-1){
+      ensureCarrySlots();
+      slot=hotbarSlots.indexOf(name);
+      if(slot===-1)slot=hotbarSlots.indexOf('');
+      if(slot===-1)return false;
+      hotbarSlots[slot]=name;
+    }else{
+      handSlots[slot]=name;
+    }
   } else {
     ensureCarrySlots();
     slot=hotbarSlots.indexOf(name);
@@ -377,7 +384,16 @@ function canAfford(cost){
 
 function validateAndConsume(cost){
   if(!canAfford(cost))return false;
-  for(const k in cost)player.inventory[k]-=cost[k];
+  for(const k in cost){
+    player.inventory[k]-=cost[k];
+    if(player.inventory[k]<=0){
+      player.inventory[k]=0;
+      const hIdx=handSlots.indexOf(k);
+      if(hIdx!==-1)handSlots[hIdx]='';
+      const cIdx=hotbarSlots.indexOf(k);
+      if(cIdx!==-1)hotbarSlots[cIdx]='';
+    }
+  }
   return true;
 }
 
@@ -388,7 +404,15 @@ function recipeCanCraft(recipe){
   if(recipe.id==='armor')return !player.inventory.armor&&!player.armorEquipped&&!utilitySlots.armor;
   if(recipe.buildable)return true;
   const existing=player.inventory[recipe.id]||0;
-  if(existing>0)return true;
+  if(existing>0 && existing<itemStackLimit(recipe.id))return true;
+  let freesSlot=false;
+  for(const k in recipe.cost){
+    if((player.inventory[k]||0)===recipe.cost[k]){
+      freesSlot=true;
+      break;
+    }
+  }
+  if(freesSlot)return true;
   if(HAND_ITEMS.has(recipe.id))return handSlots.includes('')||inventoryUsedSlots()<getHotbarCapacity();
   return inventoryUsedSlots()<getHotbarCapacity();
 }
@@ -437,7 +461,7 @@ function craftItem(id, maxBatch=false){
     }
 
     if(id==='armor'){
-      if(currentResult>0||player.armorEquipped||utilitySlots.armor)return;
+      if(currentResult>0||player.armorEquipped||utilitySlots.armor)break;
       if(!validateAndConsume(recipe.cost))break;
       player.inventory.armor=1;
       utilitySlots.armor='armor';
@@ -446,17 +470,19 @@ function craftItem(id, maxBatch=false){
     }
 
     if(currentResult>=resultLimit)break;
-    if(currentResult===0&&inventoryUsedSlots()>=getHotbarCapacity())break;
 
-    // Reserve the result slot before consuming ingredients. addItem is atomic.
-    if(!addItem(id,1))break;
-    if(!validateAndConsume(recipe.cost)){
-      // Undo the result if ingredients became unavailable.
-      player.inventory[id]--;
-      if(player.inventory[id]<=0){
-        player.inventory[id]=0;
-        const slot=hotbarSlots.indexOf(id);
-        if(slot!==-1)hotbarSlots[slot]='';
+    if(!validateAndConsume(recipe.cost))break;
+
+    if(!addItem(id,1)){
+      for(const k in recipe.cost){
+        player.inventory[k]=(player.inventory[k]||0)+recipe.cost[k];
+        if(HAND_ITEMS.has(k)){
+          const hIdx=handSlots.indexOf('');
+          if(hIdx!==-1)handSlots[hIdx]=k;
+        }else{
+          const cIdx=hotbarSlots.indexOf('');
+          if(cIdx!==-1)hotbarSlots[cIdx]=k;
+        }
       }
       break;
     }
@@ -640,7 +666,6 @@ addEventListener('keydown',e=>{
   if(e.key==='Escape')closeInventoryScreen();
   if(e.key>='1'&&e.key<='7'){
     const slot=+e.key-1;
-    // 1 = armor, 2-4 = carry 1-3, 5-6 = hands 1-2, 7 = basket/backpack
     if(slot>=1&&slot<=3) selectedCarrySlot=slot-1;
     else if(slot===4||slot===5) selectedHandSlot=slot-4;
     renderHotbar();
@@ -772,66 +797,18 @@ for(let i=player.campfires.length-1;i>=0;i--){
 const TREE_SORT_BASE_OFFSET=2.05;
 function treeSortY(e){return e.y+TREE_SORT_BASE_OFFSET}
 
-function render(){ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);const shakeX=cameraShake.intensity>0?((Math.random()-.5)*cameraShake.intensity*TILE):0,shakeY=cameraShake.intensity>0?((Math.random()-.5)*cameraShake.intensity*TILE):0;ctx.translate(shakeX,shakeY);const cx=player.x,cy=player.y,cols=viewportCols,rows=viewportRows,sx0=Math.floor(cx-cols/2),sy0=Math.floor(cy-rows/2),time=Date.now()*.003;for(let ty=sy0;ty<sy0+rows;ty++)for(let tx=sx0;tx<sx0+cols;tx++){const tile=getTile(tx,ty);if(!tile.bgCanvas)buildTileBackground(tx,ty,tile);const sx=Math.floor((tx-cx+cols/2)*TILE),sy=Math.floor((ty-cy+rows/2)*TILE);ctx.drawImage(tile.bgCanvas,sx,sy);if(tile.type==='grass'&&tile.grassPattern){const sway=Math.sin(time+tx*.3+ty*.3)*3;for(const b of tile.grassPattern){const gx=Math.floor(sx+b.x*(TILE-2)),gy=Math.floor(sy+b.y*(TILE-8)+4),bend=Math.floor(sway+b.offsetSway);ctx.fillStyle=b.light?'#5bc46a':'#3a7a42';ctx.fillRect(gx+bend,gy-2,2,2)}}const water=getWater(tx,ty);if(water.river){const wavePhase=(time*2+tx*.2+ty*.2)%Math.PI*2;ctx.fillStyle='rgba(41,108,178,.7)';ctx.fillRect(sx,sy,TILE,TILE);ctx.strokeStyle='rgba(70,160,220,.5)';ctx.lineWidth=1;for(let i=0;i<3;i++){const offset=Math.sin(wavePhase+i)*2;ctx.beginPath();ctx.moveTo(sx,sy+TILE/3*(i+1)+offset);ctx.lineTo(sx+TILE,sy+TILE/3*(i+1)+offset);ctx.stroke()}}else if(water.gleysol){ctx.fillStyle='rgba(41,130,160,.4)';ctx.fillRect(sx,sy,TILE,TILE);const bubbles=Math.floor(hash(tx,ty,1200)*4)+1;for(let i=0;i<bubbles;i++){const bx=hash(tx,ty,1201+i*2)*TILE,by=hash(tx,ty,1202+i*2)*TILE,br=1+hash(tx,ty,1203+i*2)*1.5;ctx.fillStyle=`rgba(100,180,200,${.3+hash(tx,ty,1204+i*2)*.3})`;ctx.beginPath();ctx.arc(sx+bx,sy+by,br,0,Math.PI*2);ctx.fill()}}}
+function render(){ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);const shakeX=cameraShake.intensity>0?((Math.random()-.5)*cameraShake.intensity*TILE):0,shakeY=cameraShake.intensity>0?((Math.random()-.5)*cameraShake.intensity*TILE):0;ctx.translate(shakeX,shakeY);const cx=player.x,cy=player.y,cols=viewportCols,rows=viewportRows,sx0=Math.floor(cx-cols/2),sy0=Math.floor(cy-rows/2),time=Date.now()*.003;for(let ty=sy0;ty<sy0+rows;ty++)for(let tx=sx0;tx<sx0+cols;tx++){const tile=getTile(tx,ty);if(!tile.bgCanvas)buildTileBackground(tx,ty,tile);const sx=Math.floor((tx-cx+cols/2)*TILE),sy=Math.floor((ty-cy+rows/2)*TILE);ctx.drawImage(tile.bgCanvas,sx,sy);if(tile.type==='grass'&&tile.grassPattern){const sway=Math.sin(time+tx*.3+ty*.3)*3;for(const b of tile.grassPattern){const gx=Math.floor(sx+b.x*(TILE-2)),gy=Math.floor(sy+b.y*(TILE-8)+4),bend=Math.floor(sway+b.offsetSway);ctx.fillStyle=b.light?'#5bc46a':'#3a7a42';ctx.fillRect(gx+bend,gy-2,2,2)}}const water=getWater(tx,ty);if(water.river){const wavePhase=(time*2+tx*.2+ty*.2)%Math.PI*2;ctx.fillStyle='rgba(41,108,178,.7)';ctx.fillRect(sx,sy,TILE,TILE);ctx.strokeStyle='rgba(70,160,220,.5)';ctx.lineWidth=1;for(let i=0;i<3;i++){const offset=Math.sin(wavePhase+i)*2;ctx.beginPath();ctx.moveTo(sx,sy+TILE/3*(i+1)+offset);ctx.lineTo(sx+TILE,sy+TILE/3*(i+1)+offset);ctx.stroke()}}else if(water.gleysol){ctx.fillStyle='rgba(41,130,160,.4)';ctx.fillRect(sx,sy,TILE,TILE);const bubbles=Math.floor(hash(tx,ty,1200)*4)+1;for(let i=0;i<bubbles;i++){const bx=hash(tx,ty,1201+i*2)*TILE,by=hash(tx,ty,1202+i*2)*TILE,br=1+hash(tx,ty,1203+i*2)*1.5;ctx.fillStyle=`rgba(100,180,200,${.3+hash(tx,ty,1204+i*2)*.3})`;ctx.beginPath();ctx.arc(sx+bx,sy+by,br,0,Math.PI*2);ctx.fill()}}}
 const draw=[];for(const e of entities){const sx=Math.floor((e.x-cx+cols/2)*TILE),sy=Math.floor((e.y-cy+rows/2)*TILE);if(e.type==='zombie')draw.push({y:e.y,render:()=>{if(e.aware){ctx.save();ctx.strokeStyle='#f00';ctx.globalAlpha=.22+Math.sin(Date.now()*.004)*.06;ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx+TILE/2,sy+TILE/2,10,0,Math.PI*2);ctx.stroke();ctx.restore()}const sp=currentZombieSprite(e),size=TILE*1.7;if(sp.complete&&sp.naturalWidth){ctx.drawImage(sp,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2),size,size)}else{ctx.fillStyle=e.aware?'#f00':'#600';ctx.fillRect(sx+4,sy+4,TILE-8,TILE-8)}}});else if(e.type==='tree')draw.push({y:treeSortY(e),render:()=>{const sp=getTreeSprite(e.seedVal),size=TILE*6.5;ctx.drawImage(sp.canvas,Math.floor(sx-size/2),Math.floor(sy-size/2),size,size);if(e.clicked){ctx.save();ctx.strokeStyle='#0f0';ctx.globalAlpha=.9;ctx.lineWidth=3;ctx.beginPath();ctx.arc(sx,sy,Math.max(18,e.radius*TILE+10),0,Math.PI*2);ctx.stroke();ctx.restore()}}});else if(e.type==='bush')draw.push({y:e.y,render:()=>{const sp=e.harvested?getBareBushSprite(e.seedVal):getBushSprite(e.seedVal),size=TILE*2;ctx.globalAlpha=e.harvested?.9:1;ctx.drawImage(sp.canvas,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2-4),size,size);ctx.globalAlpha=1;if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,e.radius*TILE+5,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='stick')draw.push({y:e.y,render:()=>{if(e.collected)return;const len=e.length*TILE;ctx.save();ctx.translate(sx,sy);ctx.rotate(e.angle);ctx.lineCap='round';
   ctx.strokeStyle='#352416';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(-len*.5,1);ctx.lineTo(-len*.18,.5);ctx.lineTo(len*.2,-.5);ctx.lineTo(len*.5,-1);ctx.stroke();
   ctx.strokeStyle='#664326';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(-len*.48,0);ctx.lineTo(-len*.15,-.5);ctx.lineTo(len*.18,-1);ctx.lineTo(len*.47,-1.5);ctx.stroke();
   ctx.strokeStyle='rgba(120,82,46,.65)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-len*.25,-1);ctx.lineTo(len*.32,-2);ctx.stroke();
   ctx.strokeStyle='#432b19';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(len*.15,-.5);ctx.lineTo(len*.27,-6);ctx.stroke();
   ctx.restore();if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,Math.max(10,e.radius*TILE+6),0,Math.PI*2);ctx.stroke()}}});else if(e.type==='bigPebble')draw.push({y:e.y,render:()=>{if(e.collected)return;const r=Math.floor(e.radius*TILE);ctx.save();ctx.fillStyle=e.tone>.62?'#8a8880':e.tone>.3?'#aaa69d':'#6f6d67';ctx.beginPath();ctx.ellipse(sx,sy,r*1.18,r*.92,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(225,222,214,.6)';ctx.beginPath();ctx.ellipse(sx-r*.28,sy-r*.3,r*.38,r*.22,-.2,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(55,52,48,.65)';ctx.lineWidth=1;ctx.stroke();if(e.clicked){ctx.strokeStyle='#ff0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+7,0,Math.PI*2);ctx.stroke()};ctx.restore()}});else if(e.type==='flint')draw.push({y:e.y,render:()=>{if(e.collected)return;const ang=e.seedVal%360*Math.PI/180;ctx.save();ctx.translate(sx,sy);ctx.rotate(ang);ctx.fillStyle='#cfd3d0';ctx.beginPath();ctx.moveTo(-7,2);ctx.lineTo(-3,-5);ctx.lineTo(3,-7);ctx.lineTo(8,-2);ctx.lineTo(5,4);ctx.lineTo(-2,6);ctx.closePath();ctx.fill();ctx.fillStyle='#eef1ef';ctx.beginPath();ctx.moveTo(-3,-5);ctx.lineTo(3,-7);ctx.lineTo(1,-1);ctx.lineTo(-2,2);ctx.closePath();ctx.fill();ctx.fillStyle='rgba(80,90,90,.55)';ctx.fillRect(-2,1,5,2);ctx.restore();if(e.clicked){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,11,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='charcoal')draw.push({y:e.y,render:()=>{if(e.collected)return;const r=Math.floor(e.radius*TILE);ctx.fillStyle='#4a4a48';ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();ctx.fillStyle='#2a2a28';ctx.beginPath();ctx.arc(sx-r*.35,sy-r*.35,Math.max(1,r*.35),0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(100,100,100,.4)';ctx.beginPath();ctx.arc(sx+r*.25,sy+r*.2,Math.max(1,r*.25),0,Math.PI*2);ctx.fill();if(e.clicked){ctx.strokeStyle='#ddd';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+6,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='pebble')draw.push({y:e.y,render:()=>{const r=Math.floor(e.radius*TILE);ctx.fillStyle=e.tone>.65?'rgba(100,95,85,.8)':e.tone>.35?'rgba(140,135,125,.8)':'rgba(180,175,165,.7)';ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();if(e.light>.5){ctx.fillStyle='rgba(220,215,205,.5)';ctx.beginPath();ctx.arc(sx-r*.3,sy-r*.3,Math.max(1,r*.35),0,Math.PI*2);ctx.fill()}if(e.clicked){ctx.strokeStyle='#ff0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+3,0,Math.PI*2);ctx.stroke()}}})}
-const px=Math.floor((player.x-cx+cols/2)*TILE),py=Math.floor((player.y-cy+rows/2)*TILE);draw.push({y:player.y,render:()=>{const sp=currentPlayerSprite(),size=TILE*1.7;if(sp.complete&&sp.naturalWidth){ctx.drawImage(sp,Math.floor(px-size/2),Math.floor(py-size/2),size,size)}else{ctx.fillStyle='#0f0';ctx.beginPath();ctx.arc(px,py,12,0,Math.PI*2);ctx.fill()}}});
-
-for(const cf of player.campfires){
-  const csx=Math.floor((cf.x-cx+cols/2)*TILE),csy=Math.floor((cf.y-cy+rows/2)*TILE);
-  draw.push({y:cf.y,render:()=>{
-    ctx.fillStyle='#555';
-    for(let a=0;a<Math.PI*2;a+=Math.PI/4){
-      ctx.beginPath();
-      ctx.arc(csx+Math.cos(a)*10,csy+Math.sin(a)*8,3,0,Math.PI*2);
-      ctx.fill();
-    }
-    const flick=Math.sin(Date.now()*.015)*2;
-    ctx.fillStyle='#e8a040';
-    ctx.beginPath();
-    ctx.arc(csx,csy-2,6+flick,0,Math.PI*2);
-    ctx.fill();
-    ctx.fillStyle='#ffea78';
-    ctx.beginPath();
-    ctx.arc(csx,csy-3,3+flick*.5,0,Math.PI*2);
-    ctx.fill();
-  }});
-}
-
-draw.sort((a,b)=>a.y-b.y);
-for(const d of draw)d.render();
-
-if(vignetteCanvas)ctx.drawImage(vignetteCanvas,0,0);
-
-for(const ft of floatingTexts){
-  const fsx=Math.floor((ft.x-cx+cols/2)*TILE),fsy=Math.floor((ft.y-cy+rows/2)*TILE)-ft.age*20;
-  ctx.save();
-  ctx.font='10px "Press Start 2P", monospace';
-  ctx.fillStyle='#000';
-  ctx.fillText(ft.text,fsx+1,fsy+1);
-  ctx.fillStyle=ft.color;
-  ctx.globalAlpha=Math.max(0,1-ft.age/ft.life);
-  ctx.fillText(ft.text,fsx,fsy);
-  ctx.restore();
-}
-
-ctx.setTransform(1,0,0,1,0,0);
-}
+const px=Math.floor((player.x-cx+cols/2)*TILE),py=Math.floor((player.y-cy+rows/2)*TILE);draw.push({y:player.y,render:()=>{const sp=currentPlayerSprite(),size=TILE*1.7;if(sp.complete&&sp.naturalWidth){ctx.drawImage(sp,Math.floor(px+TILE/2-size/2),Math.floor(py+TILE/2-size/2),size,size)}else{ctx.fillStyle='#0f0';ctx.fillRect(px+4,py+4,TILE-8,TILE-8)}}});draw.sort((a,b)=>a.y-b.y);for(const d of draw)d.render();if(vignetteCanvas)ctx.drawImage(vignetteCanvas,0,0)}
 
 let lastTime=performance.now();
-function loop(now){
-  const dt=Math.min(100,now-lastTime);
-  lastTime=now;
-  update(dt);
-  render();
-  requestAnimationFrame(loop);
-}
-requestAnimationFrame(loop);
-
+function gameLoop(now){const dt=Math.min(now-lastTime,100);lastTime=now;update(dt);render();requestAnimationFrame(gameLoop)}
+requestAnimationFrame(gameLoop);
 renderHotbar();
 </script>
 </body>
