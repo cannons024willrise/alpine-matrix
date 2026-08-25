@@ -223,7 +223,7 @@ function addItem(name,amount=1){
   return true;
 }
 
-function harvestBush(e){if(!e||e.type!=='bush'||e.harvested)return;if(!addItem('fiber',e.fiberYield)){createFloatingText(e.x,e.y-0.5,'Carry slots full','#f66');return}e.harvested=true;e.clicked=true;e.regrowAt=performance.now()+15000;setTimeout(()=>e.clicked=false,200)}
+function harvestBush(e){if(!e||e.type!=='bush'||e.harvested)return;if(!addItem('stalkFiber',e.fiberYield)){createFloatingText(e.x,e.y-0.5,'Carry slots full','#f66');return}e.harvested=true;e.clicked=true;e.regrowAt=performance.now()+15000;setTimeout(()=>e.clicked=false,200)}
 function harvestTreeForSticks(e){if(!e||e.type!=='tree'||e.stickHarvested)return;const yield_=e.stickYield||1;if(!addItem('thickStick',yield_)){createFloatingText(e.x,e.y-0.5,'Carry slots full','#f66');return}e.stickHarvested=true;e.clicked=true;createFloatingText(e.x,e.y-1,`◆ Stick ×${yield_}`,'#8f8');addCameraShake(.15,.35);setTimeout(()=>e.clicked=false,450)}
 function worldToScreenPoint(x,y){return{x:(x-player.x+viewportCols/2)*TILE+TILE/2,y:(y-player.y+viewportRows/2)*TILE+TILE/2}}
 
