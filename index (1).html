@@ -381,9 +381,22 @@ function validateAndConsume(cost){
   return true;
 }
 
+function getActiveCampfire(){
+  if(!player.campfires.length)return null;
+  const selected=player.campfires[player.selectedCampfire];
+  if(!selected||selected.fuel<=0)return null;
+  const nearest=player.campfires
+    .filter(cf=>cf&&cf.fuel>0)
+    .sort((a,b)=>Math.hypot(a.x-player.x,a.y-player.y)-Math.hypot(b.x-player.x,b.y-player.y))[0];
+  const chosen=selected.fuel>0?selected:nearest;
+  if(!chosen)return null;
+  // Fire-processing recipes require the player to actually be at a usable fire.
+  return Math.hypot(chosen.x-player.x,chosen.y-player.y)<=3.25?chosen:null;
+}
+
 function recipeCanCraft(recipe){
   if(!recipe||!canAfford(recipe.cost))return false;
-  if(recipe.requiresCampfire&&player.campfires.length===0)return false;
+  if(recipe.requiresCampfire&&!getActiveCampfire())return false;
   if(recipe.id==='basket')return !player.inventory.basket && !utilitySlots.backpack;
   if(recipe.id==='armor')return !player.inventory.armor&&!player.armorEquipped&&!utilitySlots.armor;
   if(recipe.buildable)return true;
@@ -424,6 +437,8 @@ function craftItem(id, maxBatch=false){
     if(!canAfford(recipe.cost))break;
     const currentResult=player.inventory[id]||0;
     const resultLimit=itemStackLimit(id);
+    const fire=recipe.requiresCampfire?getActiveCampfire():null;
+    if(recipe.requiresCampfire&&!fire)break;
 
     if(id==='basket'){
       if(hasBasket())break;
@@ -455,10 +470,24 @@ function craftItem(id, maxBatch=false){
       player.inventory[id]--;
       if(player.inventory[id]<=0){
         player.inventory[id]=0;
-        const slot=hotbarSlots.indexOf(id);
-        if(slot!==-1)hotbarSlots[slot]='';
+        const carrySlot=hotbarSlots.indexOf(id);
+        if(carrySlot!==-1)hotbarSlots[carrySlot]='';
+        const handSlot=handSlots.indexOf(id);
+        if(handSlot!==-1)handSlots[handSlot]='';
       }
       break;
+    }
+    if(fire){
+      // Fire-processing consumes one unit of campfire fuel only after a
+      // successful craft, so failed crafts never burn fuel.
+      fire.fuel=Math.max(0,fire.fuel-1);
+      if(fire.fuel<=0){
+        const fireIndex=player.campfires.indexOf(fire);
+        if(fireIndex!==-1){
+          player.campfires.splice(fireIndex,1);
+          player.selectedCampfire=Math.max(0,Math.min(player.selectedCampfire,player.campfires.length-1));
+        }
+      }
     }
     craftedCount++;
   }
@@ -551,7 +580,7 @@ function renderCraftDetail(){
   const canCraft=recipeCanCraft(r);
   const hasCarryRoom=(r.id==='basket'||r.id==='armor'||HAND_ITEMS.has(r.id))||(player.inventory[r.id]||0)>0||inventoryUsedSlots()<getHotbarCapacity();
   const ingredientSlots=Object.entries(r.cost).map(([k,v])=>{const have=player.inventory[k]||0,short=have<v;return `<div class="mc-ing">${mcSlotHTML({id:k,kind:ITEM_ICON_KIND[k]||'gem',count:v,locked:short})}<div class="mc-ing-have ${short?'short':''}">${have}/${v}</div></div>`}).join('');
-  const warning=r.requiresCampfire&&player.campfires.length===0?'<div class="mc-warning">⚠ Requires a campfire nearby</div>':'';
+  const warning=r.requiresCampfire&&!getActiveCampfire()?'<div class="mc-warning">⚠ Stand within 3 tiles of a lit campfire</div>':'';
   const basketWarning=isBasketMaxed?'<div class="mc-warning">⚠ You can only have one Basket!</div>':'';
   const carryWarning=!r.buildable&&!['basket','armor'].includes(r.id)&&!HAND_ITEMS.has(r.id)&&!hasCarryRoom&&!isBasketMaxed?'<div class="mc-warning">⚠ No free carry slot.</div>':'';
   craftDetail.innerHTML=`<div class="mc-detail-name">${r.name}</div><div class="mc-detail-desc">${r.desc}</div><div class="mc-recipe-row">${ingredientSlots}<div class="mc-arrow">→</div>${mcSlotHTML({id:r.id,kind:ITEM_ICON_KIND[r.id]||'gem',color:r.icon,count:''})}</div>${warning}${basketWarning}${carryWarning}<button class="mc-btn${canCraft?'':' disabled'}" id="craftGo" type="button">${r.buildable?'SELECT PLACEMENT':'CRAFT (Shift+Click: Auto-Batch)'}</button>`;
