@@ -28,6 +28,7 @@ canvas{display:block;image-rendering:pixelated}
 .mc-slot.small{width:34px;height:34px}
 .mc-slot:hover{background:#9d9d9d}
 .mc-slot.locked{filter:grayscale(.65) brightness(.6);cursor:default}
+.mc-slot.dragging{opacity:.35}
 .mc-slot.selected{box-shadow:inset 2px 2px 0 0 #373737,inset -2px -2px 0 0 #fbfbfb,0 0 0 2px #fff,0 0 0 4px #000}
 .mc-slot img,.mc-slot svg{width:26px;height:26px;pointer-events:none;image-rendering:pixelated}
 .mc-slot.small svg{width:20px;height:20px}
@@ -111,7 +112,7 @@ canvas{display:block;image-rendering:pixelated}
 <div id="hud"></div>
 <button id="hudToggle" type="button">◆</button>
 <div id="creativeIndicator">✦ CREATIVE MODE</div>
-<div id="craftHint">[C] Inventory | [Click/Right-Click] Full/Half Stack | [Shift+Click] Container | [`] Creative | [1-7] Slots</div>
+<div id="craftHint">[C] Inventory | [Click/Right-Click] Full/Half Stack | [Drag] Move Item | [Shift+Click] Container | [`] Creative | [1-7] Slots</div>
 <div id="hotbar"></div>
 <div id="cursorItemDisplay"></div>
 
@@ -647,11 +648,10 @@ function renderHotbar(){
 function invSlotHTML(kind,index,itemId){
   const selected=(kind==='carry'&&index===selectedCarrySlot)||(kind==='hand'&&index===selectedHandSlot);
   const attrs=`data-slot-kind="${kind}" data-slot-index="${index}"`;
-  const draggable=itemId?' draggable="true"':'';
   if(!itemId)return `<div class="mc-slot${selected?' selected':''}" ${attrs}></div>`;
   const recipe=RECIPES.find(r=>r.id===itemId);
   const count=player.inventory[itemId]||0;
-  return `<div class="mc-slot${selected?' selected':''}" ${attrs}${draggable} title="${itemDisplayName(itemId)}">${itemIconSVG(ITEM_ICON_KIND[itemId]||'gem',recipe?recipe.icon:null)}${count?`<span class="mc-count">${count}</span>`:''}</div>`;
+  return `<div class="mc-slot${selected?' selected':''}" ${attrs} draggable="false" title="${itemDisplayName(itemId)}">${itemIconSVG(ITEM_ICON_KIND[itemId]||'gem',recipe?recipe.icon:null)}${count?`<span class="mc-count">${count}</span>`:''}</div>`;
 }
 function invUtilitySlotHTML(kind){
   const itemId=kind==='armor'?utilitySlots.armor:utilitySlots.backpack;
@@ -959,13 +959,20 @@ addEventListener('keydown',e=>{
   }
 });
 
-// ---- Interactive inventory grid: click/right-click/middle-click/double-click/shift-click ----
-// Uses pointerdown + e.button rather than native click/dblclick/contextmenu so a
-// single unified path can distinguish left (0), middle (1) and right (2) buttons,
-// and so a manually-timed double-click can run its own "collect" logic instead of
-// re-firing the single-click pickup/place a second time.
+// ---- Interactive inventory grid: click/right-click/middle-click/double-click/drag-to-move ----
+// Drag is implemented with pointer capture rather than native HTML5 drag-and-drop.
+// Two things broke the old native-drag version: (1) native drag never fires at all
+// on touch devices in most mobile browsers, and (2) calling e.preventDefault() on
+// pointerdown (needed here to stop scrolling/text-selection while tapping slots)
+// suppresses the browser's internal mousedown-based drag detection, so dragstart
+// often silently never fires on desktop either. Routing click, double-click AND
+// drag through one pointerdown/pointermove/pointerup stream sidesteps both issues
+// and works identically for mouse and touch.
 inventoryHotbarGrid.addEventListener('contextmenu',e=>e.preventDefault());
 let lastSlotClick={kind:null,index:null,time:0};
+let slotDrag=null; // {pointerId,kind,index,itemId,startX,startY,dragging,slotEl}
+const SLOT_DRAG_THRESHOLD=8; // px of pointer movement before a press counts as a drag
+
 inventoryHotbarGrid.addEventListener('pointerdown',e=>{
   const slotEl=e.target.closest('[data-slot-kind]');
   if(!slotEl)return;
@@ -976,60 +983,72 @@ inventoryHotbarGrid.addEventListener('pointerdown',e=>{
   if(e.button===2){handleSlotSecondary(kind,index);refreshInventoryUI();return}
   if(e.button!==0)return; // ignore anything else (stray touch buttons, etc.)
   if(e.shiftKey){handleSlotShiftClick(kind,index);refreshInventoryUI();return}
-  const now=performance.now();
-  const isDouble=lastSlotClick.kind===kind&&lastSlotClick.index===index&&(now-lastSlotClick.time)<350;
-  lastSlotClick={kind,index,time:isDouble?0:now};
-  if(isDouble)handleSlotDouble(kind,index);
-  else handleSlotPrimary(kind,index);
-  refreshInventoryUI();
+  const itemId=getSlotItem(kind,index);
+  // Don't act yet — wait for pointerup/pointermove to know if this is a
+  // tap (click/double-click) or a drag.
+  slotDrag={pointerId:e.pointerId,kind,index,itemId,startX:e.clientX,startY:e.clientY,dragging:false,slotEl};
+  if(itemId){try{slotEl.setPointerCapture(e.pointerId)}catch(_){}}
 });
-// Prevents the browser's native text-selection/drag ghost while clicking slots rapidly.
-inventoryHotbarGrid.addEventListener('dragstart',e=>{
-  const slotEl=e.target.closest('[data-slot-kind]');
-  if(!slotEl)return;
-  const kind=slotEl.dataset.slotKind,index=+slotEl.dataset.slotIndex,itemId=getSlotItem(kind,index);
-  if(!itemId){e.preventDefault();return}
-  e.dataTransfer.effectAllowed='move';
-  e.dataTransfer.setData('text/plain',JSON.stringify({kind,index,itemId}));
-  slotEl.classList.add('dragging');
+
+inventoryHotbarGrid.addEventListener('pointermove',e=>{
+  if(!slotDrag||slotDrag.pointerId!==e.pointerId||!slotDrag.itemId)return;
+  if(!slotDrag.dragging){
+    const dx=e.clientX-slotDrag.startX,dy=e.clientY-slotDrag.startY;
+    if(Math.hypot(dx,dy)<SLOT_DRAG_THRESHOLD)return;
+    slotDrag.dragging=true;
+    slotDrag.slotEl.classList.add('dragging');
+    const recipe=RECIPES.find(r=>r.id===slotDrag.itemId);
+    cursorItemDisplay.style.display='flex';
+    cursorItemDisplay.innerHTML=`${itemIconSVG(ITEM_ICON_KIND[slotDrag.itemId]||'gem',recipe?recipe.icon:null)}<span class="mc-count">${player.inventory[slotDrag.itemId]||''}</span>`;
+  }
+  cursorItemDisplay.style.left=(e.clientX-20)+'px';
+  cursorItemDisplay.style.top=(e.clientY-20)+'px';
 });
-inventoryHotbarGrid.addEventListener('dragend',e=>{
-  const slotEl=e.target.closest('[data-slot-kind]');
-  if(slotEl)slotEl.classList.remove('dragging');
-});
-inventoryHotbarGrid.addEventListener('dragover',e=>{
-  const slotEl=e.target.closest('[data-slot-kind]');
-  if(!slotEl)return;
-  e.preventDefault();
-  e.dataTransfer.dropEffect='move';
-});
-inventoryHotbarGrid.addEventListener('drop',e=>{
-  const target=e.target.closest('[data-slot-kind]');
-  if(!target)return;
-  e.preventDefault();
-  e.stopPropagation();
-  let data=null;
-  try{data=JSON.parse(e.dataTransfer.getData('text/plain')||'null')}catch(_){}
-  if(!data)return;
-  const srcKind=data.kind,srcIndex=+data.index;
-  const targetKind=target.dataset.slotKind,targetIndex=+target.dataset.slotIndex;
-  if(srcKind===targetKind&&srcIndex===targetIndex)return;
-  // Drag uses the exact same unrestricted player-storage rules as click placement.
-  if(getSlotItem(srcKind,srcIndex)!==data.itemId)return;
-  if(!slotAcceptsItem(targetKind,data.itemId)){createFloatingText(player.x,player.y-.5,"Can't place that there",'#f66');return}
-  if(cursorItem)cursorItem=null;
-  pickupFromSlot(srcKind,srcIndex,'full');
-  if(cursorItem){
-    placeIntoSlot(targetKind,targetIndex,'full');
-    if(cursorItem){
-      // Never lose the dragged stack if placement failed. Return it to its source.
-      const saved=cursorItem;
-      cursorItem=null;
-      addItem(saved.id,saved.count);
+
+function finishSlotDrag(e){
+  const drag=slotDrag;
+  if(!drag||drag.pointerId!==e.pointerId)return;
+  slotDrag=null;
+  try{drag.slotEl.releasePointerCapture(e.pointerId)}catch(_){}
+  drag.slotEl.classList.remove('dragging');
+  if(!drag.dragging){
+    // Plain tap/click (no movement past the threshold): normal pickup/place logic.
+    const now=performance.now();
+    const isDouble=lastSlotClick.kind===drag.kind&&lastSlotClick.index===drag.index&&(now-lastSlotClick.time)<350;
+    lastSlotClick={kind:drag.kind,index:drag.index,time:isDouble?0:now};
+    if(isDouble)handleSlotDouble(drag.kind,drag.index);
+    else handleSlotPrimary(drag.kind,drag.index);
+    refreshInventoryUI();
+    return;
+  }
+  // Dragged: move the item into whichever slot is under the pointer, if any.
+  cursorItemDisplay.style.display='none';
+  const dropEl=document.elementFromPoint(e.clientX,e.clientY);
+  const targetSlotEl=dropEl&&dropEl.closest('[data-slot-kind]');
+  if(targetSlotEl&&getSlotItem(drag.kind,drag.index)===drag.itemId){
+    const targetKind=targetSlotEl.dataset.slotKind,targetIndex=+targetSlotEl.dataset.slotIndex;
+    if(!(targetKind===drag.kind&&targetIndex===drag.index)){
+      if(!slotAcceptsItem(targetKind,drag.itemId)){
+        createFloatingText(player.x,player.y-.5,"Can't place that there",'#f66');
+      }else{
+        if(cursorItem){addItem(cursorItem.id,cursorItem.count);cursorItem=null} // never clobber a held item
+        pickupFromSlot(drag.kind,drag.index,'full');
+        if(cursorItem){
+          placeIntoSlot(targetKind,targetIndex,'full');
+          if(cursorItem){
+            // Never lose the dragged stack if placement failed. Return it to its source.
+            const saved=cursorItem;
+            cursorItem=null;
+            addItem(saved.id,saved.count);
+          }
+        }
+      }
     }
   }
   refreshInventoryUI();
-});
+}
+inventoryHotbarGrid.addEventListener('pointerup',finishSlotDrag);
+inventoryHotbarGrid.addEventListener('pointercancel',finishSlotDrag);
 
 containerPanelEl.addEventListener('click',e=>{
   const closeBtn=e.target.closest('#closeContainerBtn');
