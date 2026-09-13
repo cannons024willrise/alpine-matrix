@@ -11,7 +11,7 @@ html,body{width:100%;height:100%;overflow:hidden;touch-action:none;overscroll-be
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#000;font-family:monospace;color:#0f0}
 canvas{display:block;image-rendering:pixelated}
-#hud{position:fixed;top:max(10px,env(safe-area-inset-top));left:max(10px,env(safe-area-inset-left));font-size:12px;line-height:1.5;z-index:10;pointer-events:none;text-shadow:1px 1px #000}
+#hud{position:fixed;top:max(10px,env(safe-area-inset-top));left:max(10px,env(safe-area-inset-left));font-size:12px;line-height:1.5;z-index:10;pointer-events:auto;text-shadow:1px 1px #000}
 #hud.hidden{display:none}
 #hudToggle{position:fixed;top:max(10px,env(safe-area-inset-top));left:max(10px,env(safe-area-inset-left));width:40px;height:40px;background:rgba(0,70,0,.5);border:2px solid #0f0;border-radius:4px;color:#0f0;font:700 14px monospace;cursor:pointer;pointer-events:auto;z-index:11;display:block}
 #mobileControls{display:none;position:fixed;inset:0;z-index:20;pointer-events:none}
@@ -19,7 +19,7 @@ canvas{display:block;image-rendering:pixelated}
 #joystickKnob{position:absolute;left:39px;top:39px;width:36px;height:36px;border-radius:50%;background:rgba(220,240,225,.65);box-shadow:0 0 0 2px rgba(0,0,0,.25)}
 #actionButton{position:absolute;right:max(22px,env(safe-area-inset-right));bottom:max(28px,env(safe-area-inset-bottom));width:82px;height:82px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(0,70,0,.38);color:#d8ffe0;font:700 15px monospace;pointer-events:auto;touch-action:none}
 #craftButton{position:absolute;right:max(30px,env(safe-area-inset-right));bottom:max(122px,calc(env(safe-area-inset-bottom) + 94px));width:62px;height:62px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(70,55,0,.45);color:#ffe9a8;font:700 11px monospace;pointer-events:auto;touch-action:none}
-#craftHint{position:fixed;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));font-size:11px;color:#0f0;background:rgba(0,0,0,.6);border:1px solid #0f0;border-radius:4px;padding:6px 10px;z-index:10;text-shadow:1px 1px #000}
+#craftHint{position:fixed;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));font-size:11px;color:#0f0;background:rgba(0,0,0,.6);border:1px solid #0f0;border-radius:4px;padding:6px 10px;z-index:10;text-shadow:1px 1px #000;pointer-events:auto}
 @media (pointer:coarse), (max-width:700px){#mobileControls{display:block}#hud{font-size:11px}#craftHint{display:none}}
 
 /* ---- Minecraft-style UI kit ---- */
@@ -1132,7 +1132,7 @@ function hitContainerAtScreen(clientX,clientY){
 }
 
 addEventListener('click',e=>{
-  if(e.target.closest('#inventoryScreen,#hotbar,#craftButton,#actionButton,#joystick,#hudToggle'))return;
+  if(e.target.closest('#inventoryScreen,#hotbar,#craftButton,#actionButton,#joystick,#hudToggle,#hud,#craftHint,#creativeIndicator'))return;
   if(suppressNextClick){suppressNextClick=false;return}
   if(player.placingRecipeId){
     const recipe=RECIPES.find(r=>r.id===player.placingRecipeId);
