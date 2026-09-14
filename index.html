@@ -18,6 +18,7 @@ canvas{display:block;image-rendering:pixelated}
 #joystick{position:absolute;left:max(18px,env(safe-area-inset-left));bottom:max(22px,env(safe-area-inset-bottom));width:118px;height:118px;border:2px solid rgba(255,255,255,.3);border-radius:50%;background:rgba(0,0,0,.18);pointer-events:auto;touch-action:none}
 #joystickKnob{position:absolute;left:39px;top:39px;width:36px;height:36px;border-radius:50%;background:rgba(220,240,225,.65);box-shadow:0 0 0 2px rgba(0,0,0,.25)}
 #actionButton{position:absolute;right:max(22px,env(safe-area-inset-right));bottom:max(28px,env(safe-area-inset-bottom));width:82px;height:82px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(0,70,0,.38);color:#d8ffe0;font:700 15px monospace;pointer-events:auto;touch-action:none}
+#attackButton{position:absolute;right:max(118px,calc(env(safe-area-inset-right) + 96px));bottom:max(28px,env(safe-area-inset-bottom));width:82px;height:82px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(90,20,20,.52);color:#ffe0e0;font:700 13px monospace;pointer-events:auto;touch-action:none}
 #craftButton{position:absolute;right:max(30px,env(safe-area-inset-right));bottom:max(122px,calc(env(safe-area-inset-bottom) + 94px));width:62px;height:62px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(70,55,0,.45);color:#ffe9a8;font:700 11px monospace;pointer-events:auto;touch-action:none}
 #craftHint{position:fixed;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));font-size:11px;color:#0f0;background:rgba(0,0,0,.6);border:1px solid #0f0;border-radius:4px;padding:6px 10px;z-index:10;text-shadow:1px 1px #000;pointer-events:auto}
 @media (pointer:coarse), (max-width:700px){#mobileControls{display:block}#hud{font-size:11px}#craftHint{display:none}}
@@ -142,7 +143,7 @@ canvas{display:block;image-rendering:pixelated}
     </div>
   </div>
 </div>
-<div id="mobileControls"><div id="joystick"><div id="joystickKnob"></div></div><button id="craftButton" type="button">CRAFT</button><button id="actionButton" type="button">ACT</button></div>
+<div id="mobileControls"><div id="joystick"><div id="joystickKnob"></div></div><button id="craftButton" type="button">CRAFT</button><button id="attackButton" type="button">ATTACK</button><button id="actionButton" type="button">ACT</button></div>
 <script>
 const canvas=document.getElementById('game');
 const ctx=canvas.getContext('2d');
@@ -240,7 +241,7 @@ let openContainer=null; // {type:'crate'|'furnace', ref:<crate or campfire objec
 function buildPlayerSVG(phase,moving){const cyc=phase*Math.PI*2,sw=moving?Math.sin(cyc):0,la=sw*28,aa=-sw*32,bob=moving?Math.abs(Math.sin(cyc*2))*3.5:0,bt=moving?sw*4:0,hs=moving?-sw*3:0,limb='#bcd9c4',armorColor='#8a8880';return`<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="-64 -64 128 128"><defs><radialGradient id="pBody" cx="35%" cy="30%" r="75%"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#cfe6d6"/></radialGradient><radialGradient id="pHead" cx="35%" cy="30%" r="75%"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#d6ebdc"/></radialGradient></defs><ellipse cx="${sw*2}" cy="32" rx="${20-Math.abs(sw)*2}" ry="7" fill="rgba(0,0,0,.35)"/><g transform="rotate(${la} -6 6) translate(0 ${-bob})"><rect x="-11" y="4" width="9" height="27" rx="4.5" fill="${limb}"/></g><g transform="rotate(${-la} 6 6) translate(0 ${-bob})"><rect x="2" y="4" width="9" height="27" rx="4.5" fill="${limb}"/></g><g transform="rotate(${-aa} -15 -4) translate(0 ${-bob})"><rect x="-19" y="-10" width="8" height="25" rx="4" fill="${limb}"/></g><g transform="rotate(${bt}) translate(0 ${-bob})"><rect x="-14" y="-19" width="28" height="34" rx="11" fill="${player.armorEquipped?armorColor:'url(#pBody)'}"/></g><g transform="rotate(${aa} 15 -4) translate(0 ${-bob})"><rect x="11" y="-10" width="8" height="25" rx="4" fill="${limb}"/></g><g transform="rotate(${hs} 0 ${-29-bob}) translate(0 ${-bob})"><circle cx="0" cy="-29" r="12.5" fill="url(#pHead)"/><circle cx="-4" cy="-30" r="1.4" fill="#1a2b20"/><circle cx="4" cy="-30" r="1.4" fill="#1a2b20"/></g></svg>`}
 const PLAYER_FRAME_COUNT=8,playerFrames=[];for(let i=0;i<PLAYER_FRAME_COUNT;i++){const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildPlayerSVG(i/PLAYER_FRAME_COUNT,true));playerFrames.push(img)}const playerIdleFrame=new Image();playerIdleFrame.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildPlayerSVG(0,false));function currentPlayerSprite(){if(!player.moving)return playerIdleFrame;return playerFrames[Math.floor(player.animPhase*PLAYER_FRAME_COUNT)%PLAYER_FRAME_COUNT]}
 
-const keys={};addEventListener('keydown',e=>{keys[e.key]=true});addEventListener('keyup',e=>{keys[e.key]=false});
+const keys={};addEventListener('keydown',e=>{keys[e.key]=true;if(!e.repeat&&(e.key==='f'||e.key==='F'||e.key===' ')){attack();e.preventDefault()}});addEventListener('keyup',e=>{keys[e.key]=false});
 function screenToWorld(x,y){const r=canvas.getBoundingClientRect();const sx=x-r.left,sy=y-r.top;return{x:sx/TILE+(player.x-viewportCols/2),y:sy/TILE+(player.y-viewportRows/2)}}
 const ARMOR_SLOT='armor';
 const HAND_SLOT_COUNT=2;
@@ -1373,6 +1374,52 @@ addEventListener('pointermove',e=>{
 });
 
 const COLLECTION_RANGE=2.5;
+let attackCooldown=0;
+function getSelectedHandItem(){
+  const s=handSlots[selectedHandSlot];
+  return s?s.id:'';
+}
+function attack(){
+  if(attackCooldown>0)return false;
+  const weapon=getSelectedHandItem();
+  const attackable=new Set(['spear','stoneAxe','flintKnife','shaft','knappedFlint']);
+  const damage=weapon==='spear'?30:weapon==='stoneAxe'?35:weapon==='flintKnife'?20:weapon==='shaft'?12:weapon==='knappedFlint'?8:5;
+  const range=weapon==='spear'?2.6:weapon==='stoneAxe'?1.9:1.7;
+  let best=null,bestScore=Infinity;
+  const facing=player.facingAngle;
+  for(const e of entities){
+    if(e.type!=='zombie'||e.dead)continue;
+    const dx=e.x-player.x,dy=e.y-player.y,d=Math.hypot(dx,dy);
+    if(d>range)continue;
+    const angle=Math.atan2(dy,dx);
+    let diff=Math.atan2(Math.sin(angle-facing),Math.cos(angle-facing));
+    const cone=weapon==='spear'?0.65:0.8;
+    if(Math.abs(diff)>cone)continue;
+    const score=d+Math.abs(diff)*0.5;
+    if(score<bestScore){best=e;bestScore=score;}
+  }
+  if(!best){
+    createFloatingText(player.x+Math.cos(facing)*.6,player.y+Math.sin(facing)*.6,'MISS','#aaa');
+    attackCooldown=.22;
+    return false;
+  }
+  best.hp-=damage;
+  best.hitFlash=.12;
+  best.clicked=true;
+  setTimeout(()=>best.clicked=false,120);
+  addCameraShake(.12,.18);
+  createFloatingText(best.x,best.y-1,`-${damage}`,'#ff8c8c');
+  if(best.hp<=0){
+    best.dead=true;
+    best.vx=best.vy=0;
+    createFloatingText(best.x,best.y-1.4,'◆ Zombie killed','#ff7777');
+    const idx=entities.indexOf(best);
+    if(idx!==-1)entities.splice(idx,1);
+    if(player.target===best)player.target=null;
+  }
+  attackCooldown=.22;
+  return true;
+}
 function interactTarget(){
   if(player.target){
     const t=player.target;
@@ -1473,6 +1520,7 @@ addEventListener('click',e=>{
 const joystick=document.getElementById('joystick');
 const joystickKnob=document.getElementById('joystickKnob');
 const actionButton=document.getElementById('actionButton');
+const attackButton=document.getElementById('attackButton');
 let joystickPointer=null;
 function updateJoystick(clientX,clientY){
   const r=joystick.getBoundingClientRect();
@@ -1488,7 +1536,8 @@ joystick.addEventListener('pointerdown',e=>{joystickPointer=e.pointerId;touchMov
 joystick.addEventListener('pointermove',e=>{if(e.pointerId===joystickPointer)updateJoystick(e.clientX,e.clientY);e.preventDefault()});
 joystick.addEventListener('pointerup',e=>{if(e.pointerId===joystickPointer)resetJoystick();e.preventDefault()});
 joystick.addEventListener('pointercancel',resetJoystick);
-actionButton.addEventListener('pointerdown',e=>{interactTarget();actionButton.textContent='OK';setTimeout(()=>actionButton.textContent='ACT',120);e.preventDefault()});
+actionButton.addEventListener('pointerdown',e=>{attack();actionButton.textContent='HIT';setTimeout(()=>actionButton.textContent='ACT',120);e.preventDefault()});
+attackButton.addEventListener('pointerdown',e=>{attack();attackButton.textContent='HIT';setTimeout(()=>attackButton.textContent='ATTACK',120);e.preventDefault()});
 
 canvas.addEventListener('pointerdown',e=>{
   if(e.pointerType==='touch'){
@@ -1523,7 +1572,7 @@ canvas.addEventListener('pointerdown',e=>{
 
 function cullFarEntities(){let count=0;for(const e of entities)if(e.type==='pebble'||e.type==='tree'||e.type==='bush'||e.type==='stick'||e.type==='flint'||e.type==='charcoal')count++;const limit=MAX_BIG_PEBBLES+MAX_BUSHES+MAX_STICKS+MAX_FLINT+MAX_CHARCOAL;if(count<=limit)return;const arr=[];for(let i=0;i<entities.length;i++){const e=entities[i];if(!['bigPebble','tree','bush','stick','flint','charcoal'].includes(e.type))continue;const dx=e.x-player.x,dy=e.y-player.y;arr.push({i,d:dx*dx+dy*dy,e})}arr.sort((a,b)=>b.d-a.d);const remove=new Set();for(let i=0;i<Math.max(0,arr.length-limit);i++){const x=arr[i];remove.add(x.i);const k=`${x.e.tileX},${x.e.tileY}`;if(x.e.type==='pebble')pebbleCache.delete(k);else if(x.e.type==='tree')treeEntityCache.delete(k);else if(x.e.type==='bush')bushEntityCache.delete(k);else if(x.e.type==='stick')stickEntityCache.delete(k);else if(x.e.type==='flint')flintEntityCache.delete(k);else if(x.e.type==='charcoal')charcoalEntityCache.delete(k)}for(let i=entities.length-1;i>=0;i--)if(remove.has(i))entities.splice(i,1)}
 
-function update(dt){cameraShake.duration=Math.max(0,cameraShake.duration-dt);if(cameraShake.duration<=0)cameraShake.intensity=0;for(let i=floatingTexts.length-1;i>=0;i--){floatingTexts[i].age+=dt;if(floatingTexts[i].age>floatingTexts[i].life)floatingTexts.splice(i,1)}
+function update(dt){attackCooldown=Math.max(0,attackCooldown-dt/60);cameraShake.duration=Math.max(0,cameraShake.duration-dt);if(cameraShake.duration<=0)cameraShake.intensity=0;for(let i=floatingTexts.length-1;i>=0;i--){floatingTexts[i].age+=dt;if(floatingTexts[i].age>floatingTexts[i].life)floatingTexts.splice(i,1)}
 updateNearbyCrate();
 for(let i=player.campfires.length-1;i>=0;i--){
   const cf=player.campfires[i];
