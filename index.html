@@ -1181,8 +1181,37 @@ function finishSlotDrag(e){
   // Dragged: move the item into whichever slot is under the pointer, if any.
   cursorItemDisplay.style.display='none';
   const dropEl=document.elementFromPoint(e.clientX,e.clientY);
+  const targetCrate=dropEl&&dropEl.closest('[data-crate-drag-slot]');
   const targetSlotEl=dropEl&&dropEl.closest('[data-slot-kind]');
-  if(targetSlotEl&&getSlotItem(drag.kind,drag.index)===drag.itemId){
+
+  // Inventory -> currently open crate.
+  if(targetCrate&&getSlotItem(drag.kind,drag.index)===drag.itemId){
+    const targetIndex=+targetCrate.dataset.crateIndex;
+    const crate=openContainer&&openContainer.type==='crate'?openContainer.ref:null;
+    if(crate&&drag.kind!=='crate'){
+      const before=crate.slots[targetIndex];
+      const sourceCount=getSlotCount(drag.kind,drag.index);
+      const itemId=drag.itemId;
+      const limit=itemStackLimit(itemId);
+      if(!before||before.id===itemId){
+        const already=before?before.count:0;
+        const moved=Math.min(sourceCount,Math.max(0,limit-already));
+        if(moved>0){
+          crate.slots[targetIndex]=before
+            ? {id:itemId,count:already+moved}
+            : {id:itemId,count:moved};
+          const remaining=sourceCount-moved;
+          setSlotItem(drag.kind,drag.index,remaining>0?itemId:'',remaining>0?remaining:undefined);
+        }else{
+          createFloatingText(player.x,player.y-.5,'Crate slot is full','#f66');
+        }
+      }else{
+        // Occupied by another item: swap stacks.
+        crate.slots[targetIndex]={id:itemId,count:sourceCount};
+        setSlotItem(drag.kind,drag.index,before.id,before.count);
+      }
+    }
+  }else if(targetSlotEl&&getSlotItem(drag.kind,drag.index)===drag.itemId){
     const targetKind=targetSlotEl.dataset.slotKind,targetIndex=+targetSlotEl.dataset.slotIndex;
     if(!(targetKind===drag.kind&&targetIndex===drag.index)){
       if(!slotAcceptsItem(targetKind,drag.itemId)){
@@ -1193,7 +1222,6 @@ function finishSlotDrag(e){
         if(cursorItem){
           placeIntoSlot(targetKind,targetIndex,'full');
           if(cursorItem){
-            // Never lose the dragged stack if placement failed. Return it to its source.
             const saved=cursorItem;
             cursorItem=null;
             addItem(saved.id,saved.count);
