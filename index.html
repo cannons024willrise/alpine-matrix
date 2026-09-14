@@ -231,12 +231,12 @@ const ZOMBIE_FRAME_COUNT=8,zombieFrames=[];for(let i=0;i<ZOMBIE_FRAME_COUNT;i++)
 
 const player={x:0,y:0,vx:0,vy:0,hp:100,speed:.15,radius:.2,facingAngle:Math.PI/2,animPhase:0,moving:false,inventory:{stalkFiber:0,thickStick:0,flint:0,bigPebble:0,charcoal:0,cordage:0,basket:0,knappedFlint:0,carvedShaft:0,shaft:0,flintKnife:0,stoneAxe:0,spear:0,armor:0,campfire:0},armorEquipped:false,campfires:[],selectedCampfire:0,placingRecipeId:null,target:null};
 
-// ---- Containers (chests / furnace fuel), creative mode, and the cursor-held item ----
-const CHEST_SLOT_COUNT=6;
-const containers=[]; // placed storage chests: {x,y,slots:[{id,count}|null, ...]}
+// ---- Containers (crates / furnace fuel), creative mode, and the cursor-held item ----
+const CRATE_SLOT_COUNT=20;
+const containers=[]; // placed storage crates: {x,y,slots:[{id,count}|null, ...]}
 let creativeMode=false;
 let cursorItem=null; // {id,count} currently "held" on the mouse cursor, mirrors classic slot UIs
-let openContainer=null; // {type:'chest'|'furnace', ref:<chest or campfire object>}
+let openContainer=null; // {type:'crate'|'furnace', ref:<crate or campfire object>}
 function buildPlayerSVG(phase,moving){const cyc=phase*Math.PI*2,sw=moving?Math.sin(cyc):0,la=sw*28,aa=-sw*32,bob=moving?Math.abs(Math.sin(cyc*2))*3.5:0,bt=moving?sw*4:0,hs=moving?-sw*3:0,limb='#bcd9c4',armorColor='#8a8880';return`<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="-64 -64 128 128"><defs><radialGradient id="pBody" cx="35%" cy="30%" r="75%"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#cfe6d6"/></radialGradient><radialGradient id="pHead" cx="35%" cy="30%" r="75%"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#d6ebdc"/></radialGradient></defs><ellipse cx="${sw*2}" cy="32" rx="${20-Math.abs(sw)*2}" ry="7" fill="rgba(0,0,0,.35)"/><g transform="rotate(${la} -6 6) translate(0 ${-bob})"><rect x="-11" y="4" width="9" height="27" rx="4.5" fill="${limb}"/></g><g transform="rotate(${-la} 6 6) translate(0 ${-bob})"><rect x="2" y="4" width="9" height="27" rx="4.5" fill="${limb}"/></g><g transform="rotate(${-aa} -15 -4) translate(0 ${-bob})"><rect x="-19" y="-10" width="8" height="25" rx="4" fill="${limb}"/></g><g transform="rotate(${bt}) translate(0 ${-bob})"><rect x="-14" y="-19" width="28" height="34" rx="11" fill="${player.armorEquipped?armorColor:'url(#pBody)'}"/></g><g transform="rotate(${aa} 15 -4) translate(0 ${-bob})"><rect x="11" y="-10" width="8" height="25" rx="4" fill="${limb}"/></g><g transform="rotate(${hs} 0 ${-29-bob}) translate(0 ${-bob})"><circle cx="0" cy="-29" r="12.5" fill="url(#pHead)"/><circle cx="-4" cy="-30" r="1.4" fill="#1a2b20"/><circle cx="4" cy="-30" r="1.4" fill="#1a2b20"/></g></svg>`}
 const PLAYER_FRAME_COUNT=8,playerFrames=[];for(let i=0;i<PLAYER_FRAME_COUNT;i++){const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildPlayerSVG(i/PLAYER_FRAME_COUNT,true));playerFrames.push(img)}const playerIdleFrame=new Image();playerIdleFrame.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildPlayerSVG(0,false));function currentPlayerSprite(){if(!player.moving)return playerIdleFrame;return playerFrames[Math.floor(player.animPhase*PLAYER_FRAME_COUNT)%PLAYER_FRAME_COUNT]}
 
@@ -441,19 +441,19 @@ function hitEntityAtScreen(clientX,clientY){
 
 const RECIPES=[
   {id:'campfire',name:'Campfire',stage:'Build',desc:'Gather stones and arrange them in a ring. Burn sticks as fuel to produce heat and charcoal.',cost:{thickStick:3,bigPebble:2},icon:'#e8a040',buildable:true},
-  {id:'chest',name:'Storage Chest',stage:'Build',desc:'Lash sticks and woven fiber into a sturdy container for stashing extra materials in the world.',cost:{thickStick:6,stalkFiber:4},icon:'#b97a3d',buildable:true},
+  {id:'crate',name:'Storage Crate',stage:'Build',desc:'Lash sticks and woven fiber into a sturdy container for stashing extra materials in the world.',cost:{thickStick:6,stalkFiber:4},icon:'#b97a3d',buildable:true},
   {id:'cordage',name:'Cordage',stage:'Process',desc:'Twist plant stalk fiber into two-ply cord for lashing.',cost:{stalkFiber:4},icon:'#5bc46a'},
   {id:'basket',name:'Basket',stage:'Process',desc:'Weave gathered plant stalk fibers into a small rigid basket for carrying and storing materials.',cost:{stalkFiber:6},icon:'#c99a55'},
   {id:'knappedFlint',name:'Knapped Flint Edge',stage:'Process',desc:'Percussion-flake a flint nodule with a hammerstone to raise a sharp edge.',cost:{flint:1,bigPebble:1},icon:'#cfd3d0'},
   {id:'charcoal',name:'Charcoal (at campfire)',stage:'Process',desc:'Burn thick sticks in your campfire to produce glowing embers for fire-hardening.',cost:{thickStick:2},icon:'#4a4a48',requiresCampfire:true},
   {id:'carvedShaft',name:'Carved Wooden Shaft',stage:'Process',desc:'Carve a straight stick into a tapered point using a flint blade.',cost:{thickStick:1,knappedFlint:1},icon:'#d4a574'},
   {id:'shaft',name:'Fire-Hardened Shaft',stage:'Process',desc:'Hold a carved point over hot campfire embers to drive out moisture and char the surface.',cost:{carvedShaft:1,charcoal:1},icon:'#a85',requiresCampfire:true},
-  {id:'armor',name:'Woven Armor',stage:'Haft',desc:'Weave strong cordage into protective body chest piece.',cost:{cordage:3},icon:'#8a8880'},
+  {id:'armor',name:'Woven Armor',stage:'Haft',desc:'Weave strong cordage into protective body crate piece.',cost:{cordage:3},icon:'#8a8880'},
   {id:'flintKnife',name:'Flint Knife',stage:'Haft',desc:'Lash a knapped edge to a short handle with cordage.',cost:{knappedFlint:1,shaft:1,cordage:1},icon:'#eef1ef'},
   {id:'spear',name:'Spear',stage:'Haft',desc:'Haft a flint point onto a fire-hardened shaft, lashed and bound tight with cordage.',cost:{knappedFlint:1,shaft:1,cordage:2},icon:'#c96'},
   {id:'stoneAxe',name:'Stone Axe (Celt)',stage:'Haft',desc:'Peck and grind a flint blank into an axehead, wedge it into a mortised shaft, and bind tight.',cost:{knappedFlint:2,shaft:1,cordage:2},icon:'#8a8880'}
 ];
-const ITEM_ICON_KIND={stalkFiber:'fiber',thickStick:'stick',bigPebble:'pebble',flint:'flint',charcoal:'charcoal',cordage:'coil',basket:'basket',knappedFlint:'flint',carvedShaft:'stick',shaft:'stick',flintKnife:'tool',spear:'tool',stoneAxe:'tool',armor:'armor',campfire:'flame',chest:'chest'};
+const ITEM_ICON_KIND={stalkFiber:'fiber',thickStick:'stick',bigPebble:'pebble',flint:'flint',charcoal:'charcoal',cordage:'coil',basket:'basket',knappedFlint:'flint',carvedShaft:'stick',shaft:'stick',flintKnife:'tool',spear:'tool',stoneAxe:'tool',armor:'armor',campfire:'flame',crate:'crate'};
 const ITEM_NAMES={stalkFiber:'Stalk Fibers',thickStick:'Thick Stick',bigPebble:'Pebble',flint:'Flint',charcoal:'Charcoal',basket:'Basket',armor:'Woven Armor'};
 function itemDisplayName(id){const r=RECIPES.find(x=>x.id===id);return r?r.name:(ITEM_NAMES[id]||id)}
 function itemIconSVG(kind,color){
@@ -468,7 +468,7 @@ function itemIconSVG(kind,color){
     case'basket':return`<svg viewBox="0 0 24 24"><path d="M5 9 L7 19 Q12 22 17 19 L19 9Z" fill="#b97a3d" stroke="#5b371b" stroke-width=1.2/><path d="M6 10 Q12 13 18 10" fill="none" stroke="#d6a05b" stroke-width=1.4/><path d="M8 8 Q12 3 16 8" fill="none" stroke="#6d4321" stroke-width=2" stroke-linecap="round"/><path d="M9 11 L10 19 M12 11 L12 20 M15 11 L14 19" stroke="#d6a05b" stroke-width=1" opacity=".8"/></svg>`;
     case'armor':return`<svg viewBox="0 0 24 24"><path d="M4 4 L20 4 L18 12 L16 20 L8 20 L6 12 Z" fill="#8a8880" stroke="#373737" stroke-width="1.5"/><rect x="8" y="7" width="8" height="3" fill="#c99a55"/></svg>`;
     case'tool':return`<svg viewBox="0 0 24 24"><rect x="10.5" y="10" width="3" height="13" rx="1" fill="#352416" transform="rotate(45 12 16)"/><rect x="11.1" y="10.5" width="1" height="12" rx=".5" fill="#664326" transform="rotate(45 12 16)"/><polygon points="4,4 12,4 14,10 6,12" fill="#cfd3d0"/><polygon points="4,4 12,4 8,8" fill="#eef1ef"/></svg>`;
-    case'chest':return`<svg viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="10" rx="1" fill="#b97a3d" stroke="#5b371b" stroke-width="1.2"/><rect x="3" y="7" width="18" height="5" rx="1" fill="#c99a55" stroke="#5b371b" stroke-width="1.2"/><rect x="10.5" y="10.5" width="3" height="3" fill="#5b371b"/></svg>`;
+    case'crate':return`<svg viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="10" rx="1" fill="#b97a3d" stroke="#5b371b" stroke-width="1.2"/><rect x="3" y="7" width="18" height="5" rx="1" fill="#c99a55" stroke="#5b371b" stroke-width="1.2"/><rect x="10.5" y="10.5" width="3" height="3" fill="#5b371b"/></svg>`;
     default:return`<svg viewBox="0 0 24 24"><polygon points="12,3 20,9 16,21 8,21 4,9" fill="${color||'#8a8880'}"/><polygon points="12,3 20,9 12,12" fill="rgba(255,255,255,.35)"/></svg>`;
   }
 }
@@ -888,7 +888,7 @@ function handleSlotShiftClick(kind,index){
   const itemId=getSlotItem(kind,index);
   if(!itemId)return;
   if(openContainer)moveItemToContainer(kind,index,itemId);
-  else createFloatingText(player.x,player.y-.5,'Open a chest or furnace first','#ffd76a');
+  else createFloatingText(player.x,player.y-.5,'Open a crate or furnace first','#ffd76a');
 }
 
 function renderCursorItemDisplay(){
@@ -903,26 +903,26 @@ function refreshInventoryUI(){
   renderContainerPanel();
 }
 
-// ---- Containers: storage chests and campfire fuel ("furnace") ----
+// ---- Containers: storage crates and campfire fuel ("furnace") ----
 function moveItemToContainer(kind,index,itemId){
   const slotCount=getSlotCount(kind,index);
   if(slotCount<=0)return;
-  if(openContainer.type==='chest'){
-    const chest=openContainer.ref;
+  if(openContainer.type==='crate'){
+    const crate=openContainer.ref;
     let amount=slotCount;
     const limit=itemStackLimit(itemId);
     let moved=0;
-    for(let i=0;i<chest.slots.length&&amount>0;i++){
-      const s=chest.slots[i];
+    for(let i=0;i<crate.slots.length&&amount>0;i++){
+      const s=crate.slots[i];
       if(s&&s.id===itemId&&s.count<limit){const take=Math.min(amount,limit-s.count);s.count+=take;amount-=take;moved+=take}
     }
-    for(let i=0;i<chest.slots.length&&amount>0;i++){
-      if(!chest.slots[i]){const take=Math.min(amount,limit);chest.slots[i]={id:itemId,count:take};amount-=take;moved+=take}
+    for(let i=0;i<crate.slots.length&&amount>0;i++){
+      if(!crate.slots[i]){const take=Math.min(amount,limit);crate.slots[i]={id:itemId,count:take};amount-=take;moved+=take}
     }
-    if(moved<=0){createFloatingText(chest.x,chest.y-.5,'Chest is full','#f66');return}
+    if(moved<=0){createFloatingText(crate.x,crate.y-.5,'Crate is full','#f66');return}
     const remaining=slotCount-moved;
     setSlotItem(kind,index,remaining>0?itemId:'',remaining>0?remaining:undefined);
-    createFloatingText(player.x,player.y-1,`→ Chest: ${itemDisplayName(itemId)} x${moved}`,'#8ff');
+    createFloatingText(player.x,player.y-1,`→ Crate: ${itemDisplayName(itemId)} x${moved}`,'#8ff');
   }else if(openContainer.type==='furnace'){
     if(itemId!=='thickStick'){createFloatingText(player.x,player.y-1,'Furnace only takes sticks as fuel','#f66');return}
     const cf=openContainer.ref,amount=slotCount;
@@ -932,11 +932,11 @@ function moveItemToContainer(kind,index,itemId){
   }
 }
 function withdrawFromContainer(index){
-  if(!openContainer||openContainer.type!=='chest')return;
-  const chest=openContainer.ref,stack=chest.slots[index];
+  if(!openContainer||openContainer.type!=='crate')return;
+  const crate=openContainer.ref,stack=crate.slots[index];
   if(!stack)return;
-  if(!addItem(stack.id,stack.count)){createFloatingText(chest.x,chest.y-.5,'No carry room','#f66');return}
-  chest.slots[index]=null;
+  if(!addItem(stack.id,stack.count)){createFloatingText(crate.x,crate.y-.5,'No carry room','#f66');return}
+  crate.slots[index]=null;
   createFloatingText(player.x,player.y-1,`← ${itemDisplayName(stack.id)} x${stack.count}`,'#8ff');
 }
 function withdrawFuel(amount){
@@ -950,7 +950,7 @@ function withdrawFuel(amount){
 function openContainerPanel(container){
   openContainer=container;
   inventoryScreen.classList.add('open');
-  panelTitle.textContent=container.type==='chest'?'STORAGE CHEST':'FURNACE';
+  panelTitle.textContent=container.type==='crate'?'STORAGE CRATE':'FURNACE';
   refreshInventoryUI();
 }
 function closeContainerPanel(){openContainer=null;renderContainerPanel()}
@@ -959,14 +959,14 @@ function renderContainerPanel(){
   if(!wrap)return;
   if(!openContainer){wrap.style.display='none';wrap.innerHTML='';return}
   wrap.style.display='block';
-  if(openContainer.type==='chest'){
-    const chest=openContainer.ref;
-    const slotsHtml=chest.slots.map((s,i)=>{
-      if(!s)return `<div class="mc-slot" data-chest-index="${i}"></div>`;
+  if(openContainer.type==='crate'){
+    const crate=openContainer.ref;
+    const slotsHtml=crate.slots.map((s,i)=>{
+      if(!s)return `<div class="mc-slot" data-crate-index="${i}" data-crate-drag-slot="true"></div>`;
       const recipe=RECIPES.find(r=>r.id===s.id);
-      return `<div class="mc-slot" data-chest-index="${i}" title="${itemDisplayName(s.id)}">${itemIconSVG(ITEM_ICON_KIND[s.id]||'gem',recipe?recipe.icon:null)}<span class="mc-count">${s.count}</span></div>`;
+      return `<div class="mc-slot" data-crate-index="${i}" data-crate-drag-slot="true" draggable="false" title="${itemDisplayName(s.id)}">${itemIconSVG(ITEM_ICON_KIND[s.id]||'gem',recipe?recipe.icon:null)}<span class="mc-count">${s.count}</span></div>`;
     }).join('');
-    wrap.innerHTML=`<div class="mc-camp-label"><span>STORAGE CHEST (${Math.round(chest.x)}, ${Math.round(chest.y)})</span><button class="mc-tab" id="closeContainerBtn" type="button">Close</button></div><div class="mc-grid">${slotsHtml}</div><div class="inv-note">Click a chest slot to withdraw. Shift+Click a carry item to deposit it.</div>`;
+    wrap.innerHTML=`<div class="mc-camp-label"><span>STORAGE CRATE (${Math.round(crate.x)}, ${Math.round(crate.y)})</span><button class="mc-tab" id="closeContainerBtn" type="button">Close</button></div><div class="mc-grid">${slotsHtml}</div><div class="inv-note">Click a crate slot to withdraw. Shift+Click or drag a carry item into a crate slot to deposit it.</div>`;
   }else if(openContainer.type==='furnace'){
     const cf=openContainer.ref;
     wrap.innerHTML=`<div class="mc-camp-label"><span>FURNACE — burning ${Math.ceil(cf.fuel)} min</span><button class="mc-tab" id="closeContainerBtn" type="button">Close</button></div><div class="mc-grid">${mcSlotHTML({id:'thickStick',kind:'stick',count:cf.fuelSlot.count})}</div><div class="inv-note">Click the fuel slot to withdraw sticks. Shift+Click a carried stick to add fuel.</div>`;
@@ -1025,8 +1025,49 @@ craftDetail.addEventListener('click',e=>{
 document.getElementById('stageTabsWrap').addEventListener('click',e=>{const tab=e.target.closest('[data-stage]');if(!tab)return;activeStage=tab.dataset.stage;selectedRecipeId=null;renderCraftPanel()});
 document.getElementById('inventoryClose').addEventListener('click',closeInventoryScreen);
 document.getElementById('craftButton').addEventListener('pointerdown',e=>{toggleCraftPanel();e.preventDefault()});
+let autoOpenedCrate=null;
+function getNearestCrate(maxDistance=3.5){
+  let best=null,bestDist=maxDistance;
+  for(const crate of containers){
+    const d=Math.hypot(crate.x-player.x,crate.y-player.y);
+    if(d<=bestDist){best=crate;bestDist=d}
+  }
+  return best;
+}
+
+function updateNearbyCrate(){
+  const nearbyCrate=getNearestCrate(3.5);
+
+  // Crate storage is proximity-bound: while the player remains within range,
+  // the crate inventory must stay open. Leaving range closes it automatically.
+  if(!nearbyCrate){
+    if(autoOpenedCrate && openContainer && openContainer.type==='crate' && openContainer.ref===autoOpenedCrate){
+      closeInventoryScreen();
+    }
+    autoOpenedCrate=null;
+    return;
+  }
+
+  autoOpenedCrate=nearbyCrate;
+  if(!inventoryScreen.classList.contains('open') ||
+     !openContainer ||
+     openContainer.type!=='crate' ||
+     openContainer.ref!==nearbyCrate){
+    openContainerPanel({type:'crate',ref:nearbyCrate});
+  }
+}
+
 addEventListener('keydown',e=>{
-  if((e.key==='e'||e.key==='E'||e.key==='c'||e.key==='C')&&!e.repeat){toggleCraftPanel();e.preventDefault()}
+  if((e.key==='e'||e.key==='E')&&!e.repeat){
+    const nearbyCrate=getNearestCrate();
+    if(nearbyCrate){
+      openContainerPanel({type:'crate',ref:nearbyCrate});
+    }else{
+      toggleCraftPanel();
+    }
+    e.preventDefault();
+  }
+  if((e.key==='c'||e.key==='C')&&!e.repeat){toggleCraftPanel();e.preventDefault()}
   if(e.key==='Escape')closeInventoryScreen();
   if(e.key>='1'&&e.key<='7'){
     const slot=+e.key-1;
@@ -1137,13 +1178,120 @@ function finishSlotDrag(e){
 inventoryHotbarGrid.addEventListener('pointerup',finishSlotDrag);
 inventoryHotbarGrid.addEventListener('pointercancel',finishSlotDrag);
 
+// ---- Drag-and-drop into the currently open crate ----
+function depositCursorIntoCrate(index){
+  if(!openContainer||openContainer.type!=='crate'||!cursorItem)return false;
+  const crate=openContainer.ref;
+  const target=crate.slots[index];
+  const itemId=cursorItem.id,limit=itemStackLimit(itemId);
+  if(target&&target.id!==itemId){
+    const existing=target;
+    crate.slots[index]={id:itemId,count:cursorItem.count};
+    cursorItem={id:existing.id,count:existing.count};
+    return true;
+  }
+  const already=target?target.count:0;
+  const amount=Math.min(cursorItem.count,limit-already);
+  if(amount<=0)return false;
+  crate.slots[index]={id:itemId,count:already+amount};
+  cursorItem.count-=amount;
+  if(cursorItem.count<=0)cursorItem=null;
+  return true;
+}
+
+function startContainerDragFromSlot(e){
+  if(!openContainer||openContainer.type!=='crate')return;
+  const slotEl=e.target.closest('[data-crate-drag-slot]');
+  if(!slotEl)return;
+  e.preventDefault();
+  e.stopPropagation();
+  if(e.button!==0)return;
+  const index=+slotEl.dataset.crateIndex;
+  const stack=openContainer.ref.slots[index];
+  if(!stack)return;
+  slotDrag={pointerId:e.pointerId,kind:'crate',index,itemId:stack.id,count:stack.count,startX:e.clientX,startY:e.clientY,dragging:false,slotEl};
+  try{slotEl.setPointerCapture(e.pointerId)}catch(_){}
+}
+
+function finishContainerDrag(e){
+  const drag=slotDrag;
+  if(!drag||drag.kind!=='crate'||drag.pointerId!==e.pointerId)return false;
+  slotDrag=null;
+  try{drag.slotEl.releasePointerCapture(e.pointerId)}catch(_){}
+  drag.slotEl.classList.remove('dragging');
+  cursorItemDisplay.style.display='none';
+  if(!drag.dragging){
+    withdrawFromContainer(drag.index);
+    refreshInventoryUI();
+    return true;
+  }
+  const dropEl=document.elementFromPoint(e.clientX,e.clientY);
+  const targetInv=dropEl&&dropEl.closest('[data-slot-kind]');
+  const targetCrate=dropEl&&dropEl.closest('[data-crate-drag-slot]');
+  const sourceStack=openContainer.ref.slots[drag.index];
+  if(targetInv){
+    const targetKind=targetInv.dataset.slotKind,targetIndex=+targetInv.dataset.slotIndex;
+    if(sourceStack){
+      const savedCursor=cursorItem;
+      cursorItem={id:sourceStack.id,count:sourceStack.count};
+      openContainer.ref.slots[drag.index]=null;
+      if(!slotAcceptsItem(targetKind,cursorItem.id)||!placeIntoSlot(targetKind,targetIndex,'full')){
+        openContainer.ref.slots[drag.index]=sourceStack;
+      }
+      if(savedCursor){
+        const held=savedCursor;cursorItem=null;addItem(held.id,held.count);
+      }
+    }
+  }else if(targetCrate){
+    const targetIndex=+targetCrate.dataset.crateIndex;
+    if(targetIndex!==drag.index&&sourceStack){
+      const src=openContainer.ref.slots[drag.index];
+      const dst=openContainer.ref.slots[targetIndex];
+      if(!dst||dst.id===src.id){
+        const limit=itemStackLimit(src.id);
+        const free=limit-(dst?dst.count:0);
+        if(free>0){
+          const moved=Math.min(src.count,free);
+          if(dst)dst.count+=moved;else openContainer.ref.slots[targetIndex]={id:src.id,count:moved};
+          src.count-=moved;
+          if(src.count<=0)openContainer.ref.slots[drag.index]=null;
+        }
+      }else{
+        openContainer.ref.slots[targetIndex]=src;
+        openContainer.ref.slots[drag.index]=dst;
+      }
+    }
+  }
+  refreshInventoryUI();
+  return true;
+}
+
+containerPanelEl.addEventListener('contextmenu',e=>e.preventDefault());
+containerPanelEl.addEventListener('pointerdown',startContainerDragFromSlot);
+containerPanelEl.addEventListener('pointermove',e=>{
+  if(!slotDrag||slotDrag.kind!=='crate'||slotDrag.pointerId!==e.pointerId||!slotDrag.itemId)return;
+  if(!slotDrag.dragging){
+    const dx=e.clientX-slotDrag.startX,dy=e.clientY-slotDrag.startY;
+    if(Math.hypot(dx,dy)<SLOT_DRAG_THRESHOLD)return;
+    slotDrag.dragging=true;
+    slotDrag.slotEl.classList.add('dragging');
+    const recipe=RECIPES.find(r=>r.id===slotDrag.itemId);
+    cursorItemDisplay.style.display='flex';
+    cursorItemDisplay.innerHTML=`${itemIconSVG(ITEM_ICON_KIND[slotDrag.itemId]||'gem',recipe?recipe.icon:null)}<span class="mc-count">${slotDrag.count||''}</span>`;
+  }
+  cursorItemDisplay.style.left=(e.clientX-20)+'px';
+  cursorItemDisplay.style.top=(e.clientY-20)+'px';
+});
+containerPanelEl.addEventListener('pointerup',finishContainerDrag);
+containerPanelEl.addEventListener('pointercancel',finishContainerDrag);
+
 containerPanelEl.addEventListener('click',e=>{
   const closeBtn=e.target.closest('#closeContainerBtn');
   if(closeBtn){closeContainerPanel();return}
   if(!openContainer)return;
-  if(openContainer.type==='chest'){
-    const slot=e.target.closest('[data-chest-index]');
-    if(slot){withdrawFromContainer(+slot.dataset.chestIndex);refreshInventoryUI()}
+  if(openContainer.type==='crate'){
+    const slot=e.target.closest('[data-crate-index]');
+    if(slot){withdrawFromContainer(+slot.dataset.crateIndex);refreshInventoryUI()}
   }else if(openContainer.type==='furnace'){
     const slot=e.target.closest('.mc-slot');
     if(slot){withdrawFuel(openContainer.ref.fuelSlot.count);refreshInventoryUI()}
@@ -1184,30 +1332,30 @@ function interactTarget(){
   }
 }
 
-// Places a 'buildable' recipe (campfire, chest) in the world. Assumes cost is
+// Places a 'buildable' recipe (campfire, crate) in the world. Assumes cost is
 // already validated/consumed by the caller.
 function placeBuildable(recipe,world){
   if(recipe.id==='campfire'){
     player.campfires.push({x:world.x,y:world.y,fuel:3,fuelSlot:{id:'thickStick',count:0},createdAt:performance.now()});
     player.inventory.campfire=(player.inventory.campfire||0)+1;
     createFloatingText(world.x,world.y-1,'◆ Campfire','#e8a040');
-  }else if(recipe.id==='chest'){
-    containers.push({x:world.x,y:world.y,slots:Array(CHEST_SLOT_COUNT).fill(null)});
-    createFloatingText(world.x,world.y-1,'◆ Storage Chest','#c99a55');
+  }else if(recipe.id==='crate'){
+    containers.push({x:world.x,y:world.y,slots:Array(CRATE_SLOT_COUNT).fill(null)});
+    createFloatingText(world.x,world.y-1,'◆ Storage Crate','#c99a55');
   }
   addCameraShake(.1,.3);
 }
 
-// Finds the nearest placed chest or campfire near a screen point, so the
+// Finds the nearest placed crate or campfire near a screen point, so the
 // player can click on it in the world to open its container panel.
 function hitContainerAtScreen(clientX,clientY){
   const rect=canvas.getBoundingClientRect();
   const x=clientX-rect.left,y=clientY-rect.top;
   let best=null,bestDist=34,bestKind=null;
-  for(const chest of containers){
-    const p=worldToScreenPoint(chest.x,chest.y);
+  for(const crate of containers){
+    const p=worldToScreenPoint(crate.x,crate.y);
     const d=Math.hypot(x-p.x,y-p.y);
-    if(d<bestDist){best=chest;bestDist=d;bestKind='chest'}
+    if(d<bestDist){best=crate;bestDist=d;bestKind='crate'}
   }
   for(const cf of player.campfires){
     const p=worldToScreenPoint(cf.x,cf.y);
@@ -1219,7 +1367,9 @@ function hitContainerAtScreen(clientX,clientY){
 }
 
 addEventListener('click',e=>{
-  if(e.target.closest('#inventoryScreen,#hotbar,#craftButton,#actionButton,#joystick,#hudToggle,#hud,#craftHint,#creativeIndicator'))return;
+  // World interaction is allowed ONLY from the game canvas itself.
+  // UI/HUD/screen clicks must never fall through and affect the world.
+  if(e.target!==canvas)return;
   if(suppressNextClick){suppressNextClick=false;return}
   if(player.placingRecipeId){
     const recipe=RECIPES.find(r=>r.id===player.placingRecipeId);
@@ -1246,7 +1396,7 @@ addEventListener('click',e=>{
   if(containerHit){
     const dist=Math.hypot(containerHit.ref.x-player.x,containerHit.ref.y-player.y);
     if(dist<=3.5){
-      openContainerPanel(containerHit.kind==='chest'?{type:'chest',ref:containerHit.ref}:{type:'furnace',ref:containerHit.ref});
+      openContainerPanel(containerHit.kind==='crate'?{type:'crate',ref:containerHit.ref}:{type:'furnace',ref:containerHit.ref});
     }else{
       createFloatingText(player.x,player.y-1,'Move closer to open','#ffd76a');
     }
@@ -1295,7 +1445,7 @@ canvas.addEventListener('pointerdown',e=>{
     if(containerHit){
       const dist=Math.hypot(containerHit.ref.x-player.x,containerHit.ref.y-player.y);
       if(dist<=3.5){
-        openContainerPanel(containerHit.kind==='chest'?{type:'chest',ref:containerHit.ref}:{type:'furnace',ref:containerHit.ref});
+        openContainerPanel(containerHit.kind==='crate'?{type:'crate',ref:containerHit.ref}:{type:'furnace',ref:containerHit.ref});
       }else{
         createFloatingText(player.x,player.y-1,'Move closer to open','#ffd76a');
       }
@@ -1307,6 +1457,7 @@ canvas.addEventListener('pointerdown',e=>{
 function cullFarEntities(){let count=0;for(const e of entities)if(e.type==='pebble'||e.type==='tree'||e.type==='bush'||e.type==='stick'||e.type==='flint'||e.type==='charcoal')count++;const limit=MAX_BIG_PEBBLES+MAX_BUSHES+MAX_STICKS+MAX_FLINT+MAX_CHARCOAL;if(count<=limit)return;const arr=[];for(let i=0;i<entities.length;i++){const e=entities[i];if(!['bigPebble','tree','bush','stick','flint','charcoal'].includes(e.type))continue;const dx=e.x-player.x,dy=e.y-player.y;arr.push({i,d:dx*dx+dy*dy,e})}arr.sort((a,b)=>b.d-a.d);const remove=new Set();for(let i=0;i<Math.max(0,arr.length-limit);i++){const x=arr[i];remove.add(x.i);const k=`${x.e.tileX},${x.e.tileY}`;if(x.e.type==='pebble')pebbleCache.delete(k);else if(x.e.type==='tree')treeEntityCache.delete(k);else if(x.e.type==='bush')bushEntityCache.delete(k);else if(x.e.type==='stick')stickEntityCache.delete(k);else if(x.e.type==='flint')flintEntityCache.delete(k);else if(x.e.type==='charcoal')charcoalEntityCache.delete(k)}for(let i=entities.length-1;i>=0;i--)if(remove.has(i))entities.splice(i,1)}
 
 function update(dt){cameraShake.duration=Math.max(0,cameraShake.duration-dt);if(cameraShake.duration<=0)cameraShake.intensity=0;for(let i=floatingTexts.length-1;i>=0;i--){floatingTexts[i].age+=dt;if(floatingTexts[i].age>floatingTexts[i].life)floatingTexts.splice(i,1)}
+updateNearbyCrate();
 for(let i=player.campfires.length-1;i>=0;i--){
   const cf=player.campfires[i];
   cf.fuel-=dt/1000/60;
@@ -1337,7 +1488,7 @@ const draw=[];for(const e of entities){const sx=Math.floor((e.x-cx+cols/2)*TILE)
   ctx.restore();if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,Math.max(10,e.radius*TILE+6),0,Math.PI*2);ctx.stroke()}}});else if(e.type==='bigPebble')draw.push({y:e.y,render:()=>{if(e.collected)return;const r=Math.floor(e.radius*TILE);ctx.save();ctx.fillStyle=e.tone>.62?'#8a8880':e.tone>.3?'#aaa69d':'#6f6d67';ctx.beginPath();ctx.ellipse(sx,sy,r*1.18,r*.92,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(225,222,214,.6)';ctx.beginPath();ctx.ellipse(sx-r*.28,sy-r*.3,r*.38,r*.22,-.2,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(55,52,48,.65)';ctx.lineWidth=1;ctx.stroke();if(e.clicked){ctx.strokeStyle='#ff0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+7,0,Math.PI*2);ctx.stroke()};ctx.restore()}});else if(e.type==='flint')draw.push({y:e.y,render:()=>{if(e.collected)return;const ang=e.seedVal%360*Math.PI/180;ctx.save();ctx.translate(sx,sy);ctx.rotate(ang);ctx.fillStyle='#cfd3d0';ctx.beginPath();ctx.moveTo(-7,2);ctx.lineTo(-3,-5);ctx.lineTo(3,-7);ctx.lineTo(8,-2);ctx.lineTo(5,4);ctx.lineTo(-2,6);ctx.closePath();ctx.fill();ctx.fillStyle='#eef1ef';ctx.beginPath();ctx.moveTo(-3,-5);ctx.lineTo(3,-7);ctx.lineTo(1,-1);ctx.lineTo(-2,2);ctx.closePath();ctx.fill();ctx.fillStyle='rgba(80,90,90,.55)';ctx.fillRect(-2,1,5,2);ctx.restore();if(e.clicked){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,11,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='charcoal')draw.push({y:e.y,render:()=>{if(e.collected)return;const r=Math.floor(e.radius*TILE);ctx.fillStyle='#4a4a48';ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();ctx.fillStyle='#2a2a28';ctx.beginPath();ctx.arc(sx-r*.35,sy-r*.35,Math.max(1,r*.35),0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(100,100,100,.4)';ctx.beginPath();ctx.arc(sx+r*.25,sy+r*.2,Math.max(1,r*.25),0,Math.PI*2);ctx.fill();if(e.clicked){ctx.strokeStyle='#ddd';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+6,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='pebble')draw.push({y:e.y,render:()=>{const r=Math.floor(e.radius*TILE);ctx.fillStyle=e.tone>.65?'rgba(100,95,85,.8)':e.tone>.35?'rgba(140,135,125,.8)':'rgba(180,175,165,.7)';ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();if(e.light>.5){ctx.fillStyle='rgba(220,215,205,.5)';ctx.beginPath();ctx.arc(sx-r*.3,sy-r*.3,Math.max(1,r*.35),0,Math.PI*2);ctx.fill()}if(e.clicked){ctx.strokeStyle='#ff0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+3,0,Math.PI*2);ctx.stroke()}}})}
 const px=Math.floor((player.x-cx+cols/2)*TILE),py=Math.floor((player.y-cy+rows/2)*TILE);draw.push({y:player.y,render:()=>{const sp=currentPlayerSprite(),size=TILE*1.7;if(sp.complete&&sp.naturalWidth)ctx.drawImage(sp,Math.floor(px+TILE/2-size/2),Math.floor(py+TILE/2-size/2),size,size);else{ctx.fillStyle='#0f0';ctx.fillRect(px+6,py+6,TILE-12,TILE-12)}}});
 for(const campfire of player.campfires){const csx=Math.floor((campfire.x-cx+cols/2)*TILE),csy=Math.floor((campfire.y-cy+rows/2)*TILE);draw.push({y:campfire.y,render:()=>{ctx.fillStyle='rgba(232,160,64,.4)';ctx.beginPath();ctx.arc(csx,csy,TILE*1.2,0,Math.PI*2);ctx.fill();const flame=Math.sin(time*3+campfire.fuel)*.5+.5;ctx.fillStyle=`rgba(255,140,0,${.6+flame*.2})`;ctx.beginPath();ctx.arc(csx,csy-4,6,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(255,200,0,.8)';ctx.beginPath();ctx.arc(csx,csy-2,3,0,Math.PI*2);ctx.fill();ctx.fillStyle='#ccc';ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(`⚡${Math.ceil(campfire.fuel)}${campfire.fuelSlot&&campfire.fuelSlot.count>0?' +'+campfire.fuelSlot.count:''}`,csx,csy+TILE)}})}
-for(const chest of containers){const csx=Math.floor((chest.x-cx+cols/2)*TILE),csy=Math.floor((chest.y-cy+rows/2)*TILE);draw.push({y:chest.y,render:()=>{ctx.fillStyle='rgba(0,0,0,.28)';ctx.beginPath();ctx.ellipse(csx,csy+9,15,5,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#8a5a2b';ctx.fillRect(csx-13,csy-4,26,16);ctx.fillStyle='#6d4321';ctx.fillRect(csx-13,csy-11,26,8);ctx.fillStyle='#e0b060';ctx.fillRect(csx-2,csy-3,4,4);ctx.strokeStyle='#3a2410';ctx.lineWidth=1;ctx.strokeRect(csx-13,csy-11,26,23);const filled=chest.slots.filter(Boolean).length;if(filled>0){ctx.fillStyle='#ccc';ctx.font='bold 10px monospace';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(`${filled}/${CHEST_SLOT_COUNT}`,csx,csy+TILE-4)}}})}
+for(const crate of containers){const csx=Math.floor((crate.x-cx+cols/2)*TILE),csy=Math.floor((crate.y-cy+rows/2)*TILE);draw.push({y:crate.y,render:()=>{ctx.fillStyle='rgba(0,0,0,.28)';ctx.beginPath();ctx.ellipse(csx,csy+9,15,5,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#8a5a2b';ctx.fillRect(csx-13,csy-4,26,16);ctx.fillStyle='#6d4321';ctx.fillRect(csx-13,csy-11,26,8);ctx.fillStyle='#e0b060';ctx.fillRect(csx-2,csy-3,4,4);ctx.strokeStyle='#3a2410';ctx.lineWidth=1;ctx.strokeRect(csx-13,csy-11,26,23);const filled=crate.slots.filter(Boolean).length;if(filled>0){ctx.fillStyle='#ccc';ctx.font='bold 10px monospace';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(`${filled}/${CRATE_SLOT_COUNT}`,csx,csy+TILE-4)}}})}
 if(player.placingRecipeId){const recipe=RECIPES.find(r=>r.id===player.placingRecipeId);const mx=Math.floor((player.x-cx+cols/2)*TILE),my=Math.floor((player.y-cy+rows/2)*TILE);ctx.strokeStyle='#e8a040';ctx.lineWidth=2;ctx.setLineDash([4,4]);ctx.beginPath();ctx.arc(mx,my,TILE*1.3,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='rgba(232,160,64,.2)';ctx.beginPath();ctx.arc(mx,my,TILE*1.3,0,Math.PI*2);ctx.fill();ctx.fillStyle='#e8a040';ctx.font='bold 12px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(`Click to place ${recipe?recipe.name:''}`,mx,my)}
 for(const e of entities){
   if((e.type==='bigPebble'||e.type==='flint'||e.type==='stick'||e.type==='charcoal')&&!e.collected){
