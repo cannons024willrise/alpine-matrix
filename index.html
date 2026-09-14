@@ -252,10 +252,10 @@ const BASKET_EXTRA_CARRY_SLOTS=5;
 const BASKET_CARRY_TOTAL=BASE_CARRY_SLOTS+BASKET_EXTRA_CARRY_SLOTS;
 function hasBasket(){return player.inventory.basket>0||utilitySlots.backpack==='basket'}
 function getCarrySlotCount(){return hasBasket()?BASKET_CARRY_TOTAL:BASE_CARRY_SLOTS}
-function ensureCarrySlots(){const target=getCarrySlotCount();while(hotbarSlots.length<target)hotbarSlots.push('');}
+function ensureCarrySlots(){const target=getCarrySlotCount();while(hotbarSlots.length<target)hotbarSlots.push(null);}
 const STACK_LIMITS={stalkFiber:8,thickStick:3,bigPebble:3,flint:4,charcoal:3,cordage:4,basket:1,knappedFlint:2,carvedShaft:1,shaft:1,flintKnife:1,spear:1,stoneAxe:1,armor:1,campfire:1};
-let hotbarSlots=Array(BASE_CARRY_SLOTS).fill('');
-let handSlots=Array(HAND_SLOT_COUNT).fill('');
+let hotbarSlots=Array(BASE_CARRY_SLOTS).fill(null);
+let handSlots=Array(HAND_SLOT_COUNT).fill(null);
 const utilitySlots={armor:'',backpack:''};
 let selectedHandSlot=0;
 let selectedCarrySlot=0;
@@ -265,31 +265,116 @@ function itemStackLimit(name){return STACK_LIMITS[name]||1}
 function slotArrayForItem(name){
   if(name==='armor')return {array:'armor',index:0};
   if(name==='basket')return {array:'backpack',index:0};
-  if(HAND_ITEMS.has(name))return {array:'hand',index:handSlots.indexOf(name)};
-  return {array:'carry',index:hotbarSlots.indexOf(name)};
+  if(HAND_ITEMS.has(name))return {array:'hand',index:handSlots.findIndex(s=>s&&s.id===name)};
+  return {array:'carry',index:hotbarSlots.findIndex(s=>s&&s.id===name)};
 }
+
+// ---- Core stacked-inventory engine ----
+// Carry/hand slots hold either null (empty) or {id,count}. Multiple stacks of
+// the same item are allowed as long as there are free slots. player.inventory
+// stays a derived cache (kept in sync via syncInventoryTotals) so all of the
+// existing "player.inventory[x]" reads elsewhere (crafting costs, HUD, etc.)
+// keep working unmodified.
+function totalOf(id){
+  let t=0;
+  for(const s of hotbarSlots) if(s && s.id===id) t+=s.count;
+  for(const s of handSlots) if(s && s.id===id) t+=s.count;
+  if(utilitySlots.armor===id) t+=1;
+  if(utilitySlots.backpack===id) t+=1;
+  return t;
+}
+function syncInventoryTotals(){
+  const ids=new Set(Object.keys(player.inventory));
+  for(const s of hotbarSlots) if(s) ids.add(s.id);
+  for(const s of handSlots) if(s) ids.add(s.id);
+  if(utilitySlots.armor)ids.add(utilitySlots.armor);
+  if(utilitySlots.backpack)ids.add(utilitySlots.backpack);
+  for(const id of ids) player.inventory[id]=totalOf(id);
+}
+
 function addItem(name,amount=1){
-  const current=player.inventory[name]||0;
-  const limit=itemStackLimit(name);
-  if(current+amount>limit)return false;
-  let slot=-1;
-  if(name==='armor'){ if(utilitySlots.armor && utilitySlots.armor!=='armor')return false; utilitySlots.armor='armor'; }
-  else if(name==='basket'){ if(utilitySlots.backpack && utilitySlots.backpack!=='basket')return false; utilitySlots.backpack='basket'; }
-  else if(HAND_ITEMS.has(name)){
-    slot=handSlots.indexOf(name);
-    if(slot===-1) slot=handSlots.indexOf('');
-    if(slot===-1)return false;
-    handSlots[slot]=name;
-  } else {
-    ensureCarrySlots();
-    slot=hotbarSlots.indexOf(name);
-    if(slot===-1)slot=hotbarSlots.indexOf('');
-    if(slot===-1)return false;
-    hotbarSlots[slot]=name;
+  if(amount<=0)return true;
+  if(name==='armor'){
+    if(utilitySlots.armor)return false;
+    utilitySlots.armor='armor';
+    syncInventoryTotals();
+    renderHotbar();
+    renderInventoryHotbar();
+    return true;
   }
-  player.inventory[name]=current+amount;
+  if(name==='basket'){
+    if(utilitySlots.backpack)return false;
+    utilitySlots.backpack='basket';
+    ensureCarrySlots();
+    syncInventoryTotals();
+    renderHotbar();
+    renderInventoryHotbar();
+    return true;
+  }
+  const limit=itemStackLimit(name);
+  const isHand=HAND_ITEMS.has(name);
+  if(!isHand)ensureCarrySlots();
+  const arr=isHand?handSlots:hotbarSlots;
+  const snapshot=arr.map(s=>s?{id:s.id,count:s.count}:null);
+  let remaining=amount;
+  // Top off any existing stacks of this item first.
+  for(let i=0;i<arr.length&&remaining>0;i++){
+    const s=arr[i];
+    if(s&&s.id===name&&s.count<limit){
+      const add=Math.min(remaining,limit-s.count);
+      s.count+=add;remaining-=add;
+    }
+  }
+  // Then start new stacks in whatever empty slots remain.
+  for(let i=0;i<arr.length&&remaining>0;i++){
+    if(!arr[i]){
+      const add=Math.min(remaining,limit);
+      arr[i]={id:name,count:add};
+      remaining-=add;
+    }
+  }
+  if(remaining>0){
+    // Doesn't fully fit anywhere — revert atomically so we never lose or
+    // partially-add an item.
+    for(let i=0;i<arr.length;i++)arr[i]=snapshot[i];
+    return false;
+  }
+  syncInventoryTotals();
   renderHotbar();
   renderInventoryHotbar();
+  return true;
+}
+
+function removeItem(name,amount=1){
+  if(amount<=0)return true;
+  if(name==='armor'){
+    if(utilitySlots.armor!=='armor')return false;
+    utilitySlots.armor='';
+    syncInventoryTotals();
+    renderHotbar();renderInventoryHotbar();
+    return true;
+  }
+  if(name==='basket'){
+    if(utilitySlots.backpack!=='basket')return false;
+    utilitySlots.backpack='';
+    syncInventoryTotals();
+    renderHotbar();renderInventoryHotbar();
+    return true;
+  }
+  if(totalOf(name)<amount)return false;
+  const isHand=HAND_ITEMS.has(name);
+  const arr=isHand?handSlots:hotbarSlots;
+  let remaining=amount;
+  for(let i=0;i<arr.length&&remaining>0;i++){
+    const s=arr[i];
+    if(s&&s.id===name){
+      const take=Math.min(remaining,s.count);
+      s.count-=take;remaining-=take;
+      if(s.count<=0)arr[i]=null;
+    }
+  }
+  syncInventoryTotals();
+  renderHotbar();renderInventoryHotbar();
   return true;
 }
 
@@ -392,14 +477,14 @@ function mcSlotHTML({id,kind,color,count,locked,selected,extraClass}){
 }
 function canAfford(cost){
   for(const k in cost){
-    if((player.inventory[k]||0)<cost[k])return false;
+    if(totalOf(k)<cost[k])return false;
   }
   return true;
 }
 
 function validateAndConsume(cost){
   if(!canAfford(cost))return false;
-  for(const k in cost)player.inventory[k]-=cost[k];
+  for(const k in cost)removeItem(k,cost[k]);
   return true;
 }
 
@@ -424,7 +509,7 @@ function recipeCanCraft(recipe){
   if(recipe.buildable)return true;
   const existing=player.inventory[recipe.id]||0;
   if(existing>0)return true;
-  if(HAND_ITEMS.has(recipe.id))return handSlots.includes('')||inventoryUsedSlots()<getHotbarCapacity();
+  if(HAND_ITEMS.has(recipe.id))return handSlots.includes(null)||inventoryUsedSlots()<getHotbarCapacity();
   return inventoryUsedSlots()<getHotbarCapacity();
 }
 
@@ -458,7 +543,6 @@ function craftItem(id, maxBatch=false){
   for(let i=0;i<timesToCraft;i++){
     if(!canAfford(recipe.cost))break;
     const currentResult=player.inventory[id]||0;
-    const resultLimit=itemStackLimit(id);
     const fire=recipe.requiresCampfire?getActiveCampfire():null;
     if(recipe.requiresCampfire&&!fire)break;
 
@@ -482,21 +566,14 @@ function craftItem(id, maxBatch=false){
       break;
     }
 
-    if(currentResult>=resultLimit)break;
     if(currentResult===0&&inventoryUsedSlots()>=getHotbarCapacity())break;
 
-    // Reserve the result slot before consuming ingredients. addItem is atomic.
+    // Reserve the result slot before consuming ingredients. addItem is atomic
+    // and will open a fresh stack if the existing one(s) are already full.
     if(!addItem(id,1))break;
     if(!validateAndConsume(recipe.cost)){
       // Undo the result if ingredients became unavailable.
-      player.inventory[id]--;
-      if(player.inventory[id]<=0){
-        player.inventory[id]=0;
-        const carrySlot=hotbarSlots.indexOf(id);
-        if(carrySlot!==-1)hotbarSlots[carrySlot]='';
-        const handSlot=handSlots.indexOf(id);
-        if(handSlot!==-1)handSlots[handSlot]='';
-      }
+      removeItem(id,1);
       break;
     }
     if(fire){
@@ -539,36 +616,44 @@ function quickEquipArmor(){
 function collectMatchingStacks(itemId){
   if(!itemId)return;
   const limit=itemStackLimit(itemId);
-  let total=player.inventory[itemId]||0;
-  for(let i=0;i<hotbarSlots.length;i++){
-    if(hotbarSlots[i]===itemId && total<limit){
-      let needed = limit - total;
-      player.inventory[itemId]+=needed;
-      total+=needed;
+  const arr=HAND_ITEMS.has(itemId)?handSlots:hotbarSlots;
+  // Merge any partial stacks of this item together to free up slots.
+  const stacks=[];
+  for(let i=0;i<arr.length;i++) if(arr[i]&&arr[i].id===itemId) stacks.push(i);
+  for(let a=0;a<stacks.length;a++){
+    const sa=arr[stacks[a]];
+    if(!sa)continue;
+    for(let b=a+1;b<stacks.length&&sa.count<limit;b++){
+      const sb=arr[stacks[b]];
+      if(!sb)continue;
+      const move=Math.min(limit-sa.count, sb.count);
+      sa.count+=move; sb.count-=move;
+      if(sb.count<=0)arr[stacks[b]]=null;
     }
   }
+  syncInventoryTotals();
   renderHotbar();
   renderInventoryHotbar();
 }
 
 function dropItem(slotIdx, fullStack=false){
-  const itemId = hotbarSlots[slotIdx];
-  if(!itemId)return;
-  const count=player.inventory[itemId]||0;
-  const amount=(fullStack||count<=1)?count:1;
-  player.inventory[itemId]=Math.max(0,count-amount);
-  if(player.inventory[itemId]===0)hotbarSlots[slotIdx]='';
-  createFloatingText(player.x,player.y-0.5,`Dropped ${itemDisplayName(itemId)} x${amount}`,'#f99');
+  const slot = hotbarSlots[slotIdx];
+  if(!slot)return;
+  const amount=(fullStack||slot.count<=1)?slot.count:1;
+  slot.count-=amount;
+  if(slot.count<=0)hotbarSlots[slotIdx]=null;
+  syncInventoryTotals();
+  createFloatingText(player.x,player.y-0.5,`Dropped ${itemDisplayName(slot.id)} x${amount}`,'#f99');
   renderHotbar();renderInventoryHotbar();
 }
 function dropHandItem(slotIdx, fullStack=false){
-  const itemId=handSlots[slotIdx];
-  if(!itemId)return;
-  const count=player.inventory[itemId]||0;
-  const amount=(fullStack||count<=1)?count:1;
-  player.inventory[itemId]=Math.max(0,count-amount);
-  if(player.inventory[itemId]===0)handSlots[slotIdx]='';
-  createFloatingText(player.x,player.y-0.5,`Dropped ${itemDisplayName(itemId)} x${amount}`,'#f99');
+  const slot=handSlots[slotIdx];
+  if(!slot)return;
+  const amount=(fullStack||slot.count<=1)?slot.count:1;
+  slot.count-=amount;
+  if(slot.count<=0)handSlots[slotIdx]=null;
+  syncInventoryTotals();
+  createFloatingText(player.x,player.y-0.5,`Dropped ${itemDisplayName(slot.id)} x${amount}`,'#f99');
   renderHotbar();renderInventoryHotbar();
 }
 
@@ -619,10 +704,11 @@ function utilitySlotHTML(side,itemId){
 }
 function renderHotbar(){
   const emptySlot=(attrs,title)=>`<div class="mc-slot" ${attrs} title="${title}"><svg viewBox="0 0 24 24" style="opacity:.3"><circle cx="12" cy="12" r="8" fill="#999"/></svg></div>`;
-  const handHtml=handSlots.map((itemId,idx)=>{
-    if(!itemId)return emptySlot(`data-hand-idx="${idx}"`,`Empty hand slot ${idx+1}`);
+  const handHtml=handSlots.map((slot,idx)=>{
+    if(!slot)return emptySlot(`data-hand-idx="${idx}"`,`Empty hand slot ${idx+1}`);
+    const itemId=slot.id;
     const recipe=RECIPES.find(r=>r.id===itemId);
-    return mcSlotHTML({id:itemId,kind:ITEM_ICON_KIND[itemId]||'gem',color:recipe?recipe.icon:null,count:player.inventory[itemId]||0,selected:idx===selectedHandSlot,locked:false,extraClass:'hand-slot'});
+    return mcSlotHTML({id:itemId,kind:ITEM_ICON_KIND[itemId]||'gem',color:recipe?recipe.icon:null,count:slot.count,selected:idx===selectedHandSlot,locked:false,extraClass:'hand-slot'});
   }).join('');
   hotbar.innerHTML=`
     <div class="hotbar-utility-group">${utilitySlotHTML('armor',utilitySlots.armor)}</div>
@@ -645,40 +731,46 @@ function renderHotbar(){
   }));
 }
 // ---- Slot rendering for the interactive inventory grid (carry/hand/armor/backpack) ----
-function invSlotHTML(kind,index,itemId){
+function invSlotHTML(kind,index){
+  const itemId=getSlotItem(kind,index);
   const selected=(kind==='carry'&&index===selectedCarrySlot)||(kind==='hand'&&index===selectedHandSlot);
   const attrs=`data-slot-kind="${kind}" data-slot-index="${index}"`;
   if(!itemId)return `<div class="mc-slot${selected?' selected':''}" ${attrs}></div>`;
   const recipe=RECIPES.find(r=>r.id===itemId);
-  const count=player.inventory[itemId]||0;
+  const count=getSlotCount(kind,index);
   return `<div class="mc-slot${selected?' selected':''}" ${attrs} draggable="false" title="${itemDisplayName(itemId)}">${itemIconSVG(ITEM_ICON_KIND[itemId]||'gem',recipe?recipe.icon:null)}${count?`<span class="mc-count">${count}</span>`:''}</div>`;
 }
-function invUtilitySlotHTML(kind){
-  const itemId=kind==='armor'?utilitySlots.armor:utilitySlots.backpack;
-  return invSlotHTML(kind,0,itemId||'');
-}
+function invUtilitySlotHTML(kind){return invSlotHTML(kind,0)}
 function renderInventoryHotbar(){
   const carryCapacity=getCarrySlotCount();
   ensureCarrySlots();
-  const carryHtml=Array.from({length:carryCapacity},(_,idx)=>invSlotHTML('carry',idx,hotbarSlots[idx]||'')).join('');
-  const handHtml=handSlots.map((itemId,idx)=>invSlotHTML('hand',idx,itemId)).join('');
+  const carryHtml=Array.from({length:carryCapacity},(_,idx)=>invSlotHTML('carry',idx)).join('');
+  const handHtml=handSlots.map((_,idx)=>invSlotHTML('hand',idx)).join('');
   inventoryHotbarGrid.innerHTML=`<div class="inv-hotbar-section"><div class="inv-hotbar-label">ARMOR</div><div class="inv-hotbar-slots">${invUtilitySlotHTML('armor')}</div></div><div class="inv-hotbar-section carry"><div class="inv-hotbar-label">CARRY</div><div class="inv-hotbar-slots">${carryHtml}</div></div><div class="inv-hotbar-section hands"><div class="inv-hotbar-label">HANDS</div><div class="inv-hotbar-slots">${handHtml}</div></div><div class="inv-hotbar-section"><div class="inv-hotbar-label">BACKPACK</div><div class="inv-hotbar-slots">${invUtilitySlotHTML('backpack')}</div></div>`;
   document.getElementById('hotbarCapacityLabel').textContent=`${inventoryUsedSlots()} / ${getCarrySlotCount()} carry${hasBasket()?' (+5 basket bonus)':''}`;
 }
 
 // ---- Cursor-held item: get/set the underlying slot arrays by (kind,index) ----
 function getSlotItem(kind,index){
-  if(kind==='carry')return hotbarSlots[index]||'';
-  if(kind==='hand')return handSlots[index]||'';
+  if(kind==='carry')return hotbarSlots[index]?hotbarSlots[index].id:'';
+  if(kind==='hand')return handSlots[index]?handSlots[index].id:'';
   if(kind==='armor')return utilitySlots.armor||'';
   if(kind==='backpack')return utilitySlots.backpack||'';
   return '';
 }
-function setSlotItem(kind,index,itemId){
-  if(kind==='carry')hotbarSlots[index]=itemId;
-  else if(kind==='hand')handSlots[index]=itemId;
+function getSlotCount(kind,index){
+  if(kind==='carry')return hotbarSlots[index]?hotbarSlots[index].count:0;
+  if(kind==='hand')return handSlots[index]?handSlots[index].count:0;
+  if(kind==='armor')return utilitySlots.armor?1:0;
+  if(kind==='backpack')return utilitySlots.backpack?1:0;
+  return 0;
+}
+function setSlotItem(kind,index,itemId,count){
+  if(kind==='carry')hotbarSlots[index]=itemId?{id:itemId,count:count!=null?count:(hotbarSlots[index]?hotbarSlots[index].count:0)}:null;
+  else if(kind==='hand')handSlots[index]=itemId?{id:itemId,count:count!=null?count:(handSlots[index]?handSlots[index].count:0)}:null;
   else if(kind==='armor')utilitySlots.armor=itemId;
   else if(kind==='backpack')utilitySlots.backpack=itemId;
+  syncInventoryTotals();
 }
 function slotAcceptsItem(kind,itemId){
   // CARRY and HANDS are both part of the player's general storage.
@@ -691,8 +783,8 @@ function slotAcceptsItem(kind,itemId){
   return true;
 }
 function findSlotIndexForItem(kind,itemId){
-  if(kind==='carry')return hotbarSlots.indexOf(itemId);
-  if(kind==='hand')return handSlots.indexOf(itemId);
+  if(kind==='carry')return hotbarSlots.findIndex(s=>s&&s.id===itemId&&s.count<itemStackLimit(itemId));
+  if(kind==='hand')return handSlots.findIndex(s=>s&&s.id===itemId&&s.count<itemStackLimit(itemId));
   return -1;
 }
 function canRemoveBasket(){
@@ -702,16 +794,17 @@ function canRemoveBasket(){
 
 // Pick up 'full' or 'half' of a slot's stack onto the cursor. Requires an
 // empty cursor (or one already holding the same item, in which case it tops
-// the cursor stack up further).
+// the cursor stack up further). Only affects the specific slot clicked, so
+// multiple stacks of the same item are handled independently.
 function pickupFromSlot(kind,index,portion){
   const itemId=getSlotItem(kind,index);
   if(!itemId)return false;
   if(kind==='backpack'&&!canRemoveBasket()){createFloatingText(player.x,player.y-.5,'Empty the extra carry slots first','#f66');return false}
   if(cursorItem&&cursorItem.id!==itemId)return false;
-  const total=player.inventory[itemId]||0;
-  if(total<=0)return false;
-  let amount=portion==='half'?Math.ceil(total/2):total;
-  amount=Math.min(amount,total);
+  const slotCount=getSlotCount(kind,index);
+  if(slotCount<=0)return false;
+  let amount=portion==='half'?Math.ceil(slotCount/2):slotCount;
+  amount=Math.min(amount,slotCount);
   const limit=itemStackLimit(itemId);
   if(cursorItem){
     amount=Math.min(amount,limit-cursorItem.count);
@@ -720,15 +813,15 @@ function pickupFromSlot(kind,index,portion){
   }else{
     cursorItem={id:itemId,count:amount};
   }
-  const remaining=total-amount;
-  player.inventory[itemId]=remaining;
-  if(remaining<=0)setSlotItem(kind,index,'');
+  const remaining=slotCount-amount;
+  setSlotItem(kind,index,remaining>0?itemId:'',remaining>0?remaining:undefined);
   return true;
 }
 
 // Place 'full' or 'half' of the cursor stack into a slot. Merges onto an
-// existing stack of the same item, swaps with a different item (full only),
-// or rejects items the slot doesn't accept.
+// existing stack of the same item (up to its limit), swaps with a different
+// item (full only), or rejects items the slot doesn't accept. Only touches
+// the targeted slot, so placing into an empty slot starts a fresh stack.
 function placeIntoSlot(kind,index,portion){
   if(!cursorItem)return false;
   const itemId=cursorItem.id;
@@ -736,25 +829,17 @@ function placeIntoSlot(kind,index,portion){
   const existingId=getSlotItem(kind,index);
   if(existingId&&existingId!==itemId){
     if(portion==='half')return false; // no partial swaps
-    const existingCount=player.inventory[existingId]||0;
-    setSlotItem(kind,index,itemId);
-    player.inventory[itemId]=(player.inventory[itemId]||0)+cursorItem.count;
+    const existingCount=getSlotCount(kind,index);
+    setSlotItem(kind,index,itemId,cursorItem.count);
     cursorItem={id:existingId,count:existingCount};
-    player.inventory[existingId]=0;
     return true;
   }
-  const already=player.inventory[itemId]||0;
+  const already=existingId?getSlotCount(kind,index):0;
   const limit=itemStackLimit(itemId);
   let amount=portion==='half'?Math.ceil(cursorItem.count/2):cursorItem.count;
   amount=Math.min(amount,limit-already,cursorItem.count);
   if(amount<=0)return false;
-  let targetIndex=index;
-  if(!existingId){
-    const homeIndex=findSlotIndexForItem(kind,itemId);
-    if(homeIndex!==-1&&homeIndex!==index)targetIndex=homeIndex; // merge into the item's existing slot
-  }
-  setSlotItem(kind,targetIndex,itemId);
-  player.inventory[itemId]=already+amount;
+  setSlotItem(kind,index,itemId,already+amount);
   cursorItem.count-=amount;
   if(cursorItem.count<=0)cursorItem=null;
   return true;
@@ -786,17 +871,18 @@ function handleSlotDouble(kind,index){
   }
   if(!cursorItem)return;
   const itemId=cursorItem.id,limit=itemStackLimit(itemId);
-  for(const [k,arr] of [['carry',hotbarSlots],['hand',handSlots]]){
+  for(const arr of [hotbarSlots,handSlots]){
     for(let i=0;i<arr.length&&cursorItem.count<limit;i++){
-      if(arr[i]!==itemId)continue;
-      const have=player.inventory[itemId]||0;
-      const take=Math.min(have,limit-cursorItem.count);
+      const s=arr[i];
+      if(!s||s.id!==itemId)continue;
+      const take=Math.min(s.count,limit-cursorItem.count);
       if(take<=0)continue;
       cursorItem.count+=take;
-      player.inventory[itemId]=have-take;
-      if(player.inventory[itemId]<=0)arr[i]='';
+      s.count-=take;
+      if(s.count<=0)arr[i]=null;
     }
   }
+  syncInventoryTotals();
 }
 function handleSlotShiftClick(kind,index){
   const itemId=getSlotItem(kind,index);
@@ -819,10 +905,11 @@ function refreshInventoryUI(){
 
 // ---- Containers: storage chests and campfire fuel ("furnace") ----
 function moveItemToContainer(kind,index,itemId){
+  const slotCount=getSlotCount(kind,index);
+  if(slotCount<=0)return;
   if(openContainer.type==='chest'){
     const chest=openContainer.ref;
-    let amount=player.inventory[itemId]||0;
-    if(amount<=0)return;
+    let amount=slotCount;
     const limit=itemStackLimit(itemId);
     let moved=0;
     for(let i=0;i<chest.slots.length&&amount>0;i++){
@@ -833,15 +920,13 @@ function moveItemToContainer(kind,index,itemId){
       if(!chest.slots[i]){const take=Math.min(amount,limit);chest.slots[i]={id:itemId,count:take};amount-=take;moved+=take}
     }
     if(moved<=0){createFloatingText(chest.x,chest.y-.5,'Chest is full','#f66');return}
-    player.inventory[itemId]-=moved;
-    if(player.inventory[itemId]<=0){player.inventory[itemId]=0;setSlotItem(kind,index,'')}
+    const remaining=slotCount-moved;
+    setSlotItem(kind,index,remaining>0?itemId:'',remaining>0?remaining:undefined);
     createFloatingText(player.x,player.y-1,`→ Chest: ${itemDisplayName(itemId)} x${moved}`,'#8ff');
   }else if(openContainer.type==='furnace'){
     if(itemId!=='thickStick'){createFloatingText(player.x,player.y-1,'Furnace only takes sticks as fuel','#f66');return}
-    const cf=openContainer.ref,amount=player.inventory.thickStick||0;
-    if(amount<=0)return;
+    const cf=openContainer.ref,amount=slotCount;
     cf.fuelSlot.count+=amount;
-    player.inventory.thickStick=0;
     setSlotItem(kind,index,'');
     createFloatingText(cf.x,cf.y-1,`→ Furnace fuel +${amount}`,'#ffb347');
   }
@@ -892,16 +977,18 @@ function closeInventoryScreen(){
   if(cursorItem){
     // Never destroy a held item just because the panel closed — return it home.
     const itemId=cursorItem.id,amount=cursorItem.count;
-    player.inventory[itemId]=(player.inventory[itemId]||0)+amount;
-    if(kind_for_item(itemId)==='hand'){
-      if(handSlots.indexOf(itemId)===-1){const empty=handSlots.indexOf('');if(empty!==-1)handSlots[empty]=itemId}
-    }else if(itemId==='armor'){
-      utilitySlots.armor='armor';
-    }else if(itemId==='basket'){
-      utilitySlots.backpack='basket';
-    }else{
-      ensureCarrySlots();
-      if(hotbarSlots.indexOf(itemId)===-1){const empty=hotbarSlots.indexOf('');if(empty!==-1)hotbarSlots[empty]=itemId}
+    if(!addItem(itemId,amount)){
+      // Shouldn't normally happen (the item came from a slot that had room),
+      // but guard against item loss if capacity somehow changed meanwhile.
+      const isHand=HAND_ITEMS.has(itemId);
+      const arr=isHand?handSlots:hotbarSlots;
+      if(!isHand)ensureCarrySlots();
+      let idx=arr.findIndex(s=>s&&s.id===itemId);
+      if(idx===-1)idx=arr.findIndex(s=>!s);
+      if(idx===-1)idx=0;
+      const existing=arr[idx];
+      arr[idx]={id:itemId,count:(existing&&existing.id===itemId?existing.count:0)+amount};
+      syncInventoryTotals();
     }
     cursorItem=null;
     renderCursorItemDisplay();
@@ -970,7 +1057,7 @@ addEventListener('keydown',e=>{
 // and works identically for mouse and touch.
 inventoryHotbarGrid.addEventListener('contextmenu',e=>e.preventDefault());
 let lastSlotClick={kind:null,index:null,time:0};
-let slotDrag=null; // {pointerId,kind,index,itemId,startX,startY,dragging,slotEl}
+let slotDrag=null; // {pointerId,kind,index,itemId,count,startX,startY,dragging,slotEl}
 const SLOT_DRAG_THRESHOLD=8; // px of pointer movement before a press counts as a drag
 
 inventoryHotbarGrid.addEventListener('pointerdown',e=>{
@@ -986,7 +1073,7 @@ inventoryHotbarGrid.addEventListener('pointerdown',e=>{
   const itemId=getSlotItem(kind,index);
   // Don't act yet — wait for pointerup/pointermove to know if this is a
   // tap (click/double-click) or a drag.
-  slotDrag={pointerId:e.pointerId,kind,index,itemId,startX:e.clientX,startY:e.clientY,dragging:false,slotEl};
+  slotDrag={pointerId:e.pointerId,kind,index,itemId,count:getSlotCount(kind,index),startX:e.clientX,startY:e.clientY,dragging:false,slotEl};
   if(itemId){try{slotEl.setPointerCapture(e.pointerId)}catch(_){}}
 });
 
@@ -999,7 +1086,7 @@ inventoryHotbarGrid.addEventListener('pointermove',e=>{
     slotDrag.slotEl.classList.add('dragging');
     const recipe=RECIPES.find(r=>r.id===slotDrag.itemId);
     cursorItemDisplay.style.display='flex';
-    cursorItemDisplay.innerHTML=`${itemIconSVG(ITEM_ICON_KIND[slotDrag.itemId]||'gem',recipe?recipe.icon:null)}<span class="mc-count">${player.inventory[slotDrag.itemId]||''}</span>`;
+    cursorItemDisplay.innerHTML=`${itemIconSVG(ITEM_ICON_KIND[slotDrag.itemId]||'gem',recipe?recipe.icon:null)}<span class="mc-count">${slotDrag.count||''}</span>`;
   }
   cursorItemDisplay.style.left=(e.clientX-20)+'px';
   cursorItemDisplay.style.top=(e.clientY-20)+'px';
