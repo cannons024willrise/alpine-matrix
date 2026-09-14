@@ -953,7 +953,10 @@ function openContainerPanel(container){
   panelTitle.textContent=container.type==='crate'?'STORAGE CRATE':'FURNACE';
   refreshInventoryUI();
 }
-function closeContainerPanel(){openContainer=null;renderContainerPanel()}
+function closeContainerPanel(){
+  openContainer=null;
+  renderContainerPanel();
+}
 function renderContainerPanel(){
   const wrap=document.getElementById('containerPanel');
   if(!wrap)return;
@@ -973,7 +976,7 @@ function renderContainerPanel(){
   }
 }
 
-function closeInventoryScreen(){
+function closeInventoryScreen(fromProximity=false){
   if(cursorItem){
     // Never destroy a held item just because the panel closed — return it home.
     const itemId=cursorItem.id,amount=cursorItem.count;
@@ -1023,7 +1026,10 @@ craftDetail.addEventListener('click',e=>{
   craftItem(selectedRecipeId,e.shiftKey);
 });
 document.getElementById('stageTabsWrap').addEventListener('click',e=>{const tab=e.target.closest('[data-stage]');if(!tab)return;activeStage=tab.dataset.stage;selectedRecipeId=null;renderCraftPanel()});
-document.getElementById('inventoryClose').addEventListener('click',closeInventoryScreen);
+document.getElementById('inventoryClose').addEventListener('click',e=>{
+  closeInventoryScreen();
+  e.stopPropagation();
+});
 document.getElementById('craftButton').addEventListener('pointerdown',e=>{toggleCraftPanel();e.preventDefault()});
 let autoOpenedCrate=null;
 function getNearestCrate(maxDistance=3.5){
@@ -1038,34 +1044,57 @@ function getNearestCrate(maxDistance=3.5){
 function updateNearbyCrate(){
   const nearbyCrate=getNearestCrate(3.5);
 
-  // Crate storage is proximity-bound: while the player remains within range,
-  // the crate inventory must stay open. Leaving range closes it automatically.
+  // The nearest crate is authoritative while the player is in range:
+  // its storage stays open and switches automatically when another crate
+  // becomes the nearest one. Leaving all crate ranges closes crate storage.
   if(!nearbyCrate){
-    if(autoOpenedCrate && openContainer && openContainer.type==='crate' && openContainer.ref===autoOpenedCrate){
-      closeInventoryScreen();
-    }
     autoOpenedCrate=null;
+    if(openContainer && openContainer.type==='crate'){
+      closeInventoryScreen(true);
+    }
     return;
   }
 
+  const crateChanged=autoOpenedCrate!==nearbyCrate;
   autoOpenedCrate=nearbyCrate;
-  if(!inventoryScreen.classList.contains('open') ||
-     !openContainer ||
-     openContainer.type!=='crate' ||
-     openContainer.ref!==nearbyCrate){
+
+  if(!openContainer || openContainer.type!=='crate' || openContainer.ref!==nearbyCrate || crateChanged){
     openContainerPanel({type:'crate',ref:nearbyCrate});
   }
 }
 
 addEventListener('keydown',e=>{
-  if((e.key==='e'||e.key==='E')&&!e.repeat){
-    const nearbyCrate=getNearestCrate();
-    if(nearbyCrate){
-      openContainerPanel({type:'crate',ref:nearbyCrate});
-    }else{
-      toggleCraftPanel();
-    }
+  if(e.code==='KeyE'&&!e.repeat){
     e.preventDefault();
+    if(inventoryScreen.classList.contains('open')){
+      // E always closes the integrated inventory. When a crate is active,
+      // keep the current crate context intact so nearest-crate behavior is
+      // unchanged; do not add any crate-suppression state.
+      if(openContainer&&openContainer.type==='crate'){
+        if(cursorItem){
+          const itemId=cursorItem.id,amount=cursorItem.count;
+          if(!addItem(itemId,amount)){
+            const isHand=HAND_ITEMS.has(itemId);
+            const arr=isHand?handSlots:hotbarSlots;
+            if(!isHand)ensureCarrySlots();
+            let idx=arr.findIndex(s=>s&&s.id===itemId);
+            if(idx===-1)idx=arr.findIndex(s=>!s);
+            if(idx===-1)idx=0;
+            const existing=arr[idx];
+            arr[idx]={id:itemId,count:(existing&&existing.id===itemId?existing.count:0)+amount};
+            syncInventoryTotals();
+          }
+          cursorItem=null;
+          renderCursorItemDisplay();
+        }
+        inventoryScreen.classList.remove('open');
+      }else{
+        closeInventoryScreen();
+      }
+    }else{
+      openCraftPanel();
+    }
+    return;
   }
   if((e.key==='c'||e.key==='C')&&!e.repeat){toggleCraftPanel();e.preventDefault()}
   if(e.key==='Escape')closeInventoryScreen();
