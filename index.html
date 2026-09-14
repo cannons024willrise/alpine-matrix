@@ -1575,6 +1575,44 @@ const px=Math.floor((player.x-cx+cols/2)*TILE),py=Math.floor((player.y-cy+rows/2
   const sp=currentPlayerSprite();
   if(sp.complete&&sp.naturalWidth)ctx.drawImage(sp,drawX,drawY,size,size);
   else{ctx.fillStyle='#0f0';ctx.fillRect(px+6,py+6,TILE-12,TILE-12)}
+
+  // Held-item visual: show the currently selected hand item in the player's
+  // dominant/right hand, layered in front of the sprite.
+  const held=handSlots[selectedHandSlot];
+  if(held){
+    const hx=px+TILE/2+10,hy=py+TILE/2+7;
+    const ang=player.facingAngle;
+    ctx.save();
+    ctx.translate(hx,hy);
+    ctx.rotate(ang-0.15);
+    ctx.lineCap='round';ctx.lineJoin='round';
+    if(held.id==='spear'||held.id==='shaft'||held.id==='carvedShaft'){
+      ctx.strokeStyle='#352416';ctx.lineWidth=2.2;
+      ctx.beginPath();ctx.moveTo(-2,8);ctx.lineTo(16,-10);ctx.stroke();
+      ctx.strokeStyle='#664326';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(0,7);ctx.lineTo(15,-9);ctx.stroke();
+      if(held.id!=='carvedShaft'){
+        ctx.fillStyle='#cfd3d0';
+        ctx.beginPath();ctx.moveTo(16,-10);ctx.lineTo(22,-13);ctx.lineTo(18,-7);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#eef1ef';
+        ctx.beginPath();ctx.moveTo(16,-10);ctx.lineTo(22,-13);ctx.lineTo(19,-10);ctx.closePath();ctx.fill();
+      }
+    }else if(held.id==='stoneAxe'){
+      ctx.strokeStyle='#352416';ctx.lineWidth=2.5;
+      ctx.beginPath();ctx.moveTo(0,8);ctx.lineTo(9,-7);ctx.stroke();
+      ctx.fillStyle='#8a8880';ctx.strokeStyle='#373737';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(7,-9);ctx.lineTo(18,-8);ctx.lineTo(15,-2);ctx.lineTo(8,-3);ctx.closePath();ctx.fill();ctx.stroke();
+    }else if(held.id==='flintKnife'){
+      ctx.strokeStyle='#352416';ctx.lineWidth=2.2;
+      ctx.beginPath();ctx.moveTo(0,7);ctx.lineTo(8,-2);ctx.stroke();
+      ctx.fillStyle='#cfd3d0';ctx.strokeStyle='#555';ctx.lineWidth=.8;
+      ctx.beginPath();ctx.moveTo(7,-3);ctx.lineTo(14,-7);ctx.lineTo(15,-2);ctx.lineTo(10,0);ctx.closePath();ctx.fill();ctx.stroke();
+    }else if(held.id==='knappedFlint'){
+      ctx.fillStyle='#cfd3d0';ctx.strokeStyle='#555';ctx.lineWidth=.8;
+      ctx.beginPath();ctx.moveTo(8,-6);ctx.lineTo(15,-8);ctx.lineTo(17,-2);ctx.lineTo(10,0);ctx.closePath();ctx.fill();ctx.stroke();
+    }
+    ctx.restore();
+  }
 }});
 for(const campfire of player.campfires){const csx=Math.floor((campfire.x-cx+cols/2)*TILE),csy=Math.floor((campfire.y-cy+rows/2)*TILE);draw.push({y:campfire.y,render:()=>{ctx.fillStyle='rgba(232,160,64,.4)';ctx.beginPath();ctx.arc(csx,csy,TILE*1.2,0,Math.PI*2);ctx.fill();const flame=Math.sin(time*3+campfire.fuel)*.5+.5;ctx.fillStyle=`rgba(255,140,0,${.6+flame*.2})`;ctx.beginPath();ctx.arc(csx,csy-4,6,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(255,200,0,.8)';ctx.beginPath();ctx.arc(csx,csy-2,3,0,Math.PI*2);ctx.fill();ctx.fillStyle='#ccc';ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(`⚡${Math.ceil(campfire.fuel)}${campfire.fuelSlot&&campfire.fuelSlot.count>0?' +'+campfire.fuelSlot.count:''}`,csx,csy+TILE)}})}
 for(const crate of containers){const csx=Math.floor((crate.x-cx+cols/2)*TILE),csy=Math.floor((crate.y-cy+rows/2)*TILE);draw.push({y:crate.y,render:()=>{ctx.fillStyle='rgba(0,0,0,.28)';ctx.beginPath();ctx.ellipse(csx,csy+9,15,5,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#8a5a2b';ctx.fillRect(csx-13,csy-4,26,16);ctx.fillStyle='#6d4321';ctx.fillRect(csx-13,csy-11,26,8);ctx.fillStyle='#e0b060';ctx.fillRect(csx-2,csy-3,4,4);ctx.strokeStyle='#3a2410';ctx.lineWidth=1;ctx.strokeRect(csx-13,csy-11,26,23);const filled=crate.slots.filter(Boolean).length;if(filled>0){ctx.fillStyle='#ccc';ctx.font='bold 10px monospace';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(`${filled}/${CRATE_SLOT_COUNT}`,csx,csy+TILE-4)}}})}
