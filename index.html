@@ -1149,6 +1149,12 @@ function withdrawFuel(amount){
   cf.fuelSlot.count-=take;
 }
 function openContainerPanel(container){
+  // Explicitly opening a crate (world click/proximity) clears any prior
+  // dismissal lock. The player has intentionally reopened this container.
+  if(container&&container.type==='crate'){
+    crateAutoOpenSuppressed=false;
+    autoOpenedCrate=container.ref;
+  }
   openContainer=container;
   inventoryScreen.classList.add('open');
   panelTitle.textContent=container.type==='crate'?'STORAGE CRATE':'FURNACE';
@@ -1178,6 +1184,7 @@ function renderContainerPanel(){
 }
 
 function closeInventoryScreen(fromProximity=false){
+  const closingCrateContext=openContainer&&openContainer.type==='crate';
   if(cursorItem){
     // Never destroy a held item just because the panel closed — return it home.
     const itemId=cursorItem.id,amount=cursorItem.count;
@@ -1196,6 +1203,11 @@ function closeInventoryScreen(fromProximity=false){
     }
     cursorItem=null;
     renderCursorItemDisplay();
+  }
+  if(closingCrateContext || !fromProximity){
+    // Remember that the player explicitly dismissed the nearby crate/inventory
+    // so the per-frame proximity check cannot reopen it immediately.
+    suppressNearbyCrateAutoOpen();
   }
   openContainer=null;
   inventoryScreen.classList.remove('open');
@@ -1241,6 +1253,7 @@ document.getElementById('inventoryClose').addEventListener('click',e=>{
 });
 document.getElementById('craftButton').addEventListener('pointerdown',e=>{toggleCraftPanel();e.preventDefault()});
 let autoOpenedCrate=null;
+let crateAutoOpenSuppressed=false;
 function getNearestCrate(maxDistance=3.5){
   let best=null,bestDist=maxDistance;
   for(const crate of containers){
@@ -1250,18 +1263,36 @@ function getNearestCrate(maxDistance=3.5){
   return best;
 }
 
+function suppressNearbyCrateAutoOpen(){
+  const nearbyCrate=getNearestCrate(3.5);
+  autoOpenedCrate=nearbyCrate;
+  crateAutoOpenSuppressed=!!nearbyCrate;
+}
+
 function updateNearbyCrate(){
+  // Never let proximity logic reopen a crate while the integrated inventory
+  // is intentionally open. The inventory must be closable with X/E/Escape/C.
+  if(inventoryScreen.classList.contains('open'))return;
+
   const nearbyCrate=getNearestCrate(3.5);
 
-  // The nearest crate is authoritative while the player is in range:
-  // its storage stays open and switches automatically when another crate
-  // becomes the nearest one. Leaving all crate ranges closes crate storage.
+  // Once the player leaves all crate ranges, clear the dismissal lock so a
+  // crate can auto-open normally the next time the player approaches one.
   if(!nearbyCrate){
     autoOpenedCrate=null;
+    crateAutoOpenSuppressed=false;
     if(openContainer && openContainer.type==='crate'){
       closeInventoryScreen(true);
     }
     return;
+  }
+
+  // Closing a nearby crate/inventory must not immediately reopen the same
+  // crate on the next animation frame. A different nearby crate may still
+  // become authoritative and open normally.
+  if(crateAutoOpenSuppressed){
+    if(autoOpenedCrate===nearbyCrate)return;
+    crateAutoOpenSuppressed=false;
   }
 
   const crateChanged=autoOpenedCrate!==nearbyCrate;
@@ -1297,6 +1328,7 @@ addEventListener('keydown',e=>{
           cursorItem=null;
           renderCursorItemDisplay();
         }
+        suppressNearbyCrateAutoOpen();
         inventoryScreen.classList.remove('open');
       }else{
         closeInventoryScreen();
@@ -1711,6 +1743,7 @@ addEventListener('click',e=>{
   if(containerHit){
     const dist=Math.hypot(containerHit.ref.x-player.x,containerHit.ref.y-player.y);
     if(dist<=3.5){
+      crateAutoOpenSuppressed=false;
       openContainerPanel(containerHit.kind==='crate'?{type:'crate',ref:containerHit.ref}:{type:'furnace',ref:containerHit.ref});
     }else{
       createFloatingText(player.x,player.y-1,'Move closer to open','#ffd76a');
@@ -1762,7 +1795,8 @@ canvas.addEventListener('pointerdown',e=>{
     if(containerHit){
       const dist=Math.hypot(containerHit.ref.x-player.x,containerHit.ref.y-player.y);
       if(dist<=3.5){
-        openContainerPanel(containerHit.kind==='crate'?{type:'crate',ref:containerHit.ref}:{type:'furnace',ref:containerHit.ref});
+        crateAutoOpenSuppressed=false;
+      openContainerPanel(containerHit.kind==='crate'?{type:'crate',ref:containerHit.ref}:{type:'furnace',ref:containerHit.ref});
       }else{
         createFloatingText(player.x,player.y-1,'Move closer to open','#ffd76a');
       }
