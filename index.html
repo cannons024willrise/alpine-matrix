@@ -119,6 +119,22 @@ canvas{filter:saturate(1.08) contrast(1.04)}
 #hud>div{box-shadow:0 8px 24px rgba(0,0,0,.5)}
 #hotbar{box-shadow:0 -6px 22px rgba(0,0,0,.45)}
 .mc-btn{transition:filter .08s ease}
+
+/* ---- Minecraft-style developer/admin console ---- */
+#adminConsole{display:none;position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.66);align-items:center;justify-content:center;padding:16px;font-family:monospace}
+#adminConsole.open{display:flex}
+#adminConsoleInner{width:min(760px,94vw);max-height:min(78vh,640px);display:flex;flex-direction:column;background:#161616;border:2px solid #8a8a8a;box-shadow:0 0 0 3px #000,0 18px 50px rgba(0,0,0,.7);color:#ddd}
+#adminConsoleTitle{background:#2f2f2f;color:#fff;padding:10px 12px;font:10px/1.2 'Press Start 2P',monospace;letter-spacing:1px;display:flex;align-items:center;justify-content:space-between}
+#adminConsoleTitle span:last-child{font:9px monospace;color:#9f9f9f;letter-spacing:0}
+#adminConsoleOutput{flex:1 1 auto;min-height:220px;max-height:52vh;overflow:auto;padding:10px 12px;background:#0b0b0b;font:12px/1.55 monospace;white-space:pre-wrap;word-break:break-word}
+.admin-line{margin:0 0 4px}.admin-line.cmd{color:#e6e6e6}.admin-line.ok{color:#8fda8f}.admin-line.warn{color:#ffd76a}.admin-line.err{color:#ff8a8a}.admin-line.info{color:#9ecbff}
+#adminConsoleForm{display:flex;gap:8px;padding:10px;background:#202020;border-top:2px solid #000}
+#adminPrompt{color:#7dff7d;font:bold 13px monospace;align-self:center}
+#adminCommandInput{flex:1;min-width:0;background:#050505;border:1px solid #777;color:#fff;outline:none;padding:9px 10px;font:13px monospace;box-shadow:inset 1px 1px #000}
+#adminCommandInput:focus{border-color:#0f0}
+#adminConsoleClose{width:auto;padding:9px 12px;font-size:9px}
+#adminHint{padding:7px 12px;background:#252525;border-top:1px solid #444;color:#9b9b9b;font-size:10px}
+@media(max-width:620px){#adminConsole{padding:8px}#adminConsoleInner{width:96vw;max-height:84vh}#adminConsoleOutput{max-height:58vh;min-height:180px}#adminConsoleForm{gap:5px}#adminConsoleClose{padding:9px 8px}}
 </style>
 </head>
 <body>
@@ -129,6 +145,19 @@ canvas{filter:saturate(1.08) contrast(1.04)}
 <div id="craftHint">[C] Inventory | [Click/Right-Click] Full/Half Stack | [Drag] Move Item | [Shift+Click] Container | [`] Creative | [1-7] Slots</div>
 <div id="hotbar"></div>
 <div id="cursorItemDisplay"></div>
+
+<div id="adminConsole" aria-hidden="true">
+  <div id="adminConsoleInner">
+    <div id="adminConsoleTitle"><span>DEV CONSOLE</span><span>LOCAL ADMIN • Press / to open</span></div>
+    <div id="adminConsoleOutput"></div>
+    <form id="adminConsoleForm" autocomplete="off">
+      <span id="adminPrompt">&gt;</span>
+      <input id="adminCommandInput" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Developer command">
+      <button id="adminConsoleClose" class="mc-btn" type="button">CLOSE</button>
+    </form>
+    <div id="adminHint">Commands: /help  /time  /weather  /gamerule  /gamemode  /give  /clear  /tp  /heal  /kill  /spawn  /speed  /daylength</div>
+  </div>
+</div>
 
 <div id="inventoryScreen">
   <div id="inventoryInner" class="mc-panel">
@@ -207,7 +236,7 @@ let cameraShake={intensity:0,duration:0};
 function addCameraShake(intensity,duration){cameraShake.intensity=Math.max(cameraShake.intensity,intensity);cameraShake.duration=Math.max(cameraShake.duration,duration)}
 
 // ==== Day/Night ambient lighting ====
-const DAY_LENGTH_MS=10*60*1000;
+let DAY_LENGTH_MS=10*60*1000;
 let dayClock=0.30;
 const DAY_STOPS=[
  {t:0.00,amb:'#151a3d',warm:0.00,dark:0.68},
@@ -230,7 +259,22 @@ function sampleDayColor(t){
   }
   return{amb:DAY_STOPS[0].amb,warm:DAY_STOPS[0].warm,dark:DAY_STOPS[0].dark};
 }
-function updateDayClock(dtMs){dayClock=(dayClock+dtMs/DAY_LENGTH_MS)%1}
+const adminGameRules={
+  doDaylightCycle:true,
+  doWeatherCycle:true,
+  doMobSpawning:true,
+  keepInventory:false
+};
+let weatherState='clear';
+let weatherTimerMs=0;
+let adminMobSpawnTimerMs=0;
+let adminRainSeed=Math.random()*100000;
+
+function updateDayClock(dtMs){
+  if(adminGameRules.doDaylightCycle){
+    dayClock=(dayClock+dtMs/DAY_LENGTH_MS)%1;
+  }
+}
 function sunAngleFactor(){const c=sampleDayColor(dayClock);return Math.max(0,1-c.dark/0.68)}
 function dayPhaseLabel(){const t=dayClock;if(t<0.20||t>=0.84)return'🌙 Night';if(t<0.30)return'🌅 Dawn';if(t<0.68)return'☀ Day';return'🌇 Dusk'}
 
@@ -1104,6 +1148,314 @@ function refreshInventoryUI(){
   renderContainerPanel();
 }
 
+// ---- Developer/admin console ----
+const adminConsole=document.getElementById('adminConsole');
+const adminConsoleOutput=document.getElementById('adminConsoleOutput');
+const adminCommandInput=document.getElementById('adminCommandInput');
+const adminConsoleForm=document.getElementById('adminConsoleForm');
+const adminConsoleClose=document.getElementById('adminConsoleClose');
+let adminConsoleOpen=false;
+const adminCommandHistory=[];
+let adminHistoryIndex=-1;
+
+function adminLog(text,kind='info'){
+  if(!adminConsoleOutput)return;
+  const line=document.createElement('div');
+  line.className='admin-line '+kind;
+  line.textContent=text;
+  adminConsoleOutput.appendChild(line);
+  while(adminConsoleOutput.children.length>160)adminConsoleOutput.removeChild(adminConsoleOutput.firstChild);
+  adminConsoleOutput.scrollTop=adminConsoleOutput.scrollHeight;
+}
+
+function setAdminConsoleOpen(open){
+  adminConsoleOpen=!!open;
+  adminConsole.classList.toggle('open',adminConsoleOpen);
+  adminConsole.setAttribute('aria-hidden',adminConsoleOpen?'false':'true');
+  if(adminConsoleOpen){
+    adminHistoryIndex=-1;
+    adminCommandInput.focus();
+    adminCommandInput.select();
+    if(!adminConsoleOutput.children.length){
+      adminLog('Alpine Matrix developer console. Type /help for commands.','info');
+    }
+  }
+}
+
+function setDayClockFromDevTicks(value){
+  let t=((Number(value)%24000)+24000)%24000;
+  // Minecraft-style anchors mapped onto Alpine Matrix's own visual cycle:
+  // 0=sunrise, 6000=noon, 12000=sunset, 18000=midnight.
+  const anchors=[[0,.26],[6000,.50],[12000,.75],[18000,.00],[24000,.26]];
+  for(let i=0;i<anchors.length-1;i++){
+    const a=anchors[i],b=anchors[i+1];
+    if(t>=a[0]&&t<=b[0]){
+      const f=(t-a[0])/(b[0]-a[0]);
+      dayClock=(a[1]+(b[1]-a[1])*f+1)%1;
+      return;
+    }
+  }
+}
+
+function devTicksNow(){
+  const anchors=[[0,.26],[6000,.50],[12000,.75],[18000,.00],[24000,.26]];
+  let bestTick=0,bestDist=Infinity;
+  for(let i=0;i<anchors.length-1;i++){
+    const a=anchors[i],b=anchors[i+1];
+    let f=(dayClock-a[1])/(b[1]-a[1]);
+    if(!Number.isFinite(f))continue;
+    f=Math.max(0,Math.min(1,f));
+    const tick=a[0]+(b[0]-a[0])*f;
+    const dist=Math.abs((a[1]+(b[1]-a[1])*f)-dayClock);
+    if(dist<bestDist){bestDist=dist;bestTick=tick;}
+  }
+  return Math.round(bestTick)%24000;
+}
+
+function devSetTime(value){
+  const v=String(value||'').toLowerCase();
+  if(['day','morning'].includes(v)){setDayClockFromDevTicks(1000);return 'Time set to day.';}
+  if(v==='noon'){setDayClockFromDevTicks(6000);return 'Time set to noon.';}
+  if(['sunrise','dawn'].includes(v)){setDayClockFromDevTicks(0);return 'Time set to sunrise.';}
+  if(['sunset','dusk'].includes(v)){setDayClockFromDevTicks(12000);return 'Time set to sunset.';}
+  if(['night','midnight'].includes(v)){setDayClockFromDevTicks(18000);return 'Time set to night.';}
+  if(/^[-+]?\d+(?:\.\d+)?$/.test(v)){
+    const n=Number(v);
+    if(n<0||n>24000)return 'Time must be between 0 and 24000.';
+    setDayClockFromDevTicks(n);
+    return `Time set to ${Math.round(n)}.`;
+  }
+  return 'Usage: /time set <day|noon|sunrise|sunset|night|0-24000>.';
+}
+
+function devGiveItem(id,amount){
+  const itemId=String(id||'').trim();
+  const n=Math.max(1,Math.floor(Number(amount)||1));
+  if(!itemId)return false;
+  if(!(itemId in STACK_LIMITS) && !RECIPES.some(r=>r.id===itemId))return false;
+  let added=0;
+  for(let i=0;i<n;i++){
+    if(addItem(itemId,1))added++; else break;
+  }
+  return added;
+}
+
+function devClearInventory(itemId=''){
+  if(itemId){
+    const total=totalOf(itemId);
+    if(total>0)removeItem(itemId,total);
+    return total;
+  }
+  let removed=0;
+  for(const arr of [hotbarSlots,handSlots]){
+    for(let i=0;i<arr.length;i++){
+      if(arr[i]){removed+=arr[i].count;arr[i]=null;}
+    }
+  }
+  if(utilitySlots.armor){removed++;utilitySlots.armor='';}
+  if(utilitySlots.backpack){removed++;utilitySlots.backpack='';}
+  syncInventoryTotals();
+  renderHotbar();renderInventoryHotbar();
+  return removed;
+}
+
+function devSpawn(type,count=1){
+  const n=Math.max(1,Math.min(50,Math.floor(Number(count)||1)));
+  let spawned=0;
+  for(let i=0;i<n;i++){
+    if(type==='zombie'){
+      const a=Math.random()*Math.PI*2,d=3+Math.random()*5;
+      createEntity('zombie',player.x+Math.cos(a)*d,player.y+Math.sin(a)*d);
+      spawned++;
+    }else if(type==='stick'){
+      createEntity('stick',player.x+(Math.random()-.5)*4,player.y+(Math.random()-.5)*4,{radius:.16,seedVal:Math.floor(Math.random()*100000),length:.72,angle:(Math.random()-.5)*Math.PI,thick:true,collected:false});
+      spawned++;
+    }else if(type==='flint'){
+      createEntity('flint',player.x+(Math.random()-.5)*4,player.y+(Math.random()-.5)*4,{radius:.13,seedVal:Math.floor(Math.random()*100000),sharp:true,collected:false});
+      spawned++;
+    }else if(type==='charcoal'){
+      createEntity('charcoal',player.x+(Math.random()-.5)*4,player.y+(Math.random()-.5)*4,{radius:.12,seedVal:Math.floor(Math.random()*100000),collected:false});
+      spawned++;
+    }else if(type==='bigpebble'||type==='pebble'){
+      createEntity('bigPebble',player.x+(Math.random()-.5)*4,player.y+(Math.random()-.5)*4,{radius:.18,tone:Math.random(),light:Math.random(),seed:Math.floor(Math.random()*100000),collected:false});
+      spawned++;
+    }
+  }
+  return spawned;
+}
+
+function runAdminCommand(raw){
+  const line=String(raw||'').trim();
+  if(!line)return;
+  adminLog('> '+line,'cmd');
+  const tokens=line.replace(/^\s*\//,'').trim().split(/\s+/);
+  const command=(tokens.shift()||'').toLowerCase();
+  const args=tokens;
+
+  if(command==='help'||command==='?'){
+    adminLog('/help — show commands');
+    adminLog('/time set <day|noon|sunrise|sunset|night|0-24000> | /time query');
+    adminLog('/weather <clear|rain> [seconds]');
+    adminLog('/gamerule <doDaylightCycle|doWeatherCycle|doMobSpawning|keepInventory> <true|false>');
+    adminLog('/gamemode <survival|creative>');
+    adminLog('/give <item> [amount] | /clear [item]');
+    adminLog('/tp <x> <y> | /heal [amount] | /kill');
+    adminLog('/spawn <zombie|stick|flint|charcoal|pebble> [amount]');
+    adminLog('/speed <multiplier> | /daylength <seconds>');
+    return;
+  }
+
+  if(command==='time'){
+    const sub=(args.shift()||'query').toLowerCase();
+    if(sub==='query'){
+      adminLog(`Game time: ${devTicksNow()} / 24000 • ${dayPhaseLabel()}`,'info');
+      return;
+    }
+    if(sub==='set'){
+      const msg=devSetTime(args[0]);
+      adminLog(msg,msg.startsWith('Usage')||msg.includes('must be')?'err':'ok');
+      return;
+    }
+    adminLog('Usage: /time set <value> or /time query','err');
+    return;
+  }
+
+  if(command==='weather'){
+    const value=(args[0]||'clear').toLowerCase();
+    if(value==='clear'){
+      weatherState='clear';weatherTimerMs=0;adminLog('Weather cleared.','ok');return;
+    }
+    if(value==='rain'){
+      weatherState='rain';
+      const seconds=Math.max(0,Number(args[1])||0);
+      weatherTimerMs=seconds>0?seconds*1000:0;
+      adminRainSeed=Math.random()*100000;
+      adminLog(seconds>0?`Rain started for ${seconds}s.`:'Rain started.','ok');
+      return;
+    }
+    adminLog('Usage: /weather <clear|rain> [seconds]','err');
+    return;
+  }
+
+  if(command==='gamerule'){
+    const rule=args[0],value=args[1];
+    if(!rule){
+      adminLog(`Rules: doDaylightCycle=${adminGameRules.doDaylightCycle}, doWeatherCycle=${adminGameRules.doWeatherCycle}, doMobSpawning=${adminGameRules.doMobSpawning}, keepInventory=${adminGameRules.keepInventory}`,'info');
+      return;
+    }
+    if(!(rule in adminGameRules)){adminLog('Unknown gamerule.','err');return;}
+    if(value===undefined){adminLog(`${rule} = ${adminGameRules[rule]}`,'info');return;}
+    const normalized=value.toLowerCase();
+    if(normalized!=='true'&&normalized!=='false'){adminLog('Value must be true or false.','err');return;}
+    adminGameRules[rule]=normalized==='true';
+    adminLog(`${rule} = ${adminGameRules[rule]}`,'ok');
+    return;
+  }
+
+  if(command==='gamemode'){
+    const mode=(args[0]||'').toLowerCase();
+    if(mode==='creative'||mode==='1'){
+      creativeMode=true;creativeIndicator.style.display='block';adminLog('Gamemode set to creative.','ok');return;
+    }
+    if(mode==='survival'||mode==='0'){
+      creativeMode=false;creativeIndicator.style.display='none';adminLog('Gamemode set to survival.','ok');return;
+    }
+    adminLog('Usage: /gamemode <survival|creative>','err');return;
+  }
+
+  if(command==='give'){
+    const item=args[0],amount=args[1]||1;
+    const added=devGiveItem(item,amount);
+    if(added>0)adminLog(`Gave ${item} x${added}.`,'ok');
+    else adminLog(`Could not give ${item}. Check the item name or available slots.`,'err');
+    return;
+  }
+
+  if(command==='clear'){
+    const removed=devClearInventory(args[0]||'');
+    adminLog(args[0]?`Cleared ${args[0]} x${removed}.`:`Cleared ${removed} inventory items.`,'ok');
+    return;
+  }
+
+  if(command==='tp'||command==='teleport'){
+    const x=Number(args[0]),y=Number(args[1]);
+    if(!Number.isFinite(x)||!Number.isFinite(y)){adminLog('Usage: /tp <x> <y>','err');return;}
+    player.x=x;player.y=y;player.target=null;adminLog(`Teleported to ${x}, ${y}.`,'ok');return;
+  }
+
+  if(command==='heal'){
+    const amount=args[0]===undefined?100:Number(args[0]);
+    if(!Number.isFinite(amount)){adminLog('Usage: /heal [amount]','err');return;}
+    player.hp=Math.min(100,player.hp+Math.max(0,amount));adminLog(`Health: ${player.hp}.`,'ok');return;
+  }
+
+  if(command==='kill'){
+    player.hp=0;adminLog('Player health set to 0.','warn');return;
+  }
+
+  if(command==='spawn'){
+    const type=(args[0]||'zombie').toLowerCase(),count=args[1]||1;
+    if(!['zombie','stick','flint','charcoal','pebble','bigpebble'].includes(type)){adminLog('Usage: /spawn <zombie|stick|flint|charcoal|pebble> [amount]','err');return;}
+    const n=devSpawn(type,count);adminLog(`Spawned ${type} x${n}.`,'ok');return;
+  }
+
+  if(command==='speed'){
+    const multiplier=Number(args[0]);
+    if(!Number.isFinite(multiplier)||multiplier<=0){adminLog('Usage: /speed <positive multiplier>','err');return;}
+    player.speed=.15*multiplier;adminLog(`Player speed multiplier: ${multiplier}x.`,'ok');return;
+  }
+
+  if(command==='daylength'){
+    const seconds=Number(args[0]);
+    if(!Number.isFinite(seconds)||seconds<=0){adminLog('Usage: /daylength <seconds>','err');return;}
+    DAY_LENGTH_MS=seconds*1000;adminLog(`Full day/night cycle length: ${seconds}s.`,'ok');return;
+  }
+
+  adminLog(`Unknown command: /${command}. Type /help.`,'err');
+}
+
+adminConsoleForm.addEventListener('submit',e=>{
+  e.preventDefault();
+  const value=adminCommandInput.value.trim();
+  if(!value)return;
+  adminCommandHistory.push(value);
+  if(adminCommandHistory.length>80)adminCommandHistory.shift();
+  adminHistoryIndex=-1;
+  runAdminCommand(value);
+  adminCommandInput.value='';
+});
+adminConsoleClose.addEventListener('click',()=>setAdminConsoleOpen(false));
+adminConsole.addEventListener('click',e=>{if(e.target===adminConsole)setAdminConsoleOpen(false)});
+adminCommandInput.addEventListener('keydown',e=>{
+  if(e.key==='ArrowUp'){
+    e.preventDefault();
+    if(!adminCommandHistory.length)return;
+    adminHistoryIndex=Math.min(adminCommandHistory.length-1,adminHistoryIndex<0?adminCommandHistory.length-1:adminHistoryIndex+1);
+    adminCommandInput.value=adminCommandHistory[adminHistoryIndex]||'';
+    adminCommandInput.setSelectionRange(adminCommandInput.value.length,adminCommandInput.value.length);
+  }else if(e.key==='ArrowDown'){
+    e.preventDefault();
+    if(!adminCommandHistory.length)return;
+    adminHistoryIndex--;
+    if(adminHistoryIndex<0){adminHistoryIndex=-1;adminCommandInput.value='';}
+    else adminCommandInput.value=adminCommandHistory[adminHistoryIndex]||'';
+  }else if(e.key==='Escape'){
+    e.preventDefault();setAdminConsoleOpen(false);
+  }
+});
+
+window.addEventListener('keydown',e=>{
+  if(e.key==='/'&&!e.repeat && !adminConsoleOpen && document.activeElement!==adminCommandInput){
+    e.preventDefault();setAdminConsoleOpen(true);return;
+  }
+  if(adminConsoleOpen){
+    if(e.key==='Escape'){
+      e.preventDefault();setAdminConsoleOpen(false);
+    }
+    e.stopImmediatePropagation();
+  }
+},true);
+
 // ---- Containers: storage crates and campfire fuel ("furnace") ----
 function moveItemToContainer(kind,index,itemId){
   const slotCount=getSlotCount(kind,index);
@@ -1807,7 +2159,20 @@ canvas.addEventListener('pointerdown',e=>{
 
 function cullFarEntities(){let count=0;for(const e of entities)if(e.type==='pebble'||e.type==='tree'||e.type==='bush'||e.type==='stick'||e.type==='flint'||e.type==='charcoal')count++;const limit=MAX_BIG_PEBBLES+MAX_BUSHES+MAX_STICKS+MAX_FLINT+MAX_CHARCOAL;if(count<=limit)return;const arr=[];for(let i=0;i<entities.length;i++){const e=entities[i];if(!['bigPebble','tree','bush','stick','flint','charcoal'].includes(e.type))continue;const dx=e.x-player.x,dy=e.y-player.y;arr.push({i,d:dx*dx+dy*dy,e})}arr.sort((a,b)=>b.d-a.d);const remove=new Set();for(let i=0;i<Math.max(0,arr.length-limit);i++){const x=arr[i];remove.add(x.i);const k=`${x.e.tileX},${x.e.tileY}`;if(x.e.type==='pebble')pebbleCache.delete(k);else if(x.e.type==='tree')treeEntityCache.delete(k);else if(x.e.type==='bush')bushEntityCache.delete(k);else if(x.e.type==='stick')stickEntityCache.delete(k);else if(x.e.type==='flint')flintEntityCache.delete(k);else if(x.e.type==='charcoal')charcoalEntityCache.delete(k)}for(let i=entities.length-1;i>=0;i--)if(remove.has(i))entities.splice(i,1)}
 
-function update(dt){const dtMs=dt*16.6667;updateDayClock(dtMs);updateParticles(dtMs);attackCooldown=Math.max(0,attackCooldown-dt/60);cameraShake.duration=Math.max(0,cameraShake.duration-dt);if(cameraShake.duration<=0)cameraShake.intensity=0;for(let i=floatingTexts.length-1;i>=0;i--){floatingTexts[i].age+=dt;if(floatingTexts[i].age>floatingTexts[i].life)floatingTexts.splice(i,1)}
+function update(dt){const dtMs=dt*16.6667;updateDayClock(dtMs);updateParticles(dtMs);
+if(weatherTimerMs>0){weatherTimerMs=Math.max(0,weatherTimerMs-dtMs);if(weatherTimerMs<=0)weatherState='clear';}
+if(adminGameRules.doWeatherCycle && weatherTimerMs<=0){
+  if(Math.random()<dtMs/90000){weatherState=weatherState==='rain'?'clear':'rain';if(weatherState==='rain')adminRainSeed=Math.random()*100000;}
+}
+if(adminGameRules.doMobSpawning){
+  adminMobSpawnTimerMs+=dtMs;
+  if(adminMobSpawnTimerMs>=60000){
+    adminMobSpawnTimerMs=0;
+    const zombieCount=entities.filter(e=>e.type==='zombie').length;
+    if(zombieCount<8)devSpawn('zombie',1);
+  }
+}
+attackCooldown=Math.max(0,attackCooldown-dt/60);cameraShake.duration=Math.max(0,cameraShake.duration-dt);if(cameraShake.duration<=0)cameraShake.intensity=0;for(let i=floatingTexts.length-1;i>=0;i--){floatingTexts[i].age+=dt;if(floatingTexts[i].age>floatingTexts[i].life)floatingTexts.splice(i,1)}
 updateNearbyCrate();
 for(let i=player.campfires.length-1;i>=0;i--){
   const cf=player.campfires[i];
@@ -2008,14 +2373,28 @@ for(const campfire of player.campfires){
   ctx.fillStyle=glow;ctx.beginPath();ctx.arc(bcsx,bcsy-6,radius,0,Math.PI*2);ctx.fill();
   ctx.restore();
 }
+if(weatherState==='rain'){
+  ctx.save();
+  const rainTime=Date.now()*0.001;
+  ctx.fillStyle='rgba(90,120,150,.08)';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='rgba(190,220,255,.34)';ctx.lineWidth=1;
+  const drops=Math.min(260,Math.max(90,Math.floor(W*H/9000)));
+  for(let i=0;i<drops;i++){
+    const rx=((i*97.13+adminRainSeed+rainTime*280)%(W+80))-40;
+    const ry=((i*53.71+adminRainSeed*0.37+rainTime*520)%(H+80))-40;
+    ctx.beginPath();ctx.moveTo(rx,ry);ctx.lineTo(rx-5,ry+13);ctx.stroke();
+  }
+  ctx.restore();
+}
 if(vignetteCanvas)ctx.drawImage(vignetteCanvas,0,0);ctx.translate(-shakeX,-shakeY)}
 
 let hudTimer=0;let hudVisible=true;const hudToggle=document.getElementById('hudToggle');function toggleHud(){hudVisible=!hudVisible;if(hudVisible){hud.classList.remove('hidden')}else{hud.classList.add('hidden')}}hudToggle.addEventListener('click',toggleHud);addEventListener('keydown',e=>{if(e.key==='h'||e.key==='H')toggleHud()});function updateHUD(ms=0){hudTimer+=ms;if(hudTimer<100)return;hudTimer=0;let z=0,b=0;for(const e of entities){if(e.type==='zombie')z++;if(e.type==='bush'&&!e.harvested)b++}const t=player.target?player.target.type:'—';const pos=`${Math.round(player.x)}, ${Math.round(player.y)}`;const soilDef=SOIL_DEFS[getTile(Math.floor(player.x),Math.floor(player.y)).type];const soilName=soilDef?soilDef.name:'—';hud.innerHTML=`<div style="background:rgba(0,0,0,.75);padding:14px;border:2px solid #0f0;border-radius:4px;font-size:13px;line-height:1.8;font-family:monospace;font-weight:bold">
 <div style="color:#0f0;margin-bottom:8px;font-weight:bold;font-size:15px">◆ STATUS ◆</div>
 <div>POS: ${pos} | HP: ${player.hp + (player.armorEquipped?50:0)}</div>
 <div>SOIL: ${soilName}</div>
-<div>TIME: ${dayPhaseLabel()}</div>
+<div>TIME: ${dayPhaseLabel()}${weatherState==='rain'?' | 🌧 Rain':''}</div>
 <div>TARGET: ${t} | ENTITIES: ${entities.length}</div>
+<div>DEV: / for admin console</div>
 </div>`;renderHotbar()}
 for(let i=0;i<5;i++)createEntity('zombie',Math.random()*20-10,Math.random()*20-10);
 let last=performance.now();function loop(){const now=performance.now(),raw=Math.min(now-last,100),dt=raw/16.67;last=now;update(dt);render();updateHUD(raw);requestAnimationFrame(loop)}loop();
