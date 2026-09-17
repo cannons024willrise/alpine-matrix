@@ -155,7 +155,7 @@ canvas{filter:saturate(1.08) contrast(1.04)}
       <input id="adminCommandInput" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Developer command">
       <button id="adminConsoleClose" class="mc-btn" type="button">CLOSE</button>
     </form>
-    <div id="adminHint">Commands: /help  /time  /weather  /gamerule  /gamemode  /give  /clear  /tp  /heal  /kill  /spawn  /speed  /daylength</div>
+    <div id="adminHint">Commands: /help  /time  /weather  /gamerule  /gamemode  /give  /clear  /tp  /heal  /kill  /spawn  /speed  /daylength  /light</div>
   </div>
 </div>
 
@@ -197,8 +197,43 @@ canvas.width=W;canvas.height=H;
 const TILE=32,SCALE=1;
 let viewportCols=Math.ceil(W/TILE)+4,viewportRows=Math.ceil(H/TILE)+4;
 let vignetteCanvas=null;
-function buildVignette(){const vc=document.createElement('canvas');vc.width=W;vc.height=H;const c=vc.getContext('2d');const g=c.createRadialGradient(W/2,H/2,Math.min(W,H)*.35,W/2,H/2,Math.max(W,H)*.72);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,.45)');c.fillStyle=g;c.fillRect(0,0,W,H);vignetteCanvas=vc}buildVignette();
-addEventListener('resize',()=>{W=innerWidth;H=innerHeight;canvas.width=W;canvas.height=H;viewportCols=Math.ceil(W/TILE)+4;viewportRows=Math.ceil(H/TILE)+4;buildVignette()});
+function buildVignette(){const vc=document.createElement('canvas');vc.width=W;vc.height=H;const c=vc.getContext('2d');const g=c.createRadialGradient(W/2,H/2,Math.min(W,H)*.35,W/2,H/2,Math.max(W,H)*.72);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,.45)');c.fillStyle=g;c.fillRect(0,0,W,H);vignetteCanvas=vc}
+
+// ==== Real 2D dynamic lighting engine ====
+const LIGHTING={
+  enabled:true,
+  rays:72,
+  ambientOverride:null,
+  debug:false,
+  darkScale:1.15,
+  colorStrength:0.34,
+  maxLights:24
+};
+let lightingDarkCanvas=null,lightingDarkCtx=null,lightingColorCanvas=null,lightingColorCtx=null;
+const adminLights=[];
+
+function buildLightingCanvases(){
+  lightingDarkCanvas=document.createElement('canvas');
+  lightingDarkCanvas.width=W;lightingDarkCanvas.height=H;
+  lightingDarkCtx=lightingDarkCanvas.getContext('2d');
+  lightingColorCanvas=document.createElement('canvas');
+  lightingColorCanvas.width=W;lightingColorCanvas.height=H;
+  lightingColorCtx=lightingColorCanvas.getContext('2d');
+}
+
+function resizeLightingCanvases(){
+  if(!lightingDarkCanvas||!lightingColorCanvas){buildLightingCanvases();return}
+  lightingDarkCanvas.width=W;lightingDarkCanvas.height=H;
+  lightingColorCanvas.width=W;lightingColorCanvas.height=H;
+}
+
+buildVignette();
+buildLightingCanvases();
+addEventListener('resize',()=>{
+  W=innerWidth;H=innerHeight;canvas.width=W;canvas.height=H;
+  viewportCols=Math.ceil(W/TILE)+4;viewportRows=Math.ceil(H/TILE)+4;
+  buildVignette();resizeLightingCanvases();
+});
 addEventListener('orientationchange',()=>setTimeout(()=>dispatchEvent(new Event('resize')),100));
 const LIGHT_DX=-.55,LIGHT_DY=-.8;
 function hash(x,y,seed){let h=(x*374761393+y*668265263+seed*2147483647)|0;h=(h^(h>>>13))*1274126177|0;return((h>>>0)%1000000)/1000000}
@@ -733,13 +768,24 @@ function validateAndConsume(cost){
 
 function getActiveCampfire(){
   if(!player.campfires.length)return null;
+
+  // Automatically feed one stored stick into an empty fire before checking it.
+  // This keeps fire-processing recipes usable when fuel has just run out but
+  // the player previously deposited fuel into the campfire's storage slot.
+  for(const cf of player.campfires){
+    if(cf&&cf.fuel<=0&&cf.fuelSlot&&cf.fuelSlot.count>0){
+      cf.fuelSlot.count--;
+      cf.fuel+=2;
+    }
+  }
+
   const selected=player.campfires[player.selectedCampfire];
-  if(!selected||selected.fuel<=0)return null;
   const nearest=player.campfires
     .filter(cf=>cf&&cf.fuel>0)
     .sort((a,b)=>Math.hypot(a.x-player.x,a.y-player.y)-Math.hypot(b.x-player.x,b.y-player.y))[0];
-  const chosen=selected.fuel>0?selected:nearest;
+  const chosen=selected&&selected.fuel>0?selected:nearest;
   if(!chosen)return null;
+
   // Fire-processing recipes require the player to actually be at a usable fire.
   return Math.hypot(chosen.x-player.x,chosen.y-player.y)<=3.25?chosen:null;
 }
@@ -747,13 +793,30 @@ function getActiveCampfire(){
 function recipeCanCraft(recipe){
   if(!recipe||!canAfford(recipe.cost))return false;
   if(recipe.requiresCampfire&&!getActiveCampfire())return false;
-  if(recipe.id==='basket')return !player.inventory.basket && !utilitySlots.backpack;
-  if(recipe.id==='armor')return !player.inventory.armor&&!player.armorEquipped&&!utilitySlots.armor;
+
+  if(recipe.id==='basket'){
+    return !player.inventory.basket && !utilitySlots.backpack;
+  }
+
+  if(recipe.id==='armor'){
+    return !player.inventory.armor&&!player.armorEquipped&&!utilitySlots.armor;
+  }
+
   if(recipe.buildable)return true;
+
   const existing=player.inventory[recipe.id]||0;
-  if(existing>0)return true;
-  if(HAND_ITEMS.has(recipe.id))return handSlots.includes(null)||inventoryUsedSlots()<getHotbarCapacity();
-  return inventoryUsedSlots()<getHotbarCapacity();
+  const limit=itemStackLimit(recipe.id);
+
+  // Hand items belong in the two dedicated hand slots. They must not be
+  // blocked just because the three carry slots are full.
+  if(HAND_ITEMS.has(recipe.id)){
+    if(handSlots.some(s=>s&&s.id===recipe.id&&s.count<limit))return true;
+    return handSlots.some(s=>!s);
+  }
+
+  // Carry items can top off an existing stack or use any free carry slot.
+  if(existing>0&&hotbarSlots.some(s=>s&&s.id===recipe.id&&s.count<limit))return true;
+  return hotbarSlots.some(s=>!s);
 }
 
 function maxCraftBatch(id){
@@ -810,7 +873,10 @@ function craftItem(id, maxBatch=false){
       break;
     }
 
-    if(currentResult===0&&inventoryUsedSlots()>=getHotbarCapacity())break;
+    // Carry items need carry capacity; hand items use the dedicated hand slots.
+    // Do not let full carry storage prevent crafting a hand item.
+    const resultIsHand=HAND_ITEMS.has(id);
+    if(currentResult===0&&!resultIsHand&&inventoryUsedSlots()>=getHotbarCapacity())break;
 
     // Reserve the result slot before consuming ingredients. addItem is atomic
     // and will open a fresh stack if the existing one(s) are already full.
@@ -1302,6 +1368,7 @@ function runAdminCommand(raw){
     adminLog('/tp <x> <y> | /heal [amount] | /kill');
     adminLog('/spawn <zombie|stick|flint|charcoal|pebble> [amount]');
     adminLog('/speed <multiplier> | /daylength <seconds>');
+    adminLog('/light <on|off|debug|ambient|quality|list|add|remove|clear|auto>');
     return;
   }
 
@@ -1409,6 +1476,50 @@ function runAdminCommand(raw){
     const seconds=Number(args[0]);
     if(!Number.isFinite(seconds)||seconds<=0){adminLog('Usage: /daylength <seconds>','err');return;}
     DAY_LENGTH_MS=seconds*1000;adminLog(`Full day/night cycle length: ${seconds}s.`,'ok');return;
+  }
+
+  if(command==='light'){
+    const sub=(args.shift()||'list').toLowerCase();
+    if(sub==='on'){LIGHTING.enabled=true;adminLog('2D lighting enabled.','ok');return;}
+    if(sub==='off'){LIGHTING.enabled=false;adminLog('2D lighting disabled.','warn');return;}
+    if(sub==='debug'){LIGHTING.debug=!LIGHTING.debug;adminLog(`Lighting debug ${LIGHTING.debug?'enabled':'disabled'}.`,'ok');return;}
+    if(sub==='ambient'){
+      if(args[0]===undefined){adminLog(`Ambient override: ${LIGHTING.ambientOverride==null?'AUTO':LIGHTING.ambientOverride}`,'info');return;}
+      if(String(args[0]).toLowerCase()==='auto'){LIGHTING.ambientOverride=null;adminLog('Ambient lighting returned to the day/night cycle.','ok');return;}
+      const v=Number(args[0]);
+      if(!Number.isFinite(v)||v<0||v>1){adminLog('Usage: /light ambient <0-1> or /light ambient auto','err');return;}
+      LIGHTING.ambientOverride=v;adminLog(`Ambient override: ${v}.`,'ok');return;
+    }
+    if(sub==='quality'){
+      const v=Math.floor(Number(args[0]));
+      if(!Number.isFinite(v)||v<16||v>180){adminLog('Usage: /light quality <16-180>','err');return;}
+      LIGHTING.rays=v;adminLog(`Lighting rays: ${v}.`,'ok');return;
+    }
+    if(sub==='list'){
+      adminLog(`Lighting: ${LIGHTING.enabled?'ON':'OFF'} • rays=${LIGHTING.rays} • debug=${LIGHTING.debug} • admin lights=${adminLights.length}`,'info');
+      adminLights.forEach((l,i)=>adminLog(`#${i} ${l.kind} @ ${l.x.toFixed(2)},${l.y.toFixed(2)} r=${l.radius.toFixed(2)} i=${l.intensity.toFixed(2)}`));
+      return;
+    }
+    if(sub==='add'){
+      const x=Number(args[0]),y=Number(args[1]),radius=Number(args[2]),intensity=args[3]===undefined?1:Number(args[3]);
+      if(![x,y,radius,intensity].every(Number.isFinite)||radius<=0||intensity<=0){adminLog('Usage: /light add <x> <y> <radius> [intensity] [r,g,b]','err');return;}
+      let color=[255,170,80];
+      if(args[4]){
+        const parts=args[4].split(',').map(Number);
+        if(parts.length!==3||!parts.every(Number.isFinite)||parts.some(v=>v<0||v>255)){adminLog('Color must be r,g,b using values 0-255.','err');return;}
+        color=parts.map(Math.round);
+      }
+      adminLights.push({kind:'admin',x,y,radius,intensity,color,colorStrength:.28});
+      adminLog(`Added light #${adminLights.length-1} @ ${x}, ${y}.`,'ok');return;
+    }
+    if(sub==='remove'){
+      const i=Math.floor(Number(args[0]));
+      if(!Number.isFinite(i)||i<0||i>=adminLights.length){adminLog('Usage: /light remove <index>','err');return;}
+      adminLights.splice(i,1);adminLog(`Removed admin light #${i}.`,'ok');return;
+    }
+    if(sub==='clear'){adminLights.length=0;adminLog('All admin lights removed.','ok');return;}
+    if(sub==='auto'){LIGHTING.ambientOverride=null;adminLog('Ambient lighting returned to the day/night cycle.','ok');return;}
+    adminLog('Usage: /light <on|off|debug|ambient|quality|list|add|remove|clear|auto>','err');return;
   }
 
   adminLog(`Unknown command: /${command}. Type /help.`,'err');
@@ -2196,6 +2307,194 @@ ambientTimer+=dtMs;if(ambientTimer>900){ambientTimer=0;if(Math.random()<.6){cons
 const TREE_SORT_BASE_OFFSET=2.05;
 function treeSortY(e){return e.y+TREE_SORT_BASE_OFFSET}
 
+function dayAmbientBrightness(dayC){
+  if(LIGHTING.ambientOverride!=null)return Math.max(0,Math.min(1,LIGHTING.ambientOverride));
+  return Math.max(0,1-Math.min(.92,dayC.dark*LIGHTING.darkScale));
+}
+
+function worldToLightScreen(x,y,cx,cy,cols,rows,shakeX=0,shakeY=0){
+  return {
+    x:(x-cx+cols/2)*TILE+TILE/2+shakeX,
+    y:(y-cy+rows/2)*TILE+TILE/2+shakeY
+  };
+}
+
+function addLightingOccluder(list,x,y,radius,kind){list.push({x,y,radius,kind})}
+
+function collectLightOccluders(light){
+  const list=[];
+  const maxD=(light.radius||0)+1.5;
+  for(const e of entities){
+    let r=0;
+    if(e.type==='tree')r=.62;
+    else if(e.type==='bush')r=.34;
+    else if(e.type==='zombie')r=.26;
+    else continue;
+    if(Math.hypot(e.x-light.x,e.y-light.y)<=maxD+r)addLightingOccluder(list,e.x,e.y,r,e.type);
+  }
+  for(const crate of containers){
+    if(Math.hypot(crate.x-light.x,crate.y-light.y)<=maxD+.5)addLightingOccluder(list,crate.x,crate.y,.48,'crate');
+  }
+  if(light.kind!=='player'&&Math.hypot(player.x-light.x,player.y-light.y)<=maxD+.34){
+    addLightingOccluder(list,player.x,player.y,.30,'player');
+  }
+  return list;
+}
+
+function rayCircleDistance(ox,oy,dx,dy,cx,cy,r,maxDist){
+  const vx=cx-ox,vy=cy-oy;
+  const proj=vx*dx+vy*dy;
+  if(proj<=0)return Infinity;
+  const perpSq=vx*vx+vy*vy-proj*proj;
+  if(perpSq>r*r)return Infinity;
+  const thc=Math.sqrt(Math.max(0,r*r-perpSq));
+  let t=proj-thc;
+  if(t<.02)t=proj+thc;
+  return t>.02&&t<maxDist?t:Infinity;
+}
+
+function visibilityPolygon(light,occluders){
+  const rays=Math.max(16,Math.min(180,Math.round(LIGHTING.rays)));
+  const angles=[];
+  for(let i=0;i<rays;i++)angles.push(i/rays*Math.PI*2);
+  for(const o of occluders){
+    const dx=o.x-light.x,dy=o.y-light.y,d=Math.hypot(dx,dy);
+    if(d<=.02||d>light.radius+o.radius)continue;
+    const a=Math.atan2(dy,dx);
+    const spread=Math.asin(Math.min(.999,o.radius/d));
+    angles.push(a-spread,a,a+spread);
+  }
+  angles.sort((a,b)=>a-b);
+  const points=[];
+  for(const a of angles){
+    const dx=Math.cos(a),dy=Math.sin(a);
+    let dist=light.radius;
+    for(const o of occluders){
+      const hit=rayCircleDistance(light.x,light.y,dx,dy,o.x,o.y,o.radius,dist);
+      if(hit<dist)dist=Math.max(.04,hit-.025);
+    }
+    points.push({x:light.x+dx*dist,y:light.y+dy*dist});
+  }
+  return points;
+}
+
+function clipVisibility(targetCtx,points){
+  if(!points.length)return false;
+  targetCtx.beginPath();
+  targetCtx.moveTo(points[0].x,points[0].y);
+  for(let i=1;i<points.length;i++)targetCtx.lineTo(points[i].x,points[i].y);
+  targetCtx.closePath();
+  targetCtx.clip();
+  return true;
+}
+
+function addPointLight(light,cx,cy,cols,rows,shakeX,shakeY){
+  if(!lightingDarkCtx||!lightingColorCtx)return;
+  const screen=worldToLightScreen(light.x,light.y,cx,cy,cols,rows,shakeX,shakeY);
+  const radiusPx=Math.max(1,light.radius*TILE);
+  const occluders=collectLightOccluders(light);
+  const pointsWorld=visibilityPolygon(light,occluders);
+  const points=pointsWorld.map(p=>worldToLightScreen(p.x,p.y,cx,cy,cols,rows,shakeX,shakeY));
+  if(!points.length)return;
+
+  const intensity=Math.max(.1,Math.min(1,light.intensity||1));
+  lightingDarkCtx.save();
+  lightingDarkCtx.globalCompositeOperation='destination-out';
+  if(clipVisibility(lightingDarkCtx,points)){
+    const clearGrad=lightingDarkCtx.createRadialGradient(screen.x,screen.y,0,screen.x,screen.y,radiusPx);
+    clearGrad.addColorStop(0,`rgba(255,255,255,${intensity})`);
+    clearGrad.addColorStop(.28,`rgba(255,255,255,${Math.min(1,.95*intensity)})`);
+    clearGrad.addColorStop(.62,`rgba(255,255,255,${Math.min(1,.58*intensity)})`);
+    clearGrad.addColorStop(1,'rgba(255,255,255,0)');
+    lightingDarkCtx.fillStyle=clearGrad;
+    lightingDarkCtx.fillRect(screen.x-radiusPx,screen.y-radiusPx,radiusPx*2,radiusPx*2);
+  }
+  lightingDarkCtx.restore();
+
+  const c=light.color||[255,170,80];
+  const strength=Math.max(0,Math.min(.8,(light.colorStrength==null?LIGHTING.colorStrength:light.colorStrength)*intensity));
+  lightingColorCtx.save();
+  lightingColorCtx.globalCompositeOperation='lighter';
+  if(clipVisibility(lightingColorCtx,points)){
+    const colorGrad=lightingColorCtx.createRadialGradient(screen.x,screen.y,0,screen.x,screen.y,radiusPx);
+    colorGrad.addColorStop(0,`rgba(${c[0]},${c[1]},${c[2]},${strength})`);
+    colorGrad.addColorStop(.34,`rgba(${c[0]},${c[1]},${c[2]},${strength*.72})`);
+    colorGrad.addColorStop(.72,`rgba(${c[0]},${c[1]},${c[2]},${strength*.18})`);
+    colorGrad.addColorStop(1,'rgba(0,0,0,0)');
+    lightingColorCtx.fillStyle=colorGrad;
+    lightingColorCtx.fillRect(screen.x-radiusPx,screen.y-radiusPx,radiusPx*2,radiusPx*2);
+  }
+  lightingColorCtx.restore();
+}
+
+function getSceneLights(){
+  const lights=[];
+  for(const cf of player.campfires){
+    const now=Date.now();
+    const flick=.94+Math.sin(now*.007+cf.x*3)*.045+Math.sin(now*.013+cf.y)*.025;
+    const fuelFactor=cf.fuel>0?Math.min(1,Math.max(.45,cf.fuel/3)):0;
+    lights.push({kind:'campfire',x:cf.x,y:cf.y-.08,radius:5.6*flick,intensity:Math.max(.55,1.35*fuelFactor*flick),color:[255,155,65],colorStrength:.34});
+  }
+  for(const light of adminLights.slice(0,LIGHTING.maxLights))lights.push(light);
+  return lights;
+}
+
+function buildLightmap(cx,cy,cols,rows,shakeX,shakeY){
+  if(!LIGHTING.enabled||!lightingDarkCtx||!lightingColorCtx)return;
+  const dayC=sampleDayColor(dayClock);
+  const ambient=dayAmbientBrightness(dayC);
+  const darkness=Math.max(0,1-ambient);
+
+  lightingDarkCtx.setTransform(1,0,0,1,0,0);
+  lightingDarkCtx.globalCompositeOperation='source-over';
+  lightingDarkCtx.globalAlpha=1;
+  lightingDarkCtx.clearRect(0,0,W,H);
+  if(darkness>.001){
+    lightingDarkCtx.fillStyle=`rgba(0,0,0,${darkness})`;
+    lightingDarkCtx.fillRect(0,0,W,H);
+  }
+
+  lightingColorCtx.setTransform(1,0,0,1,0,0);
+  lightingColorCtx.globalCompositeOperation='source-over';
+  lightingColorCtx.globalAlpha=1;
+  lightingColorCtx.clearRect(0,0,W,H);
+  if(dayC.dark>.01){
+    lightingColorCtx.fillStyle=dayC.amb;
+    lightingColorCtx.globalAlpha=Math.min(.10,dayC.dark*.09);
+    lightingColorCtx.fillRect(0,0,W,H);
+    lightingColorCtx.globalAlpha=1;
+  }else if(dayC.warm>.03){
+    lightingColorCtx.fillStyle=dayC.amb;
+    lightingColorCtx.globalAlpha=Math.min(.08,dayC.warm*.08);
+    lightingColorCtx.fillRect(0,0,W,H);
+    lightingColorCtx.globalAlpha=1;
+  }
+
+  for(const light of getSceneLights())addPointLight(light,cx,cy,cols,rows,shakeX,shakeY);
+
+  ctx.save();
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.globalCompositeOperation='source-over';
+  ctx.globalAlpha=1;
+  ctx.drawImage(lightingDarkCanvas,0,0);
+  ctx.globalCompositeOperation='screen';
+  ctx.drawImage(lightingColorCanvas,0,0);
+  ctx.restore();
+}
+
+function renderLightingDebug(cx,cy,cols,rows,shakeX,shakeY){
+  if(!LIGHTING.debug)return;
+  ctx.save();
+  ctx.setTransform(1,0,0,1,0,0);
+  for(const light of getSceneLights()){
+    const p=worldToLightScreen(light.x,light.y,cx,cy,cols,rows,shakeX,shakeY);
+    ctx.globalAlpha=.75;ctx.fillStyle='#fff';ctx.fillRect(p.x-1,p.y-1,2,2);
+    ctx.globalAlpha=.7;ctx.strokeStyle='#ffd76a';ctx.lineWidth=1;ctx.beginPath();ctx.arc(p.x,p.y,light.radius*TILE,0,Math.PI*2);ctx.stroke();
+    ctx.fillStyle='#ffd76a';ctx.font='9px monospace';ctx.textAlign='center';ctx.fillText(`${light.kind} ${light.radius.toFixed(1)}`,p.x,p.y-light.radius*TILE-4);
+  }
+  ctx.restore();
+}
+
 function render(){ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);const shakeX=cameraShake.intensity>0?((Math.random()-.5)*cameraShake.intensity*TILE):0,shakeY=cameraShake.intensity>0?((Math.random()-.5)*cameraShake.intensity*TILE):0;ctx.translate(shakeX,shakeY);const cx=player.x,cy=player.y,cols=viewportCols,rows=viewportRows,sx0=Math.floor(cx-cols/2),sy0=Math.floor(cy-rows/2),time=Date.now()*.003;for(let ty=sy0;ty<sy0+rows;ty++)for(let tx=sx0;tx<sx0+cols;tx++){const tile=getTile(tx,ty);if(!tile.bgCanvas)buildTileBackground(tx,ty,tile);const sx=Math.floor((tx-cx+cols/2)*TILE),sy=Math.floor((ty-cy+rows/2)*TILE);ctx.drawImage(tile.bgCanvas,sx,sy);if(tile.type==='grass'&&tile.grassPattern){const sway=Math.sin(time+tx*.3+ty*.3)*3;for(const b of tile.grassPattern){const gx=Math.floor(sx+b.x*(TILE-2)),gy=Math.floor(sy+b.y*(TILE-8)+4),bend=Math.floor(sway+b.offsetSway);ctx.fillStyle=b.light?'#5bc46a':'#3a7a42';ctx.fillRect(gx+bend,gy-2,2,2)}}const water=getWater(tx,ty);if(water.river){
   // River base: darker base color
   ctx.fillStyle='#1e5a8f';ctx.fillRect(sx,sy,TILE,TILE);
@@ -2354,25 +2653,8 @@ for(const e of entities){
   }
 }
 draw.sort((a,b)=>a.y-b.y);for(const o of draw)o.render();renderParticlesPass(cx,cy,cols,rows);for(const ft of floatingTexts){const progress=ft.age/ft.life,alpha=Math.max(0,1-progress),rise=progress*TILE*.8;ctx.save();ctx.globalAlpha=alpha;ctx.fillStyle=ft.color;ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.textBaseline='middle';const sx=Math.floor((ft.x-cx+cols/2)*TILE),sy=Math.floor((ft.y-cy+rows/2)*TILE+rise);ctx.fillText(ft.text,sx,sy);ctx.restore()}const dayC=sampleDayColor(dayClock);
-if(dayC.dark>0.015){
-  ctx.save();ctx.globalCompositeOperation='multiply';ctx.globalAlpha=dayC.dark;ctx.fillStyle=dayC.amb;ctx.fillRect(0,0,W,H);ctx.restore();
-  ctx.save();ctx.globalCompositeOperation='screen';ctx.globalAlpha=dayC.dark*0.16;ctx.fillStyle='#20306a';ctx.fillRect(0,0,W,H);ctx.restore();
-}
-if(dayC.warm>0.03){
-  ctx.save();ctx.globalCompositeOperation='overlay';ctx.globalAlpha=dayC.warm*0.4;ctx.fillStyle=dayC.amb;ctx.fillRect(0,0,W,H);ctx.restore();
-}
-for(const campfire of player.campfires){
-  const bcsx=Math.floor((campfire.x-cx+cols/2)*TILE),bcsy=Math.floor((campfire.y-cy+rows/2)*TILE);
-  const flick=0.75+Math.sin(time*7+campfire.x*3)*.15+Math.sin(time*13.3+campfire.y)*.08;
-  const radius=TILE*3.4*flick;
-  ctx.save();ctx.globalCompositeOperation='screen';
-  const glow=ctx.createRadialGradient(bcsx,bcsy-6,0,bcsx,bcsy-6,radius);
-  glow.addColorStop(0,`rgba(255,178,90,${0.55*flick})`);
-  glow.addColorStop(0.4,`rgba(255,140,40,${0.28*flick})`);
-  glow.addColorStop(1,'rgba(255,120,20,0)');
-  ctx.fillStyle=glow;ctx.beginPath();ctx.arc(bcsx,bcsy-6,radius,0,Math.PI*2);ctx.fill();
-  ctx.restore();
-}
+buildLightmap(cx,cy,cols,rows,shakeX,shakeY);
+renderLightingDebug(cx,cy,cols,rows,shakeX,shakeY);
 if(weatherState==='rain'){
   ctx.save();
   const rainTime=Date.now()*0.001;
