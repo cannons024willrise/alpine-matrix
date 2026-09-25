@@ -155,7 +155,7 @@ canvas{filter:saturate(1.08) contrast(1.04)}
       <input id="adminCommandInput" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Developer command">
       <button id="adminConsoleClose" class="mc-btn" type="button">CLOSE</button>
     </form>
-    <div id="adminHint">Commands: /help  /time  /weather  /gamerule  /gamemode  /give  /clear  /tp  /heal  /kill  /spawn  /speed  /daylength  /light</div>
+    <div id="adminHint">Commands: /help  /time  /weather  /gamerule  /gamemode  /give  /clear  /tp  /heal  /kill  /spawn  /speed  /daylength  /light  /seed</div>
   </div>
 </div>
 
@@ -186,6 +186,24 @@ canvas{filter:saturate(1.08) contrast(1.04)}
   </div>
 </div>
 <div id="mobileControls"><div id="joystick"><div id="joystickKnob"></div></div><button id="craftButton" type="button">CRAFT</button><button id="attackButton" type="button">ATTACK</button><button id="actionButton" type="button">ACT</button></div>
+
+<div id="createWorldScreen">
+  <div id="createWorldInner" class="mc-panel">
+    <div class="mc-titlebar">ALPINE MATRIX</div>
+    <div class="cw-body">
+      <div class="cw-sub">CREATE NEW WORLD</div>
+      <form id="createWorldForm" autocomplete="off">
+        <label class="cw-label" for="seedInput">World Seed</label>
+        <div class="cw-seed-row">
+          <input id="seedInput" type="text" placeholder="Leave blank for a random seed" autocomplete="off" spellcheck="false" autocapitalize="off">
+          <button id="seedRerollBtn" class="cw-reroll" type="button" title="Random seed">🎲</button>
+        </div>
+        <div class="cw-hint">Numbers or words both work — the same seed always makes the same terrain, trees and resources.</div>
+        <button id="createWorldPlayBtn" class="mc-btn cw-play" type="submit">CREATE WORLD</button>
+      </form>
+    </div>
+  </div>
+</div>
 <script>
 const canvas=document.getElementById('game');
 const ctx=canvas.getContext('2d');
@@ -199,7 +217,10 @@ let viewportCols=Math.ceil(W/TILE)+4,viewportRows=Math.ceil(H/TILE)+4;
 let vignetteCanvas=null;
 function buildVignette(){const vc=document.createElement('canvas');vc.width=W;vc.height=H;const c=vc.getContext('2d');const g=c.createRadialGradient(W/2,H/2,Math.min(W,H)*.35,W/2,H/2,Math.max(W,H)*.72);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,.45)');c.fillStyle=g;c.fillRect(0,0,W,H);vignetteCanvas=vc}
 
-// ==== Rebuilt 2D lighting: radial light + real shadow volumes ====
+// ==== 2D lighting: radial point lights with a merged, soft-edged visibility polygon ====
+// (One continuous shadow polygon per light, instead of one hard "shadow volume" wedge per
+// occluder, so neighboring trees blend into a single shadow instead of leaking a starburst
+// of light through the gaps between their individual wedges.)
 const LIGHTING={
   enabled:true,
   rays:72,
@@ -207,17 +228,19 @@ const LIGHTING={
   debug:false,
   darkScale:1.03,
   colorStrength:0.22,
-  maxLights:24
+  maxLights:24,
+  penumbra:5
 };
-let lightingDarkCanvas=null,lightingDarkCtx=null,lightingColorCanvas=null,lightingColorCtx=null,lightingMaskCanvas=null,lightingMaskCtx=null;
+let lightingDarkCanvas=null,lightingDarkCtx=null,lightingColorCanvas=null,lightingColorCtx=null,lightingMaskCanvas=null,lightingMaskCtx=null,lightingPolyCanvas=null,lightingPolyCtx=null;
 const adminLights=[];
 
 function buildLightingCanvases(){
   lightingDarkCanvas=document.createElement('canvas');lightingDarkCanvas.width=W;lightingDarkCanvas.height=H;lightingDarkCtx=lightingDarkCanvas.getContext('2d');
   lightingColorCanvas=document.createElement('canvas');lightingColorCanvas.width=W;lightingColorCanvas.height=H;lightingColorCtx=lightingColorCanvas.getContext('2d');
   lightingMaskCanvas=document.createElement('canvas');lightingMaskCanvas.width=W;lightingMaskCanvas.height=H;lightingMaskCtx=lightingMaskCanvas.getContext('2d');
+  lightingPolyCanvas=document.createElement('canvas');lightingPolyCtx=lightingPolyCanvas.getContext('2d');
 }
-function resizeLightingCanvases(){if(!lightingDarkCanvas||!lightingColorCanvas||!lightingMaskCanvas){buildLightingCanvases();return}for(const c of[lightingDarkCanvas,lightingColorCanvas,lightingMaskCanvas]){c.width=W;c.height=H}}
+function resizeLightingCanvases(){if(!lightingDarkCanvas||!lightingColorCanvas||!lightingMaskCanvas||!lightingPolyCanvas){buildLightingCanvases();return}for(const c of[lightingDarkCanvas,lightingColorCanvas,lightingMaskCanvas]){c.width=W;c.height=H}}
 buildVignette();buildLightingCanvases();
 addEventListener('resize',()=>{W=innerWidth;H=innerHeight;canvas.width=W;canvas.height=H;viewportCols=Math.ceil(W/TILE)+4;viewportRows=Math.ceil(H/TILE)+4;buildVignette();resizeLightingCanvases()});
 addEventListener('orientationchange',()=>setTimeout(()=>dispatchEvent(new Event('resize')),100));
@@ -227,7 +250,29 @@ function noise(x,y,seed){const x0=Math.floor(x),y0=Math.floor(y),sx=x-x0,sy=y-y0
 function mixColorRGB(a,b,t){const r1=parseInt(a.slice(1,3),16),g1=parseInt(a.slice(3,5),16),b1=parseInt(a.slice(5,7),16),r2=parseInt(b.slice(1,3),16),g2=parseInt(b.slice(3,5),16),b2=parseInt(b.slice(5,7),16);return[Math.round(r1+(r2-r1)*t),Math.round(g1+(g2-g1)*t),Math.round(b1+(b2-b1)*t)]}
 function mixColor(a,b,t){const rgb=mixColorRGB(a,b,t);return`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`}
 function fbm(x,y,seed,octaves=4){let total=0,amp=0.5,freq=1,max=0;for(let o=0;o<octaves;o++){total+=noise(x*freq,y*freq,seed+o*191)*amp;max+=amp;amp*=0.5;freq*=2.03}return total/max}
-const SEED=Math.random()*1e9;
+// ==== Deterministic world seed ====
+// Every procedural generator below already takes SEED as a plain input to hash()/noise(), so
+// making the world reproducible is just a matter of resolving SEED to a stable value (instead
+// of a fresh Math.random() every load) and keeping it around - in the URL, so reloading or
+// sharing the link reproduces the same world, and via the /seed console command below.
+function stringToSeedNumber(str){
+  str=String(str);let h=5381;
+  for(let i=0;i<str.length;i++)h=((h*33)^str.charCodeAt(i))>>>0;
+  return h%1000000000;
+}
+function parseSeedValue(raw){
+  const s=String(raw==null?'':raw).trim();
+  if(s==='')return null;
+  return/^-?\d+(\.\d+)?$/.test(s)?Math.abs(Math.floor(Number(s)))%1000000000:stringToSeedNumber(s);
+}
+function readSeedFromURL(){
+  try{return parseSeedValue(new URLSearchParams(location.search).get('seed'))}catch(_){return null}
+}
+function writeSeedToURL(seedValue){
+  try{const url=new URL(location.href);url.searchParams.set('seed',String(seedValue));history.replaceState(null,'',url)}catch(_){}
+}
+let SEED=readSeedFromURL();
+if(SEED==null){SEED=Math.floor(Math.random()*1e9);writeSeedToURL(SEED)}
 const tileCache=new Map(),treeEntityCache=new Map(),pebbleCache=new Map(),bigPebbleCache=new Map(),collectedBigPebbleCache=new Map(),bushEntityCache=new Map(),stickEntityCache=new Map(),collectedStickCache=new Map(),flintEntityCache=new Map(),collectedFlintCache=new Map(),charcoalEntityCache=new Map(),collectedCharcoalCache=new Map(),treeSpriteCache=new Map(),bushSpriteCache=new Map();
 const MAX_PEBBLES=400,MAX_BIG_PEBBLES=100,MAX_BUSHES=180,MAX_STICKS=180,MAX_FLINT=90,MAX_CHARCOAL=140;
 let frameCounter=0;
@@ -359,6 +404,21 @@ function drawSoftShadow(sx,sy,rx,ry,alpha){
   g.addColorStop(1,'rgba(4,7,4,0)');
   ctx.save();ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(sx,sy,rx,ry,0,0,Math.PI*2);ctx.fill();ctx.restore();
 }
+// Directional ground shadow for foliage: leans along the fixed sun direction (LIGHT_DX/DY)
+// and stretches longer near dawn/dusk, shrinking toward noon, fading out at night (when the
+// point-light system above already grounds nearby objects with its own shadow).
+function drawCastShadow(baseX,baseY,rx,ry,strength){
+  const sun=sunAngleFactor();
+  if(sun<=.03||strength<=0)return;
+  const reach=6+20*(1-sun);
+  const ox=LIGHT_DX*reach,oy=LIGHT_DY*reach*.6;
+  const alpha=Math.min(.34,strength*(.55+sun*.45));
+  const g=ctx.createRadialGradient(baseX+ox,baseY+oy,0,baseX+ox,baseY+oy,Math.max(rx,ry)*1.1+reach*.3);
+  g.addColorStop(0,`rgba(3,7,3,${alpha})`);
+  g.addColorStop(.6,`rgba(3,7,3,${alpha*.55})`);
+  g.addColorStop(1,'rgba(3,7,3,0)');
+  ctx.save();ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(baseX+ox,baseY+oy,rx+reach*.25,ry+reach*.12,0,0,Math.PI*2);ctx.fill();ctx.restore();
+}
 let footstepTimer=0,ambientTimer=0;
 
 function treeShouldSpawn(tx,ty){const tile=getTile(tx,ty),water=getWater(tx,ty);if(tile.type==='gleysol'||water.gleysol||water.river)return false;if(!isVegetated(tile.type))return false;const treelimit=0.50+tile.aspect*0.04;if(tile.elevation>treelimit)return false;const treeDensity=noise(tx*.12,ty*.12,SEED+500),spacing=hash(tx,ty,803);return treeDensity>.62&&spacing>.5}
@@ -377,13 +437,13 @@ function generateStickEntityForTile(tx,ty){const key=`${tx},${ty}`;if(stickEntit
   createEntity('stick',x,y,{tileX:tx,tileY:ty,radius:.16,seedVal:Math.floor(hash(tx,ty,744)*100000),length:.62+hash(tx,ty,745)*.30,angle:(hash(tx,ty,746)-.5)*Math.PI,thick:true,collected:false});
   stickEntityCache.set(key,true)}
 
-function generateFlintForTile(tx,ty){const key=`${tx},${ty}`;if(flintEntityCache.has(key)||collectedFlintCache.has(key))return;const tile=getTile(tx,ty),water=getWater(tx,ty);const regionX=Math.floor(tx/3),regionY=Math.floor(ty/3);const regionHasFlint=hash(regionX,regionY,861)<0.15;const regionCellX=regionX*3+Math.floor(hash(regionX,regionY,865)*3);const regionCellY=regionY*3+Math.floor(hash(regionX,regionY,866)*3);if(!isBare(tile.type)||water.river||!regionHasFlint||tx!==regionCellX||ty!==regionCellY){flintEntityCache.set(key,true);return}const x=tx+.15+hash(tx,ty,862)*.7,y=ty+.15+hash(tx,ty,863)*.7;createEntity('flint',x,y,{tileX:tx,tileY:ty,radius:.13,seedVal:Math.floor(hash(tx,ty,864)*100000),sharp:true,collected:false});flintEntityCache.set(key,true)}
+function generateFlintForTile(tx,ty){const key=`${tx},${ty}`;if(flintEntityCache.has(key)||collectedFlintCache.has(key))return;const tile=getTile(tx,ty),water=getWater(tx,ty);const regionX=Math.floor(tx/3),regionY=Math.floor(ty/3);const regionHasFlint=hash(regionX,regionY,SEED+861)<0.15;const regionCellX=regionX*3+Math.floor(hash(regionX,regionY,SEED+865)*3);const regionCellY=regionY*3+Math.floor(hash(regionX,regionY,SEED+866)*3);if(!isBare(tile.type)||water.river||!regionHasFlint||tx!==regionCellX||ty!==regionCellY){flintEntityCache.set(key,true);return}const x=tx+.15+hash(tx,ty,SEED+862)*.7,y=ty+.15+hash(tx,ty,SEED+863)*.7;createEntity('flint',x,y,{tileX:tx,tileY:ty,radius:.13,seedVal:Math.floor(hash(tx,ty,SEED+864)*100000),sharp:true,collected:false});flintEntityCache.set(key,true)}
 
-function generateCharcoalForTile(tx,ty){const key=`${tx},${ty}`;if(charcoalEntityCache.has(key)||collectedCharcoalCache.has(key))return;const tile=getTile(tx,ty),water=getWater(tx,ty);if(water.river){charcoalEntityCache.set(key,true);return}const hasCharcoal=hash(tx,ty,922)<0.12;if(!hasCharcoal){charcoalEntityCache.set(key,true);return}const x=tx+.2+hash(tx,ty,923)*.6,y=ty+.2+hash(tx,ty,924)*.6;createEntity('charcoal',x,y,{tileX:tx,tileY:ty,radius:.12,seedVal:Math.floor(hash(tx,ty,925)*100000),collected:false});charcoalEntityCache.set(key,true)}
+function generateCharcoalForTile(tx,ty){const key=`${tx},${ty}`;if(charcoalEntityCache.has(key)||collectedCharcoalCache.has(key))return;const tile=getTile(tx,ty),water=getWater(tx,ty);if(water.river){charcoalEntityCache.set(key,true);return}const hasCharcoal=hash(tx,ty,SEED+922)<0.12;if(!hasCharcoal){charcoalEntityCache.set(key,true);return}const x=tx+.2+hash(tx,ty,SEED+923)*.6,y=ty+.2+hash(tx,ty,SEED+924)*.6;createEntity('charcoal',x,y,{tileX:tx,tileY:ty,radius:.12,seedVal:Math.floor(hash(tx,ty,SEED+925)*100000),collected:false});charcoalEntityCache.set(key,true)}
 
-function generatePebblesForTile(tx,ty){const key=`${tx},${ty}`;if(pebbleCache.has(key))return;const tile=getTile(tx,ty),water=getWater(tx,ty);if(!isBare(tile.type)||water.river){pebbleCache.set(key,true);return}const count=Math.floor(hash(tx,ty,850)*2.5)+1;for(let i=0;i<count;i++){const s=851+i*5,r=.08+hash(tx,ty,s+2)*.08,lx=hash(tx,ty,s)*(1-r*2)+r,ly=hash(tx,ty,s+1)*(1-r*2)+r;createEntity('pebble',tx+lx,ty+ly,{radius:r,tone:hash(tx,ty,s+3),light:hash(tx,ty,s+4),tileX:tx,tileY:ty,seed:Math.floor(hash(tx,ty,s+6)*100000)})}pebbleCache.set(key,true)}
+function generatePebblesForTile(tx,ty){const key=`${tx},${ty}`;if(pebbleCache.has(key))return;const tile=getTile(tx,ty),water=getWater(tx,ty);if(!isBare(tile.type)||water.river){pebbleCache.set(key,true);return}const count=Math.floor(hash(tx,ty,SEED+850)*2.5)+1;for(let i=0;i<count;i++){const s=SEED+851+i*5,r=.08+hash(tx,ty,s+2)*.08,lx=hash(tx,ty,s)*(1-r*2)+r,ly=hash(tx,ty,s+1)*(1-r*2)+r;createEntity('pebble',tx+lx,ty+ly,{radius:r,tone:hash(tx,ty,s+3),light:hash(tx,ty,s+4),tileX:tx,tileY:ty,seed:Math.floor(hash(tx,ty,s+6)*100000)})}pebbleCache.set(key,true)}
 
-function generateBigPebbleForTile(tx,ty){const key=`${tx},${ty}`;if(bigPebbleCache.has(key)||collectedBigPebbleCache.has(key))return;const tile=getTile(tx,ty),water=getWater(tx,ty);if(!isBare(tile.type)||water.river){bigPebbleCache.set(key,true);return}if(hash(tx,ty,860)>.34){bigPebbleCache.set(key,true);return}const r=.16+hash(tx,ty,861)*.06;const lx=r+hash(tx,ty,862)*(1-r*2),ly=r+hash(tx,ty,863)*(1-r*2);createEntity('bigPebble',tx+lx,ty+ly,{radius:r,tone:hash(tx,ty,864),light:hash(tx,ty,865),tileX:tx,tileY:ty,seed:Math.floor(hash(tx,ty,866)*100000),collected:false});bigPebbleCache.set(key,true)}
+function generateBigPebbleForTile(tx,ty){const key=`${tx},${ty}`;if(bigPebbleCache.has(key)||collectedBigPebbleCache.has(key))return;const tile=getTile(tx,ty),water=getWater(tx,ty);if(!isBare(tile.type)||water.river){bigPebbleCache.set(key,true);return}if(hash(tx,ty,SEED+860)>.34){bigPebbleCache.set(key,true);return}const r=.16+hash(tx,ty,SEED+861)*.06;const lx=r+hash(tx,ty,SEED+862)*(1-r*2),ly=r+hash(tx,ty,SEED+863)*(1-r*2);createEntity('bigPebble',tx+lx,ty+ly,{radius:r,tone:hash(tx,ty,SEED+864),light:hash(tx,ty,SEED+865),tileX:tx,tileY:ty,seed:Math.floor(hash(tx,ty,SEED+866)*100000),collected:false});bigPebbleCache.set(key,true)}
 
 function buildTileBackground(tx,ty,tileData){
   const def=SOIL_DEFS[tileData.type]||SOIL_DEFS.brownEarth;
@@ -1330,6 +1390,21 @@ function devSpawn(type,count=1){
   return spawned;
 }
 
+function regenerateWorld(newSeed){
+  SEED=newSeed;
+  tileCache.clear();waterCache.clear();
+  treeEntityCache.clear();bushEntityCache.clear();
+  stickEntityCache.clear();collectedStickCache.clear();
+  flintEntityCache.clear();collectedFlintCache.clear();
+  charcoalEntityCache.clear();collectedCharcoalCache.clear();
+  pebbleCache.clear();bigPebbleCache.clear();collectedBigPebbleCache.clear();
+  for(let i=entities.length-1;i>=0;i--){
+    const t=entities[i].type;
+    if(t==='tree'||t==='bush'||t==='stick'||t==='flint'||t==='charcoal'||t==='pebble'||t==='bigPebble')entities.splice(i,1);
+  }
+  writeSeedToURL(newSeed);
+}
+
 function runAdminCommand(raw){
   const line=String(raw||'').trim();
   if(!line)return;
@@ -1348,7 +1423,8 @@ function runAdminCommand(raw){
     adminLog('/tp <x> <y> | /heal [amount] | /kill');
     adminLog('/spawn <zombie|stick|flint|charcoal|pebble> [amount]');
     adminLog('/speed <multiplier> | /daylength <seconds>');
-    adminLog('/light <on|off|debug|ambient|quality|list|add|remove|clear|auto>');
+    adminLog('/light <on|off|debug|ambient|quality|penumbra|list|add|remove|clear|auto>');
+    adminLog('/seed [number or text] — show or regenerate the world seed');
     return;
   }
 
@@ -1458,6 +1534,15 @@ function runAdminCommand(raw){
     DAY_LENGTH_MS=seconds*1000;adminLog(`Full day/night cycle length: ${seconds}s.`,'ok');return;
   }
 
+  if(command==='seed'){
+    if(!args.length){adminLog(`World seed: ${SEED}`,'info');return;}
+    const parsed=parseSeedValue(args.join(' '));
+    if(parsed==null){adminLog('Usage: /seed [number or text]','err');return;}
+    regenerateWorld(parsed);
+    adminLog(`World regenerated with seed: ${parsed}`,'ok');
+    return;
+  }
+
   if(command==='light'){
     const sub=(args.shift()||'list').toLowerCase();
     if(sub==='on'){LIGHTING.enabled=true;adminLog('2D lighting enabled.','ok');return;}
@@ -1475,8 +1560,13 @@ function runAdminCommand(raw){
       if(!Number.isFinite(v)||v<16||v>180){adminLog('Usage: /light quality <16-180>','err');return;}
       LIGHTING.rays=v;adminLog(`Lighting rays: ${v}.`,'ok');return;
     }
+    if(sub==='penumbra'){
+      const v=Number(args[0]);
+      if(!Number.isFinite(v)||v<0||v>24){adminLog('Usage: /light penumbra <0-24>','err');return;}
+      LIGHTING.penumbra=v;adminLog(`Shadow penumbra: ${v}px.`,'ok');return;
+    }
     if(sub==='list'){
-      adminLog(`Lighting: ${LIGHTING.enabled?'ON':'OFF'} • rays=${LIGHTING.rays} • debug=${LIGHTING.debug} • admin lights=${adminLights.length}`,'info');
+      adminLog(`Lighting: ${LIGHTING.enabled?'ON':'OFF'} • rays=${LIGHTING.rays} • penumbra=${LIGHTING.penumbra}px • debug=${LIGHTING.debug} • admin lights=${adminLights.length}`,'info');
       adminLights.forEach((l,i)=>adminLog(`#${i} ${l.kind} @ ${l.x.toFixed(2)},${l.y.toFixed(2)} r=${l.radius.toFixed(2)} i=${l.intensity.toFixed(2)}`));
       return;
     }
@@ -1499,7 +1589,7 @@ function runAdminCommand(raw){
     }
     if(sub==='clear'){adminLights.length=0;adminLog('All admin lights removed.','ok');return;}
     if(sub==='auto'){LIGHTING.ambientOverride=null;adminLog('Ambient lighting returned to the day/night cycle.','ok');return;}
-    adminLog('Usage: /light <on|off|debug|ambient|quality|list|add|remove|clear|auto>','err');return;
+    adminLog('Usage: /light <on|off|debug|ambient|quality|penumbra|list|add|remove|clear|auto>','err');return;
   }
 
   adminLog(`Unknown command: /${command}. Type /help.`,'err');
@@ -1518,6 +1608,13 @@ adminConsoleForm.addEventListener('submit',e=>{
 adminConsoleClose.addEventListener('click',()=>setAdminConsoleOpen(false));
 adminConsole.addEventListener('click',e=>{if(e.target===adminConsole)setAdminConsoleOpen(false)});
 adminCommandInput.addEventListener('keydown',e=>{
+  // This input handles its own keys in full - stopping them here means they never bubble up
+  // to the window-level game-hotkey listeners (movement, attack, inventory, etc). The console
+  // previously tried to block those hotkeys the other way around, with a capture-phase
+  // listener on window that ran BEFORE the event ever reached this input - which also meant
+  // it blocked the event from ever reaching this input's own handling below, including typing
+  // itself, this history navigation, Escape-to-close and Enter-to-run.
+  e.stopPropagation();
   if(e.key==='ArrowUp'){
     e.preventDefault();
     if(!adminCommandHistory.length)return;
@@ -1532,18 +1629,15 @@ adminCommandInput.addEventListener('keydown',e=>{
     else adminCommandInput.value=adminCommandHistory[adminHistoryIndex]||'';
   }else if(e.key==='Escape'){
     e.preventDefault();setAdminConsoleOpen(false);
+  }else if(e.key==='Enter'){
+    e.preventDefault();
+    adminConsoleForm.requestSubmit();
   }
 });
 
 window.addEventListener('keydown',e=>{
   if(e.key==='/'&&!e.repeat && !adminConsoleOpen && document.activeElement!==adminCommandInput){
-    e.preventDefault();setAdminConsoleOpen(true);return;
-  }
-  if(adminConsoleOpen){
-    if(e.key==='Escape'){
-      e.preventDefault();setAdminConsoleOpen(false);
-    }
-    e.stopImmediatePropagation();
+    e.preventDefault();setAdminConsoleOpen(true);
   }
 },true);
 
@@ -2318,70 +2412,99 @@ function collectLightOccluders(light){
   return list;
 }
 
-function shadowVolume(ctx2,light,o,extra=0,alpha=1,cx=0,cy=0,cols=0,rows=0,shakeX=0,shakeY=0){
-  const dx=o.x-light.x,dy=o.y-light.y,d=Math.hypot(dx,dy),r=o.radius+extra;
-  if(d<=.03)return;
-  if(d<=r+.02){
-    const p=worldToLightScreen(o.x,o.y,cx,cy,cols,rows,shakeX,shakeY);
-    ctx2.save();ctx2.globalAlpha=alpha;ctx2.fillStyle='#000';ctx2.beginPath();ctx2.arc(p.x,p.y,Math.max(1,r*TILE),0,Math.PI*2);ctx2.fill();ctx2.restore();
-    return;
-  }
-  const a=Math.atan2(dy,dx),s=Math.asin(Math.min(.999,r/d)),td=Math.sqrt(Math.max(0,d*d-r*r));
-  const p1={x:light.x+Math.cos(a-s)*td,y:light.y+Math.sin(a-s)*td};
-  const p2={x:light.x+Math.cos(a+s)*td,y:light.y+Math.sin(a+s)*td};
-  const far=Math.min(light.radius+extra+1.25,d+light.radius);
-  const f1={x:light.x+(p1.x-light.x)*far/td,y:light.y+(p1.y-light.y)*far/td};
-  const f2={x:light.x+(p2.x-light.x)*far/td,y:light.y+(p2.y-light.y)*far/td};
-  const q=[p1,p2,f2,f1].map(p=>worldToLightScreen(p.x,p.y,cx,cy,cols,rows,shakeX,shakeY));
-  ctx2.save();ctx2.globalAlpha=alpha;ctx2.fillStyle='#000';ctx2.beginPath();ctx2.moveTo(q[0].x,q[0].y);for(let i=1;i<q.length;i++)ctx2.lineTo(q[i].x,q[i].y);ctx2.closePath();ctx2.fill();ctx2.restore();
+// Circle-ray intersection: distance from the ray's origin (along unit direction dx,dy) to
+// the near edge of circle (ox,oy,r), given relative to that same origin. Infinity if the ray
+// misses the circle, or the circle sits behind the origin.
+function rayCircleHit(dx,dy,ox,oy,r){
+  const proj=ox*dx+oy*dy;
+  if(proj<=0)return Infinity;
+  const ex=ox-dx*proj,ey=oy-dy*proj,distSq=ex*ex+ey*ey,rSq=r*r;
+  if(distSq>=rSq)return Infinity;
+  const t=proj-Math.sqrt(rSq-distSq);
+  return t>0?t:Infinity;
 }
 
-function blockLightMask(light,occluders,cx,cy,cols,rows,shakeX,shakeY){
-  lightingMaskCtx.save();
-  lightingMaskCtx.globalCompositeOperation='destination-out';
-  for(const o of occluders){
-    const pen=.18+(o.kind==='tree'?.10:0);
-    shadowVolume(lightingMaskCtx,light,o,pen,.30,cx,cy,cols,rows,shakeX,shakeY);
-    shadowVolume(lightingMaskCtx,light,o,0,1,cx,cy,cols,rows,shakeX,shakeY);
+// Marches a ring of rays out from the light and, for each one, finds the nearest occluder it
+// hits (or the light's own radius if none block it). The result is ONE continuous polygon
+// describing how far light reaches in every direction, so occluders standing close together
+// merge into a single shadow instead of each casting an independent wedge - that independence
+// is what let light leak through the gaps between wedges and produce the starburst. Points are
+// {x,y} tile-unit offsets from the light.
+function buildVisibilityPolygon(light,occluders,rays){
+  const pts=new Array(rays);
+  for(let i=0;i<rays;i++){
+    const angle=(i/rays)*Math.PI*2,dx=Math.cos(angle),dy=Math.sin(angle);
+    let dist=light.radius;
+    for(const o of occluders){
+      const hit=rayCircleHit(dx,dy,o.x-light.x,o.y-light.y,o.radius);
+      if(hit<dist)dist=hit;
+    }
+    pts[i]={x:dx*dist,y:dy*dist};
   }
-  lightingMaskCtx.restore();
+  return pts;
 }
 
 function addPointLight(light,cx,cy,cols,rows,shakeX,shakeY){
-  if(!lightingDarkCtx||!lightingColorCtx||!lightingMaskCtx)return;
+  if(!lightingDarkCtx||!lightingColorCtx||!lightingMaskCtx||!lightingPolyCtx)return;
   const screen=worldToLightScreen(light.x,light.y,cx,cy,cols,rows,shakeX,shakeY);
   const radiusPx=Math.max(1,light.radius*TILE),intensity=Math.max(.05,Math.min(1,light.intensity||1));
   const occluders=collectLightOccluders(light);
+  const poly=buildVisibilityPolygon(light,occluders,LIGHTING.rays);
+
+  // Rasterize the visibility polygon into a small canvas local to this light and blur it a
+  // touch, so every shadow edge gets a soft penumbra instead of a razor-sharp cutoff.
+  const pad=LIGHTING.penumbra*2+3,half=Math.ceil(radiusPx+pad),boxSize=half*2,boxX=screen.x-half,boxY=screen.y-half;
+  lightingPolyCanvas.width=boxSize;lightingPolyCanvas.height=boxSize;
+  lightingPolyCtx.save();
+  lightingPolyCtx.translate(half,half);
+  lightingPolyCtx.filter=LIGHTING.penumbra>0?`blur(${LIGHTING.penumbra}px)`:'none';
+  lightingPolyCtx.fillStyle='#fff';
+  lightingPolyCtx.beginPath();
+  lightingPolyCtx.moveTo(poly[0].x*TILE,poly[0].y*TILE);
+  for(let i=1;i<poly.length;i++)lightingPolyCtx.lineTo(poly[i].x*TILE,poly[i].y*TILE);
+  lightingPolyCtx.closePath();
+  lightingPolyCtx.fill();
+  lightingPolyCtx.restore();
+
+  // Brightness pass: warm-white radial falloff, masked to the blurred visibility shape.
   lightingMaskCtx.setTransform(1,0,0,1,0,0);
   lightingMaskCtx.globalCompositeOperation='source-over';
-  lightingMaskCtx.clearRect(0,0,W,H);
+  lightingMaskCtx.clearRect(boxX,boxY,boxSize,boxSize);
   const g=lightingMaskCtx.createRadialGradient(screen.x,screen.y,0,screen.x,screen.y,radiusPx);
-  g.addColorStop(0,`rgba(255,255,255,${Math.min(1,intensity)})`);
-  g.addColorStop(.20,`rgba(255,255,255,${Math.min(1,intensity*.98)})`);
-  g.addColorStop(.52,`rgba(255,255,255,${Math.min(.82,intensity*.72)})`);
-  g.addColorStop(.80,`rgba(255,255,255,${intensity*.28})`);
+  g.addColorStop(0,`rgba(255,255,255,${intensity})`);
+  g.addColorStop(.22,`rgba(255,255,255,${intensity*.97})`);
+  g.addColorStop(.5,`rgba(255,255,255,${intensity*.78})`);
+  g.addColorStop(.78,`rgba(255,255,255,${intensity*.36})`);
   g.addColorStop(1,'rgba(255,255,255,0)');
-  lightingMaskCtx.fillStyle=g;lightingMaskCtx.fillRect(screen.x-radiusPx,screen.y-radiusPx,radiusPx*2,radiusPx*2);
-  blockLightMask(light,occluders,cx,cy,cols,rows,shakeX,shakeY);
+  lightingMaskCtx.fillStyle=g;lightingMaskCtx.fillRect(boxX,boxY,boxSize,boxSize);
+  lightingMaskCtx.globalCompositeOperation='destination-in';
+  lightingMaskCtx.drawImage(lightingPolyCanvas,boxX,boxY);
+  lightingMaskCtx.globalCompositeOperation='source-over';
 
   lightingDarkCtx.save();
   lightingDarkCtx.globalCompositeOperation='destination-out';
-  lightingDarkCtx.drawImage(lightingMaskCanvas,0,0);
+  lightingDarkCtx.drawImage(lightingMaskCanvas,boxX,boxY,boxSize,boxSize,boxX,boxY,boxSize,boxSize);
   lightingDarkCtx.restore();
 
+  // Color pass: tint the same masked shape with the light's own color (firelight amber, etc).
   const c=light.color||[255,170,80],strength=Math.max(0,Math.min(.75,(light.colorStrength==null?LIGHTING.colorStrength:light.colorStrength)*intensity));
   lightingMaskCtx.setTransform(1,0,0,1,0,0);
   lightingMaskCtx.globalCompositeOperation='source-over';
-  lightingMaskCtx.clearRect(0,0,W,H);
+  lightingMaskCtx.clearRect(boxX,boxY,boxSize,boxSize);
   const cg=lightingMaskCtx.createRadialGradient(screen.x,screen.y,0,screen.x,screen.y,radiusPx);
   cg.addColorStop(0,`rgba(${c[0]},${c[1]},${c[2]},${strength})`);
-  cg.addColorStop(.30,`rgba(${c[0]},${c[1]},${c[2]},${strength*.80})`);
-  cg.addColorStop(.66,`rgba(${c[0]},${c[1]},${c[2]},${strength*.30})`);
+  cg.addColorStop(.32,`rgba(${c[0]},${c[1]},${c[2]},${strength*.78})`);
+  cg.addColorStop(.68,`rgba(${c[0]},${c[1]},${c[2]},${strength*.30})`);
   cg.addColorStop(1,'rgba(0,0,0,0)');
-  lightingMaskCtx.fillStyle=cg;lightingMaskCtx.fillRect(screen.x-radiusPx,screen.y-radiusPx,radiusPx*2,radiusPx*2);
-  blockLightMask(light,occluders,cx,cy,cols,rows,shakeX,shakeY);
+  lightingMaskCtx.fillStyle=cg;lightingMaskCtx.fillRect(boxX,boxY,boxSize,boxSize);
+  lightingMaskCtx.globalCompositeOperation='destination-in';
+  lightingMaskCtx.drawImage(lightingPolyCanvas,boxX,boxY);
+  lightingMaskCtx.globalCompositeOperation='source-over';
 
-  lightingColorCtx.save();lightingColorCtx.globalCompositeOperation='lighter';lightingColorCtx.drawImage(lightingMaskCanvas,0,0);lightingColorCtx.restore();
+  lightingColorCtx.save();
+  lightingColorCtx.globalCompositeOperation='lighter';
+  lightingColorCtx.drawImage(lightingMaskCanvas,boxX,boxY,boxSize,boxSize,boxX,boxY,boxSize,boxSize);
+  lightingColorCtx.restore();
 }
 
 function getSceneLights(){
@@ -2491,7 +2614,7 @@ function render(){ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';c
     ctx.fillStyle='rgba(230,240,235,0.5)';ctx.beginPath();ctx.arc(px,py,1,0,Math.PI*2);ctx.fill();
   }
 }}
-const draw=[];for(const e of entities){const sx=Math.floor((e.x-cx+cols/2)*TILE),sy=Math.floor((e.y-cy+rows/2)*TILE);if(e.type==='zombie')draw.push({y:e.y,render:()=>{const gx=sx+TILE/2,gy=sy+TILE/2;drawSoftShadow(gx-6,gy+10,13,5,.22+.28*sunAngleFactor());if(e.aware){ctx.save();ctx.strokeStyle='#f00';ctx.globalAlpha=.22+Math.sin(Date.now()*.004)*.06;ctx.lineWidth=2;ctx.beginPath();ctx.arc(gx,gy,10,0,Math.PI*2);ctx.stroke();ctx.restore()}const sp=currentZombieSprite(e),size=TILE*1.7;ctx.save();const hue=Math.floor(((e.colorSeed||0)-.5)*70);if(hue)ctx.filter=`hue-rotate(${hue}deg) saturate(${1+((e.colorSeed||0)-.5)*.4})`;if(sp.complete&&sp.naturalWidth){ctx.drawImage(sp,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2),size,size)}else{ctx.fillStyle=e.aware?'#f00':'#600';ctx.fillRect(sx+4,sy+4,TILE-8,TILE-8)}ctx.restore();if(e.hitFlash>0){ctx.save();ctx.globalCompositeOperation='screen';ctx.globalAlpha=Math.min(1,e.hitFlash*4);if(sp.complete&&sp.naturalWidth)ctx.drawImage(sp,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2),size,size);ctx.restore()}}});else if(e.type==='tree')draw.push({y:treeSortY(e),render:()=>{const sp=getTreeSprite(e.seedVal),size=TILE*6.5;ctx.drawImage(sp.canvas,Math.floor(sx-size/2),Math.floor(sy-size/2),size,size);if(e.clicked){ctx.save();ctx.strokeStyle='#0f0';ctx.globalAlpha=.9;ctx.lineWidth=3;ctx.beginPath();ctx.arc(sx,sy,Math.max(18,e.radius*TILE+10),0,Math.PI*2);ctx.stroke();ctx.restore()}}});else if(e.type==='bush')draw.push({y:e.y,render:()=>{const sp=e.harvested?getBareBushSprite(e.seedVal):getBushSprite(e.seedVal),size=TILE*2;ctx.globalAlpha=e.harvested?.9:1;ctx.drawImage(sp.canvas,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2-4),size,size);ctx.globalAlpha=1;if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,e.radius*TILE+5,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='stick')draw.push({y:e.y,render:()=>{if(e.collected)return;const len=e.length*TILE;ctx.save();ctx.translate(sx,sy);ctx.rotate(e.angle);ctx.lineCap='round';
+const draw=[];for(const e of entities){const sx=Math.floor((e.x-cx+cols/2)*TILE),sy=Math.floor((e.y-cy+rows/2)*TILE);if(e.type==='zombie')draw.push({y:e.y,render:()=>{const gx=sx+TILE/2,gy=sy+TILE/2;drawSoftShadow(gx-6,gy+10,13,5,.22+.28*sunAngleFactor());if(e.aware){ctx.save();ctx.strokeStyle='#f00';ctx.globalAlpha=.22+Math.sin(Date.now()*.004)*.06;ctx.lineWidth=2;ctx.beginPath();ctx.arc(gx,gy,10,0,Math.PI*2);ctx.stroke();ctx.restore()}const sp=currentZombieSprite(e),size=TILE*1.7;ctx.save();const hue=Math.floor(((e.colorSeed||0)-.5)*70);if(hue)ctx.filter=`hue-rotate(${hue}deg) saturate(${1+((e.colorSeed||0)-.5)*.4})`;if(sp.complete&&sp.naturalWidth){ctx.drawImage(sp,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2),size,size)}else{ctx.fillStyle=e.aware?'#f00':'#600';ctx.fillRect(sx+4,sy+4,TILE-8,TILE-8)}ctx.restore();if(e.hitFlash>0){ctx.save();ctx.globalCompositeOperation='screen';ctx.globalAlpha=Math.min(1,e.hitFlash*4);if(sp.complete&&sp.naturalWidth)ctx.drawImage(sp,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2),size,size);ctx.restore()}}});else if(e.type==='tree')draw.push({y:treeSortY(e),render:()=>{drawCastShadow(sx,sy+10,24,9,.30);const sp=getTreeSprite(e.seedVal),size=TILE*6.5;ctx.drawImage(sp.canvas,Math.floor(sx-size/2),Math.floor(sy-size/2),size,size);if(e.clicked){ctx.save();ctx.strokeStyle='#0f0';ctx.globalAlpha=.9;ctx.lineWidth=3;ctx.beginPath();ctx.arc(sx,sy,Math.max(18,e.radius*TILE+10),0,Math.PI*2);ctx.stroke();ctx.restore()}}});else if(e.type==='bush')draw.push({y:e.y,render:()=>{drawCastShadow(sx+TILE/2,sy+TILE/2+7,13,6,.22);const sp=e.harvested?getBareBushSprite(e.seedVal):getBushSprite(e.seedVal),size=TILE*2;ctx.globalAlpha=e.harvested?.9:1;ctx.drawImage(sp.canvas,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2-4),size,size);ctx.globalAlpha=1;if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,e.radius*TILE+5,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='stick')draw.push({y:e.y,render:()=>{if(e.collected)return;const len=e.length*TILE;ctx.save();ctx.translate(sx,sy);ctx.rotate(e.angle);ctx.lineCap='round';
   ctx.strokeStyle='#352416';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(-len*.5,1);ctx.lineTo(-len*.18,.5);ctx.lineTo(len*.2,-.5);ctx.lineTo(len*.5,-1);ctx.stroke();
   ctx.strokeStyle='#664326';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(-len*.48,0);ctx.lineTo(-len*.15,-.5);ctx.lineTo(len*.18,-1);ctx.lineTo(len*.47,-1.5);ctx.stroke();
   ctx.strokeStyle='rgba(120,82,46,.65)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-len*.25,-1);ctx.lineTo(len*.32,-2);ctx.stroke();
@@ -2621,6 +2744,7 @@ let hudTimer=0;let hudVisible=true;const hudToggle=document.getElementById('hudT
 <div style="color:#0f0;margin-bottom:8px;font-weight:bold;font-size:15px">◆ STATUS ◆</div>
 <div>POS: ${pos} | HP: ${player.hp + (player.armorEquipped?50:0)}</div>
 <div>SOIL: ${soilName}</div>
+<div>SEED: ${SEED}</div>
 <div>TIME: ${dayPhaseLabel()}${weatherState==='rain'?' | 🌧 Rain':''}</div>
 <div>TARGET: ${t} | ENTITIES: ${entities.length}</div>
 <div>DEV: / for admin console</div>
