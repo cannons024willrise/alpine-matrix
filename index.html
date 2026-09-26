@@ -249,7 +249,8 @@ const LIGHTING={
   colorStrength:0.22,
   maxLights:24,
   penumbra:5,
-  atmosphere:0.4
+  atmosphere:0.4,
+  shadowHeightScale:1.0
 };
 let lightingDarkCanvas=null,lightingDarkCtx=null,lightingColorCanvas=null,lightingColorCtx=null,lightingMaskCanvas=null,lightingMaskCtx=null,lightingPolyCanvas=null,lightingPolyCtx=null;
 const adminLights=[];
@@ -1443,7 +1444,7 @@ function runAdminCommand(raw){
     adminLog('/tp <x> <y> | /heal [amount] | /kill');
     adminLog('/spawn <zombie|stick|flint|charcoal|pebble> [amount]');
     adminLog('/speed <multiplier> | /daylength <seconds>');
-    adminLog('/light <on|off|debug|ambient|quality|penumbra|list|add|remove|clear|auto>');
+    adminLog('/light <on|off|debug|ambient|quality|penumbra|atmosphere|shadowdepth|list|add|remove|clear|auto>');
     adminLog('/seed [number or text] — show or regenerate the world seed');
     return;
   }
@@ -1585,8 +1586,18 @@ function runAdminCommand(raw){
       if(!Number.isFinite(v)||v<0||v>24){adminLog('Usage: /light penumbra <0-24>','err');return;}
       LIGHTING.penumbra=v;adminLog(`Shadow penumbra: ${v}px.`,'ok');return;
     }
+    if(sub==='atmosphere'){
+      const v=Number(args[0]);
+      if(!Number.isFinite(v)||v<0||v>1){adminLog('Usage: /light atmosphere <0-1>','err');return;}
+      LIGHTING.atmosphere=v;adminLog(`Atmospheric diffusion: ${v}.`,'ok');return;
+    }
+    if(sub==='shadowdepth'){
+      const v=Number(args[0]);
+      if(!Number.isFinite(v)||v<0||v>6){adminLog('Usage: /light shadowdepth <0-6>','err');return;}
+      LIGHTING.shadowHeightScale=v;adminLog(`Shadow height scale: ${v}.`,'ok');return;
+    }
     if(sub==='list'){
-      adminLog(`Lighting: ${LIGHTING.enabled?'ON':'OFF'} • rays=${LIGHTING.rays} • penumbra=${LIGHTING.penumbra}px • debug=${LIGHTING.debug} • admin lights=${adminLights.length}`,'info');
+      adminLog(`Lighting: ${LIGHTING.enabled?'ON':'OFF'} • rays=${LIGHTING.rays} • penumbra=${LIGHTING.penumbra}px • atmosphere=${LIGHTING.atmosphere} • shadowdepth=${LIGHTING.shadowHeightScale} • debug=${LIGHTING.debug} • admin lights=${adminLights.length}`,'info');
       adminLights.forEach((l,i)=>adminLog(`#${i} ${l.kind} @ ${l.x.toFixed(2)},${l.y.toFixed(2)} r=${l.radius.toFixed(2)} i=${l.intensity.toFixed(2)}`));
       return;
     }
@@ -1609,7 +1620,7 @@ function runAdminCommand(raw){
     }
     if(sub==='clear'){adminLights.length=0;adminLog('All admin lights removed.','ok');return;}
     if(sub==='auto'){LIGHTING.ambientOverride=null;adminLog('Ambient lighting returned to the day/night cycle.','ok');return;}
-    adminLog('Usage: /light <on|off|debug|ambient|quality|penumbra|list|add|remove|clear|auto>','err');return;
+    adminLog('Usage: /light <on|off|debug|ambient|quality|penumbra|atmosphere|shadowdepth|list|add|remove|clear|auto>','err');return;
   }
 
   adminLog(`Unknown command: /${command}. Type /help.`,'err');
@@ -2414,9 +2425,13 @@ function worldToLightScreen(x,y,cx,cy,cols,rows,shakeX=0,shakeY=0){
   return{x:(x-cx+cols/2)*TILE+TILE/2+shakeX,y:(y-cy+rows/2)*TILE+TILE/2+shakeY};
 }
 
-function addLightingOccluder(list,x,y,radius,kind){
-  list.push({x,y,radius,kind});
+function addLightingOccluder(list,x,y,radius,kind,height){
+  list.push({x,y,radius,kind,height});
 }
+// Relative entity heights driving how deep a shadow reaches (see rayShadowBands below).
+// Purely a game-feel scale, not measured units - a tree stands taller than a crate, that's
+// the only thing that matters here.
+const OCCLUDER_HEIGHTS={tree:2.2,bush:.6,zombie:1.0,player:1.0,crate:.5};
 
 function collectLightOccluders(light){
   const list=[],maxD=(light.radius||0)+1.1;
@@ -2426,13 +2441,13 @@ function collectLightOccluders(light){
     else if(e.type==='bush')r=.40;
     else if(e.type==='zombie')r=.28;
     else continue;
-    if(Math.hypot(e.x-light.x,e.y-light.y)<=maxD+r)addLightingOccluder(list,e.x,e.y,r,e.type);
+    if(Math.hypot(e.x-light.x,e.y-light.y)<=maxD+r)addLightingOccluder(list,e.x,e.y,r,e.type,OCCLUDER_HEIGHTS[e.type]);
   }
   for(const crate of containers){
-    if(Math.hypot(crate.x-light.x,crate.y-light.y)<=maxD+.55)addLightingOccluder(list,crate.x,crate.y,.50,'crate');
+    if(Math.hypot(crate.x-light.x,crate.y-light.y)<=maxD+.55)addLightingOccluder(list,crate.x,crate.y,.50,'crate',OCCLUDER_HEIGHTS.crate);
   }
   if(light.kind!=='player'&&Math.hypot(player.x-light.x,player.y-light.y)<=maxD+.34)
-    addLightingOccluder(list,player.x,player.y,.30,'player');
+    addLightingOccluder(list,player.x,player.y,.30,'player',OCCLUDER_HEIGHTS.player);
   return list;
 }
 
@@ -2448,24 +2463,74 @@ function rayCircleHit(dx,dy,ox,oy,r){
   return t>0?t:Infinity;
 }
 
-// Marches a ring of rays out from the light and, for each one, finds the nearest occluder it
-// hits (or the light's own radius if none block it). The result is ONE continuous polygon
-// describing how far light reaches in every direction, so occluders standing close together
-// merge into a single shadow instead of each casting an independent wedge - that independence
-// is what let light leak through the gaps between wedges and produce the starburst. Points are
-// {x,y} tile-unit offsets from the light.
-function buildVisibilityPolygon(light,occluders,rays){
-  const pts=new Array(rays);
-  for(let i=0;i<rays;i++){
-    const angle=(i/rays)*Math.PI*2,dx=Math.cos(angle),dy=Math.sin(angle);
-    let dist=light.radius;
-    for(const o of occluders){
-      const hit=rayCircleHit(dx,dy,o.x-light.x,o.y-light.y,o.radius);
-      if(hit<dist)dist=hit;
-    }
-    pts[i]={x:dx*dist,y:dy*dist};
+// ---- Rectilinear (straight-line) shadows, bounded by each occluder's own height ----
+// Deliberately kept separate from the atmospheric diffusion pass in addPointLight below: this
+// system only ever reasons about straight lines being blocked and later resuming, never about
+// scattering. A tall entity blocks a deeper stretch of its ray than a short one; past that
+// depth, if nothing else is in the way, the very same straight-line light resumes at full
+// strength - so one tree's shadow reads as a bounded shape, not a wedge stretching all the way
+// to the edge of the light.
+const DEFAULT_OCCLUDER_HEIGHT=1;
+
+// Every dark [start,end] band one ray casts through the occluder set, merged wherever bands
+// touch or overlap so a row of trees reads as one continuous shadow rather than flickering
+// gaps between each trunk's own band.
+function rayShadowBands(dx,dy,light,occluders){
+  const raw=[];
+  for(const o of occluders){
+    const hit=rayCircleHit(dx,dy,o.x-light.x,o.y-light.y,o.radius);
+    if(hit>=light.radius)continue;
+    const depth=Math.max(0,(o.height==null?DEFAULT_OCCLUDER_HEIGHT:o.height)*LIGHTING.shadowHeightScale);
+    if(depth<=0)continue;
+    raw.push({start:hit,end:Math.min(light.radius,hit+depth)});
   }
-  return pts;
+  raw.sort((a,b)=>a.start-b.start);
+  const bands=[];
+  for(const b of raw){
+    const last=bands[bands.length-1];
+    if(last&&b.start<=last.end)last.end=Math.max(last.end,b.end);
+    else bands.push({start:b.start,end:b.end});
+  }
+  return bands;
+}
+
+// The complement of the dark bands within [0,maxDist]: where this ray's straight-line light
+// actually reaches - possibly more than one segment per ray now.
+function litIntervalsFromBands(bands,maxDist){
+  const lit=[];
+  let cursor=0;
+  for(const b of bands){
+    if(b.start>cursor)lit.push({start:cursor,end:b.start});
+    cursor=Math.max(cursor,b.end);
+  }
+  if(cursor<maxDist)lit.push({start:cursor,end:maxDist});
+  return lit;
+}
+
+// Builds every lit wedge, across every ray, as one combined path (each wedge its own subpath)
+// and fills it exactly once, so the blur set on ctxTarget lands on the whole shape together -
+// filling (and therefore blurring) each wedge separately would leave faint seams between
+// neighboring rays wherever their lit intervals should read as one continuous region.
+function rasterizeDirectMask(ctxTarget,light,occluders,rays,cx,cy){
+  const twoPi=Math.PI*2;
+  ctxTarget.beginPath();
+  for(let i=0;i<rays;i++){
+    const a0=(i/rays)*twoPi,a1=((i+1)/rays)*twoPi;
+    const dx=Math.cos(a0),dy=Math.sin(a0);
+    const bands=rayShadowBands(dx,dy,light,occluders);
+    const lit=litIntervalsFromBands(bands,light.radius);
+    for(const iv of lit){
+      if(iv.end-iv.start<=.0005)continue;
+      const rIn=iv.start*TILE,rOut=iv.end*TILE;
+      ctxTarget.moveTo(cx+Math.cos(a0)*rIn,cy+Math.sin(a0)*rIn);
+      ctxTarget.lineTo(cx+Math.cos(a0)*rOut,cy+Math.sin(a0)*rOut);
+      ctxTarget.arc(cx,cy,rOut,a0,a1);
+      ctxTarget.lineTo(cx+Math.cos(a1)*rIn,cy+Math.sin(a1)*rIn);
+      if(rIn>.01)ctxTarget.arc(cx,cy,rIn,a1,a0,true);
+      ctxTarget.closePath();
+    }
+  }
+  ctxTarget.fill();
 }
 
 function addPointLight(light,cx,cy,cols,rows,shakeX,shakeY){
@@ -2473,24 +2538,48 @@ function addPointLight(light,cx,cy,cols,rows,shakeX,shakeY){
   const screen=worldToLightScreen(light.x,light.y,cx,cy,cols,rows,shakeX,shakeY);
   const radiusPx=Math.max(1,light.radius*TILE),intensity=Math.max(.05,Math.min(1,light.intensity||1));
   const occluders=collectLightOccluders(light);
-  const poly=buildVisibilityPolygon(light,occluders,LIGHTING.rays);
 
-  // Rasterize the visibility polygon into a small canvas local to this light and blur it a
-  // touch, so every shadow edge gets a soft penumbra instead of a razor-sharp cutoff.
+  // Diffusion pass: light scattering through hazy alpine air, reaching even the parts the
+  // rectilinear pass below blocks off, at a much bigger and softer radius. This is the ONLY
+  // place occluders are ignored outright - everything from here down still respects them.
+  const atmoStrength=Math.max(0,Math.min(1,LIGHTING.atmosphere));
+  if(atmoStrength>.01){
+    const atmoRadiusPx=radiusPx*1.7,atmoAlpha=intensity*.32*atmoStrength;
+    lightingDarkCtx.save();
+    lightingDarkCtx.globalCompositeOperation='destination-out';
+    const ag=lightingDarkCtx.createRadialGradient(screen.x,screen.y,0,screen.x,screen.y,atmoRadiusPx);
+    ag.addColorStop(0,`rgba(255,255,255,${atmoAlpha})`);
+    ag.addColorStop(.5,`rgba(255,255,255,${atmoAlpha*.6})`);
+    ag.addColorStop(1,'rgba(255,255,255,0)');
+    lightingDarkCtx.fillStyle=ag;
+    lightingDarkCtx.fillRect(screen.x-atmoRadiusPx,screen.y-atmoRadiusPx,atmoRadiusPx*2,atmoRadiusPx*2);
+    lightingDarkCtx.restore();
+
+    const ac=light.color||[255,170,80],atint=atmoAlpha*.5;
+    lightingColorCtx.save();
+    lightingColorCtx.globalCompositeOperation='lighter';
+    const acg=lightingColorCtx.createRadialGradient(screen.x,screen.y,0,screen.x,screen.y,atmoRadiusPx);
+    acg.addColorStop(0,`rgba(${ac[0]},${ac[1]},${ac[2]},${atint})`);
+    acg.addColorStop(.5,`rgba(${ac[0]},${ac[1]},${ac[2]},${atint*.5})`);
+    acg.addColorStop(1,'rgba(0,0,0,0)');
+    lightingColorCtx.fillStyle=acg;
+    lightingColorCtx.fillRect(screen.x-atmoRadiusPx,screen.y-atmoRadiusPx,atmoRadiusPx*2,atmoRadiusPx*2);
+    lightingColorCtx.restore();
+  }
+
+  // Rectilinear pass: rasterize the height-bounded direct-light mask into a small canvas
+  // local to this light, blurred a touch so each shadow edge gets a soft penumbra rather
+  // than a razor-sharp cutoff.
   const pad=LIGHTING.penumbra*2+3,half=Math.ceil(radiusPx+pad),boxSize=half*2,boxX=screen.x-half,boxY=screen.y-half;
   lightingPolyCanvas.width=boxSize;lightingPolyCanvas.height=boxSize;
   lightingPolyCtx.save();
   lightingPolyCtx.translate(half,half);
   lightingPolyCtx.filter=LIGHTING.penumbra>0?`blur(${LIGHTING.penumbra}px)`:'none';
   lightingPolyCtx.fillStyle='#fff';
-  lightingPolyCtx.beginPath();
-  lightingPolyCtx.moveTo(poly[0].x*TILE,poly[0].y*TILE);
-  for(let i=1;i<poly.length;i++)lightingPolyCtx.lineTo(poly[i].x*TILE,poly[i].y*TILE);
-  lightingPolyCtx.closePath();
-  lightingPolyCtx.fill();
+  rasterizeDirectMask(lightingPolyCtx,light,occluders,LIGHTING.rays,0,0);
   lightingPolyCtx.restore();
 
-  // Brightness pass: warm-white radial falloff, masked to the blurred visibility shape.
+  // Brightness pass: warm-white radial falloff, masked to the blurred direct-light shape.
   lightingMaskCtx.setTransform(1,0,0,1,0,0);
   lightingMaskCtx.globalCompositeOperation='source-over';
   lightingMaskCtx.clearRect(boxX,boxY,boxSize,boxSize);
