@@ -133,8 +133,26 @@ canvas{filter:saturate(1.08) contrast(1.04)}
 #adminCommandInput{flex:1;min-width:0;background:#050505;border:1px solid #777;color:#fff;outline:none;padding:9px 10px;font:13px monospace;box-shadow:inset 1px 1px #000}
 #adminCommandInput:focus{border-color:#0f0}
 #adminConsoleClose{width:auto;padding:9px 12px;font-size:9px}
+#adminConsoleRun{width:auto;padding:9px 12px;font-size:9px;background:#2f6b35;box-shadow:inset 2px 2px 0 0 #4f9a55,inset -2px -2px 0 0 #173a1a,0 0 0 2px #000}
 #adminHint{padding:7px 12px;background:#252525;border-top:1px solid #444;color:#9b9b9b;font-size:10px}
-@media(max-width:620px){#adminConsole{padding:8px}#adminConsoleInner{width:96vw;max-height:84vh}#adminConsoleOutput{max-height:58vh;min-height:180px}#adminConsoleForm{gap:5px}#adminConsoleClose{padding:9px 8px}}
+@media(max-width:620px){#adminConsole{padding:8px}#adminConsoleInner{width:96vw;max-height:84vh}#adminConsoleOutput{max-height:58vh;min-height:180px}#adminConsoleForm{gap:5px}#adminConsoleClose{padding:9px 8px}#adminConsoleRun{padding:9px 8px}}
+
+/* ---- Create World start screen ---- */
+#createWorldScreen{display:none;position:fixed;inset:0;z-index:200;align-items:center;justify-content:center;padding:16px;font-family:monospace;background:radial-gradient(ellipse at 50% 30%,#1c3a22 0%,#0c1810 60%,#060b07 100%)}
+#createWorldScreen.open{display:flex}
+#createWorldInner{width:min(420px,94vw);color:#222}
+#createWorldInner .mc-titlebar{text-align:center;font-size:16px;letter-spacing:2px;padding:16px 12px}
+.cw-body{background:#bcbcbc;padding:18px 16px 16px;box-shadow:inset 0 2px 0 0 #8f8f8f}
+.cw-sub{font-family:'Press Start 2P',monospace;font-size:10px;color:#333;letter-spacing:1px;margin-bottom:14px;text-align:center}
+.cw-label{display:block;font-size:11px;color:#333;margin-bottom:5px;letter-spacing:.5px}
+.cw-seed-row{display:flex;gap:6px;margin-bottom:8px}
+#seedInput{flex:1;min-width:0;background:#8b8b8b;box-shadow:inset 2px 2px 0 0 #373737,inset -2px -2px 0 0 #fbfbfb,0 0 0 2px #000;border:none;outline:none;color:#111;padding:9px 8px;font:12px monospace;pointer-events:auto}
+#seedInput::placeholder{color:#4a4a4a}
+.cw-reroll{width:40px;flex:0 0 auto;background:#7d7d7d;box-shadow:inset 2px 2px 0 0 #b1b1b1,inset -2px -2px 0 0 #3c3c3c,0 0 0 2px #000;border:none;font-size:16px;cursor:pointer;pointer-events:auto}
+.cw-reroll:hover{filter:brightness(1.15)}
+.cw-hint{font-size:9px;color:#4a4a4a;line-height:1.5;margin-bottom:16px}
+.cw-play{background:#3f7f3d;box-shadow:inset 2px 2px 0 0 #6fbf6d,inset -2px -2px 0 0 #1f4f1d,0 0 0 2px #000;font-size:11px;padding:13px 14px}
+.cw-play:hover{filter:brightness(1.12)}
 </style>
 </head>
 <body>
@@ -153,6 +171,7 @@ canvas{filter:saturate(1.08) contrast(1.04)}
     <form id="adminConsoleForm" autocomplete="off">
       <span id="adminPrompt">&gt;</span>
       <input id="adminCommandInput" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Developer command">
+      <button id="adminConsoleRun" class="mc-btn" type="button">RUN</button>
       <button id="adminConsoleClose" class="mc-btn" type="button">CLOSE</button>
     </form>
     <div id="adminHint">Commands: /help  /time  /weather  /gamerule  /gamemode  /give  /clear  /tp  /heal  /kill  /spawn  /speed  /daylength  /light  /seed</div>
@@ -229,7 +248,8 @@ const LIGHTING={
   darkScale:1.03,
   colorStrength:0.22,
   maxLights:24,
-  penumbra:5
+  penumbra:5,
+  atmosphere:0.4
 };
 let lightingDarkCanvas=null,lightingDarkCtx=null,lightingColorCanvas=null,lightingColorCtx=null,lightingMaskCanvas=null,lightingMaskCtx=null,lightingPolyCanvas=null,lightingPolyCtx=null;
 const adminLights=[];
@@ -272,7 +292,7 @@ function writeSeedToURL(seedValue){
   try{const url=new URL(location.href);url.searchParams.set('seed',String(seedValue));history.replaceState(null,'',url)}catch(_){}
 }
 let SEED=readSeedFromURL();
-if(SEED==null){SEED=Math.floor(Math.random()*1e9);writeSeedToURL(SEED)}
+let gameStarted=false;
 const tileCache=new Map(),treeEntityCache=new Map(),pebbleCache=new Map(),bigPebbleCache=new Map(),collectedBigPebbleCache=new Map(),bushEntityCache=new Map(),stickEntityCache=new Map(),collectedStickCache=new Map(),flintEntityCache=new Map(),collectedFlintCache=new Map(),charcoalEntityCache=new Map(),collectedCharcoalCache=new Map(),treeSpriteCache=new Map(),bushSpriteCache=new Map();
 const MAX_PEBBLES=400,MAX_BIG_PEBBLES=100,MAX_BUSHES=180,MAX_STICKS=180,MAX_FLINT=90,MAX_CHARCOAL=140;
 let frameCounter=0;
@@ -558,7 +578,7 @@ function rebuildPlayerSprites(){
 }
 const PLAYER_FRAME_COUNT=8,playerFrames=[];for(let i=0;i<PLAYER_FRAME_COUNT;i++){const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildPlayerSVG(i/PLAYER_FRAME_COUNT,true));playerFrames.push(img)}const playerIdleFrame=new Image();playerIdleFrame.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildPlayerSVG(0,false));function currentPlayerSprite(){if(!player.moving)return playerIdleFrame;return playerFrames[Math.floor(player.animPhase*PLAYER_FRAME_COUNT)%PLAYER_FRAME_COUNT]}
 
-const keys={};addEventListener('keydown',e=>{keys[e.key]=true;if(!e.repeat&&(e.key==='f'||e.key==='F'||e.key===' ')){attack();e.preventDefault()}});addEventListener('keyup',e=>{keys[e.key]=false});
+const keys={};addEventListener('keydown',e=>{if(!gameStarted)return;keys[e.key]=true;if(!e.repeat&&(e.key==='f'||e.key==='F'||e.key===' ')){attack();e.preventDefault()}});addEventListener('keyup',e=>{keys[e.key]=false});
 function screenToWorld(x,y){const r=canvas.getBoundingClientRect();const sx=x-r.left,sy=y-r.top;return{x:sx/TILE+(player.x-viewportCols/2),y:sy/TILE+(player.y-viewportRows/2)}}
 const ARMOR_SLOT='armor';
 const HAND_SLOT_COUNT=2;
@@ -1595,8 +1615,7 @@ function runAdminCommand(raw){
   adminLog(`Unknown command: /${command}. Type /help.`,'err');
 }
 
-adminConsoleForm.addEventListener('submit',e=>{
-  e.preventDefault();
+function submitAdminCommand(){
   const value=adminCommandInput.value.trim();
   if(!value)return;
   adminCommandHistory.push(value);
@@ -1604,7 +1623,10 @@ adminConsoleForm.addEventListener('submit',e=>{
   adminHistoryIndex=-1;
   runAdminCommand(value);
   adminCommandInput.value='';
-});
+  adminCommandInput.focus();
+}
+adminConsoleForm.addEventListener('submit',e=>{e.preventDefault();submitAdminCommand()});
+document.getElementById('adminConsoleRun').addEventListener('click',()=>submitAdminCommand());
 adminConsoleClose.addEventListener('click',()=>setAdminConsoleOpen(false));
 adminConsole.addEventListener('click',e=>{if(e.target===adminConsole)setAdminConsoleOpen(false)});
 adminCommandInput.addEventListener('keydown',e=>{
@@ -1631,12 +1653,13 @@ adminCommandInput.addEventListener('keydown',e=>{
     e.preventDefault();setAdminConsoleOpen(false);
   }else if(e.key==='Enter'){
     e.preventDefault();
-    adminConsoleForm.requestSubmit();
+    submitAdminCommand();
   }
 });
 
 window.addEventListener('keydown',e=>{
-  if(e.key==='/'&&!e.repeat && !adminConsoleOpen && document.activeElement!==adminCommandInput){
+  const activeTag=document.activeElement&&document.activeElement.tagName;
+  if(e.key==='/'&&!e.repeat && !adminConsoleOpen && activeTag!=='INPUT' && activeTag!=='TEXTAREA'){
     e.preventDefault();setAdminConsoleOpen(true);
   }
 },true);
@@ -1842,6 +1865,7 @@ function updateNearbyCrate(){
 }
 
 addEventListener('keydown',e=>{
+  if(!gameStarted)return;
   if(e.code==='KeyE'&&!e.repeat){
     e.preventDefault();
     if(inventoryScreen.classList.contains('open')){
@@ -2749,8 +2773,40 @@ let hudTimer=0;let hudVisible=true;const hudToggle=document.getElementById('hudT
 <div>TARGET: ${t} | ENTITIES: ${entities.length}</div>
 <div>DEV: / for admin console</div>
 </div>`;renderHotbar()}
-for(let i=0;i<5;i++)createEntity('zombie',Math.random()*20-10,Math.random()*20-10);
-let last=performance.now();function loop(){const now=performance.now(),raw=Math.min(now-last,100),dt=raw/16.67;last=now;update(dt);render();updateHUD(raw);requestAnimationFrame(loop)}loop();
+let last=performance.now();
+function loop(){const now=performance.now(),raw=Math.min(now-last,100),dt=raw/16.67;last=now;update(dt);render();updateHUD(raw);requestAnimationFrame(loop)}
+function hideCreateWorldScreen(){const el=document.getElementById('createWorldScreen');if(el)el.classList.remove('open')}
+function startGame(seedValue){
+  if(gameStarted)return;
+  SEED=seedValue;
+  gameStarted=true;
+  writeSeedToURL(seedValue);
+  hideCreateWorldScreen();
+  for(let i=0;i<5;i++)createEntity('zombie',Math.random()*20-10,Math.random()*20-10);
+  last=performance.now();
+  loop();
+}
+function showCreateWorldScreen(){
+  const screen=document.getElementById('createWorldScreen'),form=document.getElementById('createWorldForm'),input=document.getElementById('seedInput'),reroll=document.getElementById('seedRerollBtn'),playBtn=document.getElementById('createWorldPlayBtn');
+  if(!screen||!form||!input){startGame(Math.floor(Math.random()*1e9));return}
+  screen.classList.add('open');
+  // Deliberately self-contained, the same way the dev console's Enter key is: don't rely on
+  // requestSubmit()/implicit form submission working a particular way in every browser. Both
+  // the button click and the Enter key call the exact same function directly.
+  function commitSeed(){
+    const parsed=parseSeedValue(input.value);
+    startGame(parsed==null?Math.floor(Math.random()*1e9):parsed);
+  }
+  input.addEventListener('keydown',e=>{
+    e.stopPropagation();
+    if(e.key==='Enter'){e.preventDefault();commitSeed();}
+  });
+  if(reroll)reroll.addEventListener('click',()=>{input.value=String(Math.floor(Math.random()*1e9));input.focus()});
+  if(playBtn)playBtn.addEventListener('click',e=>{e.preventDefault();commitSeed();});
+  form.addEventListener('submit',e=>{e.preventDefault();commitSeed();});
+  input.focus();
+}
+if(SEED!=null)startGame(SEED);else showCreateWorldScreen();
 </script>
 </body>
 </html>
