@@ -249,8 +249,9 @@ const LIGHTING={
   colorStrength:0.22,
   maxLights:24,
   penumbra:5,
-  atmosphere:0.4,
-  shadowHeightScale:1.0
+  atmosphere:0.5,
+  shadowHeightScale:1.0,
+  shadowChainLimit:1.6
 };
 let lightingDarkCanvas=null,lightingDarkCtx=null,lightingColorCanvas=null,lightingColorCtx=null,lightingMaskCanvas=null,lightingMaskCtx=null,lightingPolyCanvas=null,lightingPolyCtx=null;
 const adminLights=[];
@@ -565,6 +566,8 @@ const player={x:0,y:0,vx:0,vy:0,hp:100,speed:.15,radius:.2,facingAngle:Math.PI/2
 // ---- Containers (crates / furnace fuel), creative mode, and the cursor-held item ----
 const CRATE_SLOT_COUNT=20;
 const containers=[]; // placed storage crates: {x,y,slots:[{id,count}|null, ...]}
+const fences=[]; // placed fence edges: {tx,ty,o:'h'|'v',x,y}. 'h' runs along the TOP edge of tile (tx,ty), 'v' along its LEFT edge; x,y is the edge's midpoint
+const FENCE_HALF_THICK=.09;
 let creativeMode=false;
 let cursorItem=null; // {id,count} currently "held" on the mouse cursor, mirrors classic slot UIs
 let openContainer=null; // {type:'crate'|'furnace', ref:<crate or campfire object>}
@@ -592,7 +595,7 @@ const BASKET_CARRY_TOTAL=BASE_CARRY_SLOTS+BASKET_EXTRA_CARRY_SLOTS;
 function hasBasket(){return player.inventory.basket>0||utilitySlots.backpack==='basket'}
 function getCarrySlotCount(){return hasBasket()?BASKET_CARRY_TOTAL:BASE_CARRY_SLOTS}
 function ensureCarrySlots(){const target=getCarrySlotCount();while(hotbarSlots.length<target)hotbarSlots.push(null);}
-const STACK_LIMITS={stalkFiber:8,thickStick:3,bigPebble:3,flint:4,charcoal:3,cordage:4,basket:1,knappedFlint:2,carvedShaft:1,shaft:1,flintKnife:1,spear:1,stoneAxe:1,armor:1,campfire:1};
+const STACK_LIMITS={stalkFiber:8,thickStick:3,bigPebble:3,flint:4,charcoal:3,cordage:4,basket:1,knappedFlint:2,carvedShaft:1,shaft:1,flintKnife:1,spear:1,stoneAxe:1,armor:1,campfire:1,fence:8};
 let hotbarSlots=Array(BASE_CARRY_SLOTS).fill(null);
 let handSlots=Array(HAND_SLOT_COUNT).fill(null);
 const utilitySlots={armor:'',backpack:''};
@@ -781,6 +784,7 @@ function hitEntityAtScreen(clientX,clientY){
 const RECIPES=[
   {id:'campfire',name:'Campfire',stage:'Build',desc:'Gather stones and arrange them in a ring. Burn sticks as fuel to produce heat and charcoal.',cost:{thickStick:3,bigPebble:2},icon:'#e8a040',buildable:true},
   {id:'crate',name:'Storage Crate',stage:'Build',desc:'Lash sticks and woven fiber into a sturdy container for stashing extra materials in the world.',cost:{thickStick:6,stalkFiber:4},icon:'#b97a3d',buildable:true},
+  {id:'fence',name:'Fence',stage:'Build',desc:'Lash thick sticks into a rail that runs along a tile edge. Rotate it in Build Mode (B). Blocks movement - zombies included.',cost:{thickStick:4,cordage:1},icon:'#8a6636',buildable:true,place:'edge'},
   {id:'cordage',name:'Cordage',stage:'Process',desc:'Twist plant stalk fiber into two-ply cord for lashing.',cost:{stalkFiber:4},icon:'#5bc46a'},
   {id:'basket',name:'Basket',stage:'Process',desc:'Weave gathered plant stalk fibers into a small rigid basket for carrying and storing materials.',cost:{stalkFiber:6},icon:'#c99a55'},
   {id:'knappedFlint',name:'Knapped Flint Edge',stage:'Process',desc:'Percussion-flake a flint nodule with a hammerstone to raise a sharp edge.',cost:{flint:1,bigPebble:1},icon:'#cfd3d0'},
@@ -792,7 +796,7 @@ const RECIPES=[
   {id:'spear',name:'Spear',stage:'Haft',desc:'Haft a flint point onto a fire-hardened shaft, lashed and bound tight with cordage.',cost:{knappedFlint:1,shaft:1,cordage:2},icon:'#c96'},
   {id:'stoneAxe',name:'Stone Axe (Celt)',stage:'Haft',desc:'Peck and grind a flint blank into an axehead, wedge it into a mortised shaft, and bind tight.',cost:{knappedFlint:2,shaft:1,cordage:2},icon:'#8a8880'}
 ];
-const ITEM_ICON_KIND={stalkFiber:'fiber',thickStick:'stick',bigPebble:'pebble',flint:'flint',charcoal:'charcoal',cordage:'coil',basket:'basket',knappedFlint:'flint',carvedShaft:'stick',shaft:'stick',flintKnife:'tool',spear:'tool',stoneAxe:'tool',armor:'armor',campfire:'flame',crate:'crate'};
+const ITEM_ICON_KIND={stalkFiber:'fiber',thickStick:'stick',bigPebble:'pebble',flint:'flint',charcoal:'charcoal',cordage:'coil',basket:'basket',knappedFlint:'flint',carvedShaft:'stick',shaft:'stick',flintKnife:'tool',spear:'tool',stoneAxe:'tool',armor:'armor',campfire:'flame',crate:'crate',fence:'fence'};
 const ITEM_NAMES={stalkFiber:'Stalk Fibers',thickStick:'Thick Stick',bigPebble:'Pebble',flint:'Flint',charcoal:'Charcoal',basket:'Basket',armor:'Woven Armor'};
 function itemDisplayName(id){const r=RECIPES.find(x=>x.id===id);return r?r.name:(ITEM_NAMES[id]||id)}
 function itemIconSVG(kind,color){
@@ -808,6 +812,7 @@ function itemIconSVG(kind,color){
     case'armor':return`<svg viewBox="0 0 24 24"><path d="M4 4 L20 4 L18 12 L16 20 L8 20 L6 12 Z" fill="#8a8880" stroke="#373737" stroke-width="1.5"/><rect x="8" y="7" width="8" height="3" fill="#c99a55"/></svg>`;
     case'tool':return`<svg viewBox="0 0 24 24"><rect x="10.5" y="10" width="3" height="13" rx="1" fill="#352416" transform="rotate(45 12 16)"/><rect x="11.1" y="10.5" width="1" height="12" rx=".5" fill="#664326" transform="rotate(45 12 16)"/><polygon points="4,4 12,4 14,10 6,12" fill="#cfd3d0"/><polygon points="4,4 12,4 8,8" fill="#eef1ef"/></svg>`;
     case'crate':return`<svg viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="10" rx="1" fill="#b97a3d" stroke="#5b371b" stroke-width="1.2"/><rect x="3" y="7" width="18" height="5" rx="1" fill="#c99a55" stroke="#5b371b" stroke-width="1.2"/><rect x="10.5" y="10.5" width="3" height="3" fill="#5b371b"/></svg>`;
+    case'fence':return`<svg viewBox="0 0 24 24"><rect x="3" y="5" width="3" height="16" fill="#664326"/><rect x="18" y="5" width="3" height="16" fill="#664326"/><rect x="2" y="8" width="20" height="3" fill="#8a6636"/><rect x="2" y="15" width="20" height="3" fill="#8a6636"/></svg>`;
     default:return`<svg viewBox="0 0 24 24"><polygon points="12,3 20,9 16,21 8,21 4,9" fill="${color||'#8a8880'}"/><polygon points="12,3 20,9 12,12" fill="rgba(255,255,255,.35)"/></svg>`;
   }
 }
@@ -863,7 +868,7 @@ function recipeCanCraft(recipe){
     return !player.inventory.armor&&!player.armorEquipped&&!utilitySlots.armor;
   }
 
-  if(recipe.buildable)return true;
+  if(recipe.buildable)return buildableFitsAfterCraft(recipe);
 
   const existing=player.inventory[recipe.id]||0;
   const limit=itemStackLimit(recipe.id);
@@ -878,6 +883,37 @@ function recipeCanCraft(recipe){
   // Carry items can top off an existing stack or use any free carry slot.
   if(existing>0&&hotbarSlots.some(s=>s&&s.id===recipe.id&&s.count<limit))return true;
   return hotbarSlots.some(s=>!s);
+}
+
+// Buildables are crafted into the carry inventory (Minecraft style) and placed later from
+// Build Mode. The result slot can't be reserved BEFORE spending the ingredients the way
+// other recipes do - a crate's own sticks and fiber can fill every base carry slot, so that
+// would make it uncraftable - so this simulates spending them first, on copies of the slots.
+function buildableFitsAfterCraft(recipe){
+  ensureCarrySlots();
+  const carry=hotbarSlots.map(s=>s?{id:s.id,count:s.count}:null);
+  const hands=handSlots.map(s=>s?{id:s.id,count:s.count}:null);
+  for(const k in recipe.cost){
+    let need=recipe.cost[k];
+    const arr=HAND_ITEMS.has(k)?hands:carry;
+    for(let i=0;i<arr.length&&need>0;i++){
+      const s=arr[i];
+      if(s&&s.id===k){const take=Math.min(need,s.count);s.count-=take;need-=take;if(s.count<=0)arr[i]=null}
+    }
+    if(need>0)return false;
+  }
+  const limit=itemStackLimit(recipe.id),dest=HAND_ITEMS.has(recipe.id)?hands:carry;
+  return dest.some(s=>s&&s.id===recipe.id&&s.count<limit)||dest.some(s=>!s);
+}
+function craftBuildableOnce(recipe){
+  if(!canAfford(recipe.cost)||!buildableFitsAfterCraft(recipe))return false;
+  if(!validateAndConsume(recipe.cost))return false;
+  if(!addItem(recipe.id,1)){
+    // The fits-check just passed, so this shouldn't happen - but never eat ingredients.
+    for(const k in recipe.cost)addItem(k,recipe.cost[k]);
+    return false;
+  }
+  return true;
 }
 
 function maxCraftBatch(id){
@@ -897,11 +933,18 @@ function craftItem(id, maxBatch=false){
   if(!recipe||!recipeCanCraft(recipe))return false;
 
   if(recipe.buildable){
-    player.placingRecipeId=id;
-    selectedRecipeId=null;
-    closeInventoryScreen();
-    createFloatingText(player.x,player.y-1,`Click world to place ${recipe.name}`,'#ffd76a');
-    return true;
+    const wanted=maxBatch?Math.max(1,maxCraftBatch(id)):1;
+    let made=0;
+    for(let i=0;i<wanted;i++){
+      if(!craftBuildableOnce(recipe))break;
+      made++;
+    }
+    if(made>0){
+      createFloatingText(player.x,player.y-1,`◆ Crafted ${recipe.name} x${made} - press B to build`,'#ffd76a');
+      addCameraShake(.08,.2);
+    }
+    renderCraftPanel();
+    return made>0;
   }
 
   const availableBatch=maxCraftBatch(id);
@@ -1064,8 +1107,9 @@ function renderCraftDetail(){
   const ingredientSlots=Object.entries(r.cost).map(([k,v])=>{const have=player.inventory[k]||0,short=have<v;return `<div class="mc-ing">${mcSlotHTML({id:k,kind:ITEM_ICON_KIND[k]||'gem',count:v,locked:short})}<div class="mc-ing-have ${short?'short':''}">${have}/${v}</div></div>`}).join('');
   const warning=r.requiresCampfire&&!getActiveCampfire()?'<div class="mc-warning">⚠ Stand within 3 tiles of a lit campfire</div>':'';
   const basketWarning=isBasketMaxed?'<div class="mc-warning">⚠ You can only have one Basket!</div>':'';
-  const carryWarning=!r.buildable&&!['basket','armor'].includes(r.id)&&!HAND_ITEMS.has(r.id)&&!hasCarryRoom&&!isBasketMaxed?'<div class="mc-warning">⚠ No free carry slot.</div>':'';
-  craftDetail.innerHTML=`<div class="mc-detail-name">${r.name}</div><div class="mc-detail-desc">${r.desc}</div><div class="mc-recipe-row">${ingredientSlots}<div class="mc-arrow">→</div>${mcSlotHTML({id:r.id,kind:ITEM_ICON_KIND[r.id]||'gem',color:r.icon,count:''})}</div>${warning}${basketWarning}${carryWarning}<button class="mc-btn${canCraft?'':' disabled'}" id="craftGo" type="button">${r.buildable?'SELECT PLACEMENT':'CRAFT (Shift+Click: Auto-Batch)'}</button>`;
+  const carryWarning=!r.buildable&&!['basket','armor'].includes(r.id)&&!HAND_ITEMS.has(r.id)&&!hasCarryRoom&&!isBasketMaxed?'<div class="mc-warning">⚠ No free carry slot.</div>':(r.buildable&&afford&&!canCraft?'<div class="mc-warning">⚠ No room to carry it.</div>':'');
+  const buildableLabel=r.buildable?'CRAFT (then place with B)':'CRAFT (Shift+Click: Auto-Batch)';
+  craftDetail.innerHTML=`<div class="mc-detail-name">${r.name}</div><div class="mc-detail-desc">${r.desc}</div><div class="mc-recipe-row">${ingredientSlots}<div class="mc-arrow">→</div>${mcSlotHTML({id:r.id,kind:ITEM_ICON_KIND[r.id]||'gem',color:r.icon,count:''})}</div>${warning}${basketWarning}${carryWarning}<button class="mc-btn${canCraft?'':' disabled'}" id="craftGo" type="button">${buildableLabel}</button>`;
 }
 function utilitySlotHTML(side,itemId){
   const labels={armor:'Armor',backpack:'Basket / Backpack'};
@@ -1444,7 +1488,7 @@ function runAdminCommand(raw){
     adminLog('/tp <x> <y> | /heal [amount] | /kill');
     adminLog('/spawn <zombie|stick|flint|charcoal|pebble> [amount]');
     adminLog('/speed <multiplier> | /daylength <seconds>');
-    adminLog('/light <on|off|debug|ambient|quality|penumbra|atmosphere|shadowdepth|list|add|remove|clear|auto>');
+    adminLog('/light <on|off|debug|ambient|quality|penumbra|atmosphere|shadowdepth|chainlimit|list|add|remove|clear|auto>');
     adminLog('/seed [number or text] — show or regenerate the world seed');
     return;
   }
@@ -1596,8 +1640,13 @@ function runAdminCommand(raw){
       if(!Number.isFinite(v)||v<0||v>6){adminLog('Usage: /light shadowdepth <0-6>','err');return;}
       LIGHTING.shadowHeightScale=v;adminLog(`Shadow height scale: ${v}.`,'ok');return;
     }
+    if(sub==='chainlimit'){
+      const v=Number(args[0]);
+      if(!Number.isFinite(v)||v<1||v>4){adminLog('Usage: /light chainlimit <1-4>','err');return;}
+      LIGHTING.shadowChainLimit=v;adminLog(`Shadow chain limit: ${v}x a run's tallest member.`,'ok');return;
+    }
     if(sub==='list'){
-      adminLog(`Lighting: ${LIGHTING.enabled?'ON':'OFF'} • rays=${LIGHTING.rays} • penumbra=${LIGHTING.penumbra}px • atmosphere=${LIGHTING.atmosphere} • shadowdepth=${LIGHTING.shadowHeightScale} • debug=${LIGHTING.debug} • admin lights=${adminLights.length}`,'info');
+      adminLog(`Lighting: ${LIGHTING.enabled?'ON':'OFF'} • rays=${LIGHTING.rays} • penumbra=${LIGHTING.penumbra}px • atmosphere=${LIGHTING.atmosphere} • shadowdepth=${LIGHTING.shadowHeightScale} • chainlimit=${LIGHTING.shadowChainLimit} • debug=${LIGHTING.debug} • admin lights=${adminLights.length}`,'info');
       adminLights.forEach((l,i)=>adminLog(`#${i} ${l.kind} @ ${l.x.toFixed(2)},${l.y.toFixed(2)} r=${l.radius.toFixed(2)} i=${l.intensity.toFixed(2)}`));
       return;
     }
@@ -1620,7 +1669,7 @@ function runAdminCommand(raw){
     }
     if(sub==='clear'){adminLights.length=0;adminLog('All admin lights removed.','ok');return;}
     if(sub==='auto'){LIGHTING.ambientOverride=null;adminLog('Ambient lighting returned to the day/night cycle.','ok');return;}
-    adminLog('Usage: /light <on|off|debug|ambient|quality|penumbra|atmosphere|shadowdepth|list|add|remove|clear|auto>','err');return;
+    adminLog('Usage: /light <on|off|debug|ambient|quality|penumbra|atmosphere|shadowdepth|chainlimit|list|add|remove|clear|auto>','err');return;
   }
 
   adminLog(`Unknown command: /${command}. Type /help.`,'err');
@@ -2431,13 +2480,13 @@ function addLightingOccluder(list,x,y,radius,kind,height){
 // Relative entity heights driving how deep a shadow reaches (see rayShadowBands below).
 // Purely a game-feel scale, not measured units - a tree stands taller than a crate, that's
 // the only thing that matters here.
-const OCCLUDER_HEIGHTS={tree:2.2,bush:.6,zombie:1.0,player:1.0,crate:.5};
+const OCCLUDER_HEIGHTS={tree:2.2,bush:.6,zombie:1.0,player:1.0,crate:.5,fence:.4};
 
 function collectLightOccluders(light){
   const list=[],maxD=(light.radius||0)+1.1;
   for(const e of entities){
     let r=0;
-    if(e.type==='tree')r=.72;
+    if(e.type==='tree')r=.55;
     else if(e.type==='bush')r=.40;
     else if(e.type==='zombie')r=.28;
     else continue;
@@ -2445,6 +2494,12 @@ function collectLightOccluders(light){
   }
   for(const crate of containers){
     if(Math.hypot(crate.x-light.x,crate.y-light.y)<=maxD+.55)addLightingOccluder(list,crate.x,crate.y,.50,'crate',OCCLUDER_HEIGHTS.crate);
+  }
+  for(const fence of fences){
+    if(Math.hypot(fence.x-light.x,fence.y-light.y)>maxD+.7)continue;
+    for(const k of [-.33,0,.33]){
+      addLightingOccluder(list,fence.x+(fence.o==='h'?k:0),fence.y+(fence.o==='h'?0:k),.2,'fence',OCCLUDER_HEIGHTS.fence);
+    }
   }
   if(light.kind!=='player'&&Math.hypot(player.x-light.x,player.y-light.y)<=maxD+.34)
     addLightingOccluder(list,player.x,player.y,.30,'player',OCCLUDER_HEIGHTS.player);
@@ -2482,14 +2537,23 @@ function rayShadowBands(dx,dy,light,occluders){
     if(hit>=light.radius)continue;
     const depth=Math.max(0,(o.height==null?DEFAULT_OCCLUDER_HEIGHT:o.height)*LIGHTING.shadowHeightScale);
     if(depth<=0)continue;
-    raw.push({start:hit,end:Math.min(light.radius,hit+depth)});
+    raw.push({start:hit,end:Math.min(light.radius,hit+depth),depth});
   }
   raw.sort((a,b)=>a.start-b.start);
+  const chainMult=Math.max(1,LIGHTING.shadowChainLimit);
   const bands=[];
   for(const b of raw){
     const last=bands[bands.length-1];
-    if(last&&b.start<=last.end)last.end=Math.max(last.end,b.end);
-    else bands.push({start:b.start,end:b.end});
+    if(last&&b.start<=last.end){
+      // A row of trees standing close together would otherwise keep merging into one
+      // ever-longer band - each new tree's own end just kept winning the max(). Capping the
+      // run at a multiple of its tallest single member's own depth is what actually lets
+      // light start reading through a dense stand again instead of one solid wall.
+      last.maxDepth=Math.max(last.maxDepth,b.depth);
+      last.end=Math.min(Math.max(last.end,b.end),last.start+last.maxDepth*chainMult);
+    }else{
+      bands.push({start:b.start,end:b.end,maxDepth:b.depth});
+    }
   }
   return bands;
 }
