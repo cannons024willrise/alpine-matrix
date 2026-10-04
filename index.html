@@ -137,6 +137,13 @@ canvas{filter:saturate(1.08) contrast(1.04)}
 #adminHint{padding:7px 12px;background:#252525;border-top:1px solid #444;color:#9b9b9b;font-size:10px}
 @media(max-width:620px){#adminConsole{padding:8px}#adminConsoleInner{width:96vw;max-height:84vh}#adminConsoleOutput{max-height:58vh;min-height:180px}#adminConsoleForm{gap:5px}#adminConsoleClose{padding:9px 8px}#adminConsoleRun{padding:9px 8px}}
 
+/* ---- Build Mode bar ---- */
+#buildBar{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:74px;z-index:12;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;padding:6px 8px;background:rgba(0,0,0,.55);border:2px solid #333;max-width:96vw;pointer-events:auto;touch-action:none}
+#buildBar.show{display:flex}
+#buildBar .bb-label{font:8px/1 'Press Start 2P',monospace;color:#ddd;text-shadow:1px 1px #000;margin-right:2px}
+#buildBar .bb-hint{font:9px monospace;color:#bbb;flex-basis:100%;text-align:center}
+@media (pointer:coarse), (max-width:700px){#buildBar{bottom:126px}#buildBar .bb-hint{display:none}}
+
 /* ---- Create World start screen ---- */
 #createWorldScreen{display:none;position:fixed;inset:0;z-index:200;align-items:center;justify-content:center;padding:16px;font-family:monospace;background:radial-gradient(ellipse at 50% 30%,#1c3a22 0%,#0c1810 60%,#060b07 100%)}
 #createWorldScreen.open{display:flex}
@@ -160,8 +167,9 @@ canvas{filter:saturate(1.08) contrast(1.04)}
 <div id="hud"></div>
 <button id="hudToggle" type="button">◆</button>
 <div id="creativeIndicator">✦ CREATIVE MODE</div>
-<div id="craftHint">[C] Inventory | [Click/Right-Click] Full/Half Stack | [Drag] Move Item | [Shift+Click] Container | [`] Creative | [1-7] Slots</div>
+<div id="craftHint">[C] Inventory | [Click/Right-Click] Full/Half Stack | [Drag] Move Item | [Shift+Click] Container | [`] Creative | [1-7] Slots | [B] Build</div>
 <div id="hotbar"></div>
+<div id="buildBar"></div>
 <div id="cursorItemDisplay"></div>
 
 <div id="adminConsole" aria-hidden="true">
@@ -174,7 +182,7 @@ canvas{filter:saturate(1.08) contrast(1.04)}
       <button id="adminConsoleRun" class="mc-btn" type="button">RUN</button>
       <button id="adminConsoleClose" class="mc-btn" type="button">CLOSE</button>
     </form>
-    <div id="adminHint">Commands: /help  /time  /weather  /gamerule  /gamemode  /give  /clear  /tp  /heal  /kill  /spawn  /speed  /daylength  /light  /seed</div>
+    <div id="adminHint">Commands: /help  /time  /weather  /gamerule  /gamemode  /give  /clear  /tp  /heal  /kill  /spawn  /speed  /daylength  /light  /seed  /hitbox</div>
   </div>
 </div>
 
@@ -561,13 +569,23 @@ function buildZombieSVG(phase,moving){
 }
 const ZOMBIE_FRAME_COUNT=8,zombieFrames=[];for(let i=0;i<ZOMBIE_FRAME_COUNT;i++){const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildZombieSVG(i/ZOMBIE_FRAME_COUNT,true));zombieFrames.push(img)}const zombieIdleFrame=new Image();zombieIdleFrame.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildZombieSVG(0,false));function currentZombieSprite(e){if(!e.vx&&!e.vy)return zombieIdleFrame;return zombieFrames[Math.floor(e.animPhase*ZOMBIE_FRAME_COUNT)%ZOMBIE_FRAME_COUNT]}
 
-const player={x:0,y:0,vx:0,vy:0,hp:100,speed:.15,radius:.2,facingAngle:Math.PI/2,animPhase:0,moving:false,inventory:{stalkFiber:0,thickStick:0,flint:0,bigPebble:0,charcoal:0,cordage:0,basket:0,knappedFlint:0,carvedShaft:0,shaft:0,flintKnife:0,stoneAxe:0,spear:0,armor:0,campfire:0},armorEquipped:false,campfires:[],selectedCampfire:0,placingRecipeId:null,target:null};
+const player={x:0,y:0,vx:0,vy:0,hp:100,speed:.15,radius:.2,facingAngle:Math.PI/2,animPhase:0,moving:false,inventory:{stalkFiber:0,thickStick:0,flint:0,bigPebble:0,charcoal:0,cordage:0,basket:0,knappedFlint:0,carvedShaft:0,shaft:0,flintKnife:0,stoneAxe:0,spear:0,armor:0,campfire:0},armorEquipped:false,campfires:[],selectedCampfire:0,placingRecipeId:null,lastBuildId:null,target:null};
 
 // ---- Containers (crates / furnace fuel), creative mode, and the cursor-held item ----
 const CRATE_SLOT_COUNT=20;
 const containers=[]; // placed storage crates: {x,y,slots:[{id,count}|null, ...]}
-const fences=[]; // placed fence edges: {tx,ty,o:'h'|'v',x,y}. 'h' runs along the TOP edge of tile (tx,ty), 'v' along its LEFT edge; x,y is the edge's midpoint
-const FENCE_HALF_THICK=.09;
+// Fences work like Minecraft's: each placed piece is a POST, and posts one tile apart join up
+// with rails automatically - no rotation, the shape comes from which neighbours exist. Posts
+// sit on the tile-CORNER lattice, so a run of them lies exactly along tile edges.
+const fences=[]; // placed posts: {vx,vy} (integer lattice coordinates)
+const fenceMap=new Map();
+function fenceAt(vx,vy){return fenceMap.get(vx+','+vy)||null}
+function addFencePost(vx,vy){if(fenceAt(vx,vy))return null;const p={vx,vy};fences.push(p);fenceMap.set(vx+','+vy,p);return p}
+function removeFencePost(p){const i=fences.indexOf(p);if(i!==-1)fences.splice(i,1);fenceMap.delete(p.vx+','+p.vy)}
+const FENCE_POST_R=.14,FENCE_ARM_R=.09; // collision half-sizes: a post, and a rail joining two posts
+const BUILD_REACH=6; // how far from the player (in tiles) anything can be placed or picked up
+const FENCE_AIM_DY=.3; // aim at the middle of the post you're placing, not its base
+let DEBUG_HITBOX=false;
 let creativeMode=false;
 let cursorItem=null; // {id,count} currently "held" on the mouse cursor, mirrors classic slot UIs
 let openContainer=null; // {type:'crate'|'furnace', ref:<crate or campfire object>}
@@ -584,6 +602,31 @@ const PLAYER_FRAME_COUNT=8,playerFrames=[];for(let i=0;i<PLAYER_FRAME_COUNT;i++)
 
 const keys={};addEventListener('keydown',e=>{if(!gameStarted)return;keys[e.key]=true;if(!e.repeat&&(e.key==='f'||e.key==='F'||e.key===' ')){attack();e.preventDefault()}});addEventListener('keyup',e=>{keys[e.key]=false});
 function screenToWorld(x,y){const r=canvas.getBoundingClientRect();const sx=x-r.left,sy=y-r.top;return{x:sx/TILE+(player.x-viewportCols/2),y:sy/TILE+(player.y-viewportRows/2)}}
+// Build Mode pointer plumbing. The live pointer position drives the placement ghost (mouse
+// only - touch has no hover); the wheel cycles the piece you're holding; right-click leaves.
+let lastCanvasPointer=null;
+canvas.addEventListener('pointermove',e=>{
+  if(e.pointerType!=='touch')lastCanvasPointer={x:e.clientX,y:e.clientY};
+  if(buildStroke)buildPointerMove(e);
+});
+canvas.addEventListener('wheel',e=>{
+  if(!player.placingRecipeId)return;
+  e.preventDefault();
+  cycleBuildPiece(e.deltaY>0?1:-1);
+},{passive:false});
+canvas.addEventListener('contextmenu',e=>{if(player.placingRecipeId){e.preventDefault();exitBuildMode()}});
+window.addEventListener('pointerup',e=>{
+  if(buildStroke&&buildStroke.pointerId===e.pointerId)buildStroke=null;
+  // The click that follows a build pointerdown must not also harvest whatever is under the cursor.
+  setTimeout(()=>{buildClickGuard=false},120);
+});
+window.addEventListener('pointercancel',()=>{buildStroke=null});
+document.getElementById('buildBar').addEventListener('pointerdown',e=>{
+  e.stopPropagation();e.preventDefault();
+  const slot=e.target.closest('.bb-slot');
+  if(!slot)return;
+  if(player.placingRecipeId===slot.dataset.id)exitBuildMode();else enterBuildMode(slot.dataset.id);
+});
 const ARMOR_SLOT='armor';
 const HAND_SLOT_COUNT=2;
 const CARRY_SLOT_COUNT=3;
@@ -731,6 +774,41 @@ function screenPointForEntity(ent){
   };
 }
 
+function closestPointOnSegment(px,py,x1,y1,x2,y2){
+  const dx=x2-x1,dy=y2-y1,lenSq=dx*dx+dy*dy;
+  if(lenSq===0)return{x:x1,y:y1};
+  let t=((px-x1)*dx+(py-y1)*dy)/lenSq;
+  t=Math.max(0,Math.min(1,t));
+  return{x:x1+t*dx,y:y1+t*dy};
+}
+// Fence collision, written to match what's DRAWN. A post is a small circle, a rail is a thin
+// capsule between two joined posts, and whatever walks into them is a circle at its FEET -
+// not at its world position, which sits about half a tile up-and-left of where the sprite's
+// feet actually appear (sprites are drawn centred on the tile, standing on their shadow).
+// (ox,oy) is that offset from the entity's world position to where its feet are drawn, so the
+// player's shoes stop at the fence line instead of their torso. /hitbox draws all of it.
+function resolveFenceCollision(ent,radius,ox,oy){
+  if(!fences.length)return;
+  let gx=ent.x+ox,gy=ent.y+oy;
+  const shove=(qx,qy,minD)=>{
+    let dx=gx-qx,dy=gy-qy,d=Math.hypot(dx,dy);
+    if(d>=minD)return;
+    if(d<1e-4){dx=0;dy=1;d=1} // dead centre on it: shove south
+    const amt=minD-d+.004;
+    gx+=dx/d*amt;gy+=dy/d*amt;
+  };
+  for(let pass=0;pass<2;pass++){
+    const bx=Math.floor(gx),by=Math.floor(gy);
+    for(let vx=bx-2;vx<=bx+3;vx++)for(let vy=by-2;vy<=by+3;vy++){
+      if(!fenceAt(vx,vy))continue;
+      shove(vx,vy,radius+FENCE_POST_R);
+      if(fenceAt(vx+1,vy)){const c=closestPointOnSegment(gx,gy,vx,vy,vx+1,vy);shove(c.x,c.y,radius+FENCE_ARM_R)}
+      if(fenceAt(vx,vy+1)){const c=closestPointOnSegment(gx,gy,vx,vy,vx,vy+1);shove(c.x,c.y,radius+FENCE_ARM_R)}
+    }
+  }
+  ent.x=gx-ox;ent.y=gy-oy;
+}
+
 function pointToSegmentDistance(px,py,x1,y1,x2,y2){
   const dx=x2-x1,dy=y2-y1;
   const lenSq=dx*dx+dy*dy;
@@ -784,7 +862,7 @@ function hitEntityAtScreen(clientX,clientY){
 const RECIPES=[
   {id:'campfire',name:'Campfire',stage:'Build',desc:'Gather stones and arrange them in a ring. Burn sticks as fuel to produce heat and charcoal.',cost:{thickStick:3,bigPebble:2},icon:'#e8a040',buildable:true},
   {id:'crate',name:'Storage Crate',stage:'Build',desc:'Lash sticks and woven fiber into a sturdy container for stashing extra materials in the world.',cost:{thickStick:6,stalkFiber:4},icon:'#b97a3d',buildable:true},
-  {id:'fence',name:'Fence',stage:'Build',desc:'Lash thick sticks into a rail that runs along a tile edge. Rotate it in Build Mode (B). Blocks movement - zombies included.',cost:{thickStick:4,cordage:1},icon:'#8a6636',buildable:true,place:'edge'},
+  {id:'fence',name:'Fence',stage:'Build',desc:'Lash thick sticks into fence posts (makes 3). Posts snap to tile corners and link up with their neighbours by themselves, so a line of posts becomes a wall along the tile edges. Blocks movement - zombies included.',cost:{thickStick:3,cordage:1},icon:'#8a6636',buildable:true,place:'vertex',yield:3},
   {id:'cordage',name:'Cordage',stage:'Process',desc:'Twist plant stalk fiber into two-ply cord for lashing.',cost:{stalkFiber:4},icon:'#5bc46a'},
   {id:'basket',name:'Basket',stage:'Process',desc:'Weave gathered plant stalk fibers into a small rigid basket for carrying and storing materials.',cost:{stalkFiber:6},icon:'#c99a55'},
   {id:'knappedFlint',name:'Knapped Flint Edge',stage:'Process',desc:'Percussion-flake a flint nodule with a hammerstone to raise a sharp edge.',cost:{flint:1,bigPebble:1},icon:'#cfd3d0'},
@@ -885,10 +963,10 @@ function recipeCanCraft(recipe){
   return hotbarSlots.some(s=>!s);
 }
 
-// Buildables are crafted into the carry inventory (Minecraft style) and placed later from
-// Build Mode. The result slot can't be reserved BEFORE spending the ingredients the way
-// other recipes do - a crate's own sticks and fiber can fill every base carry slot, so that
-// would make it uncraftable - so this simulates spending them first, on copies of the slots.
+// Buildables are crafted into the carry inventory (Minecraft style) and placed later in Build
+// Mode. The result slot can't be reserved BEFORE spending the ingredients the way other
+// recipes do - a crate's own sticks and fiber can fill every base carry slot, so that would
+// make it uncraftable - so this simulates spending them first, on copies of the slots.
 function buildableFitsAfterCraft(recipe){
   ensureCarrySlots();
   const carry=hotbarSlots.map(s=>s?{id:s.id,count:s.count}:null);
@@ -903,17 +981,65 @@ function buildableFitsAfterCraft(recipe){
     if(need>0)return false;
   }
   const limit=itemStackLimit(recipe.id),dest=HAND_ITEMS.has(recipe.id)?hands:carry;
-  return dest.some(s=>s&&s.id===recipe.id&&s.count<limit)||dest.some(s=>!s);
+  let room=0;
+  for(const s of dest){if(!s)room+=limit;else if(s.id===recipe.id)room+=Math.max(0,limit-s.count)}
+  return room>=(recipe.yield||1);
 }
+// Crafts one batch (recipe.yield items, 1 by default). Returns how many items it made.
 function craftBuildableOnce(recipe){
-  if(!canAfford(recipe.cost)||!buildableFitsAfterCraft(recipe))return false;
-  if(!validateAndConsume(recipe.cost))return false;
-  if(!addItem(recipe.id,1)){
+  const n=recipe.yield||1;
+  if(!canAfford(recipe.cost)||!buildableFitsAfterCraft(recipe))return 0;
+  if(!validateAndConsume(recipe.cost))return 0;
+  if(!addItem(recipe.id,n)){
     // The fits-check just passed, so this shouldn't happen - but never eat ingredients.
     for(const k in recipe.cost)addItem(k,recipe.cost[k]);
-    return false;
+    return 0;
   }
+  return n;
+}
+
+// ---- Build Mode ----
+// Buildables you carry show up in a build bar above the hotbar. Pick one there (click/tap,
+// or press B), then click the world to place it - hold and drag to paint a whole line of
+// fence. B / Esc / right-click leaves Build Mode again.
+let buildStroke=null,buildClickGuard=false;
+function carriedBuildables(){return RECIPES.filter(r=>r.buildable&&totalOf(r.id)>0)}
+function renderBuildBar(){
+  const el=document.getElementById('buildBar');
+  if(!el)return;
+  const list=carriedBuildables(),active=player.placingRecipeId;
+  const sig=(active||'-')+'|'+list.map(r=>r.id+':'+totalOf(r.id)).join(',');
+  if(el.dataset.sig===sig)return; // only touch the DOM when something changed, so clicks on it always land
+  el.dataset.sig=sig;
+  if(!list.length){el.classList.remove('show');el.innerHTML='';return}
+  el.classList.add('show');
+  el.innerHTML=`<span class="bb-label">${active?'BUILDING':'BUILD [B]'}</span>`
+    +list.map(r=>mcSlotHTML({id:r.id,kind:ITEM_ICON_KIND[r.id]||'gem',color:r.icon,count:totalOf(r.id),selected:r.id===active,extraClass:'bb-slot'})).join('')
+    +(active?'<span class="bb-hint">click to place · drag to paint · shift+click to pick up · B / esc to exit</span>':'');
+}
+function enterBuildMode(id){
+  const r=RECIPES.find(x=>x.id===id&&x.buildable);
+  if(!r||totalOf(id)<=0)return false;
+  if(inventoryScreen.classList.contains('open'))closeInventoryScreen();
+  player.placingRecipeId=id;player.lastBuildId=id;buildStroke=null;
+  renderBuildBar();
   return true;
+}
+function exitBuildMode(){
+  player.placingRecipeId=null;buildStroke=null;
+  renderBuildBar();
+}
+function toggleBuildMode(){
+  if(player.placingRecipeId){exitBuildMode();return}
+  const list=carriedBuildables();
+  if(!list.length){createFloatingText(player.x,player.y-1,'Nothing to build - craft a buildable first','#ffd76a');return}
+  enterBuildMode((list.find(r=>r.id===player.lastBuildId)||list[0]).id);
+}
+function cycleBuildPiece(dir){
+  const list=carriedBuildables();
+  if(list.length<2)return;
+  const i=Math.max(0,list.findIndex(r=>r.id===player.placingRecipeId));
+  enterBuildMode(list[(i+dir+list.length)%list.length].id);
 }
 
 function maxCraftBatch(id){
@@ -936,14 +1062,16 @@ function craftItem(id, maxBatch=false){
     const wanted=maxBatch?Math.max(1,maxCraftBatch(id)):1;
     let made=0;
     for(let i=0;i<wanted;i++){
-      if(!craftBuildableOnce(recipe))break;
-      made++;
+      const n=craftBuildableOnce(recipe);
+      if(!n)break;
+      made+=n;
     }
     if(made>0){
       createFloatingText(player.x,player.y-1,`◆ Crafted ${recipe.name} x${made} - press B to build`,'#ffd76a');
       addCameraShake(.08,.2);
+      player.lastBuildId=id; // so B picks up the piece you just made
     }
-    renderCraftPanel();
+    renderCraftPanel();renderBuildBar();
     return made>0;
   }
 
@@ -1109,7 +1237,7 @@ function renderCraftDetail(){
   const basketWarning=isBasketMaxed?'<div class="mc-warning">⚠ You can only have one Basket!</div>':'';
   const carryWarning=!r.buildable&&!['basket','armor'].includes(r.id)&&!HAND_ITEMS.has(r.id)&&!hasCarryRoom&&!isBasketMaxed?'<div class="mc-warning">⚠ No free carry slot.</div>':(r.buildable&&afford&&!canCraft?'<div class="mc-warning">⚠ No room to carry it.</div>':'');
   const buildableLabel=r.buildable?'CRAFT (then place with B)':'CRAFT (Shift+Click: Auto-Batch)';
-  craftDetail.innerHTML=`<div class="mc-detail-name">${r.name}</div><div class="mc-detail-desc">${r.desc}</div><div class="mc-recipe-row">${ingredientSlots}<div class="mc-arrow">→</div>${mcSlotHTML({id:r.id,kind:ITEM_ICON_KIND[r.id]||'gem',color:r.icon,count:''})}</div>${warning}${basketWarning}${carryWarning}<button class="mc-btn${canCraft?'':' disabled'}" id="craftGo" type="button">${buildableLabel}</button>`;
+  craftDetail.innerHTML=`<div class="mc-detail-name">${r.name}</div><div class="mc-detail-desc">${r.desc}</div><div class="mc-recipe-row">${ingredientSlots}<div class="mc-arrow">→</div>${mcSlotHTML({id:r.id,kind:ITEM_ICON_KIND[r.id]||'gem',color:r.icon,count:(r.yield>1?r.yield:'')})}</div>${warning}${basketWarning}${carryWarning}<button class="mc-btn${canCraft?'':' disabled'}" id="craftGo" type="button">${buildableLabel}</button>`;
 }
 function utilitySlotHTML(side,itemId){
   const labels={armor:'Armor',backpack:'Basket / Backpack'};
@@ -1343,6 +1471,7 @@ function setAdminConsoleOpen(open){
   adminConsoleOpen=!!open;
   adminConsole.classList.toggle('open',adminConsoleOpen);
   adminConsole.setAttribute('aria-hidden',adminConsoleOpen?'false':'true');
+  if(!adminConsoleOpen&&document.activeElement===adminCommandInput)adminCommandInput.blur(); // same reason: a hidden input must not keep eating keys
   if(adminConsoleOpen){
     adminHistoryIndex=-1;
     adminCommandInput.focus();
@@ -1490,6 +1619,7 @@ function runAdminCommand(raw){
     adminLog('/speed <multiplier> | /daylength <seconds>');
     adminLog('/light <on|off|debug|ambient|quality|penumbra|atmosphere|shadowdepth|chainlimit|list|add|remove|clear|auto>');
     adminLog('/seed [number or text] — show or regenerate the world seed');
+    adminLog('/hitbox — toggle the collision overlay (fences, player, zombies)');
     return;
   }
 
@@ -1597,6 +1727,12 @@ function runAdminCommand(raw){
     const seconds=Number(args[0]);
     if(!Number.isFinite(seconds)||seconds<=0){adminLog('Usage: /daylength <seconds>','err');return;}
     DAY_LENGTH_MS=seconds*1000;adminLog(`Full day/night cycle length: ${seconds}s.`,'ok');return;
+  }
+
+  if(command==='hitbox'){
+    DEBUG_HITBOX=!DEBUG_HITBOX;
+    adminLog(DEBUG_HITBOX?'Hitbox overlay ON: fence posts (red), rails (orange), player feet (green), zombie feet (blue).':'Hitbox overlay OFF.','ok');
+    return;
   }
 
   if(command==='seed'){
@@ -1977,6 +2113,8 @@ addEventListener('keydown',e=>{
     creativeIndicator.style.display=creativeMode?'block':'none';
     createFloatingText(player.x,player.y-1,creativeMode?'✦ Creative Mode ON':'Creative Mode OFF',creativeMode?'#ffd76a':'#aaa');
   }
+  if((e.key==='b'||e.key==='B')&&!e.repeat)toggleBuildMode();
+  if(e.key==='Escape'&&player.placingRecipeId)exitBuildMode();
 });
 
 // ---- Interactive inventory grid: click/right-click/middle-click/double-click/drag-to-move ----
@@ -2226,6 +2364,9 @@ addEventListener('pointermove',e=>{
 });
 
 const COLLECTION_RANGE=2.5;
+const ZOMBIE_FIRE_AVOID_RADIUS=4.5; // a lit campfire keeps zombies out to roughly this far
+const ZOMBIE_DAY_SLOW=.5; // fraction of speed lost at peak daylight
+const ZOMBIE_BURN_RATE=4; // HP/sec lost at peak daylight (scales with sun height squared)
 let attackCooldown=0;
 function getSelectedHandItem(){
   const s=handSlots[selectedHandSlot];
@@ -2300,18 +2441,102 @@ function interactTarget(){
   }
 }
 
-// Places a 'buildable' recipe (campfire, crate) in the world. Assumes cost is
-// already validated/consumed by the caller.
+// Places a 'buildable' recipe (campfire, crate, fence post) in the world. Assumes the item
+// has already been taken out of the inventory by the caller.
 function placeBuildable(recipe,world){
   if(recipe.id==='campfire'){
     player.campfires.push({x:world.x,y:world.y,fuel:3,fuelSlot:{id:'thickStick',count:0},createdAt:performance.now()});
-    player.inventory.campfire=(player.inventory.campfire||0)+1;
     createFloatingText(world.x,world.y-1,'◆ Campfire','#e8a040');
+    addCameraShake(.1,.3);
   }else if(recipe.id==='crate'){
     containers.push({x:world.x,y:world.y,slots:Array(CRATE_SLOT_COUNT).fill(null)});
     createFloatingText(world.x,world.y-1,'◆ Storage Crate','#c99a55');
+    addCameraShake(.1,.3);
+  }else if(recipe.id==='fence'){
+    addFencePost(world.vx,world.vy);
+    spawnDust(world.vx,world.vy,2); // no shake or popup per post - painting a line places lots of them
   }
-  addCameraShake(.1,.3);
+}
+
+// ---- Placing: where the pointer points, whether that's allowed, and doing it ----
+function buildTargetAt(recipe,clientX,clientY){
+  const w=screenToWorld(clientX,clientY);
+  if(recipe.place==='vertex'){
+    const vx=Math.round(w.x),vy=Math.round(w.y+FENCE_AIM_DY);
+    return{vx,vy,x:vx,y:vy,key:vx+','+vy};
+  }
+  return{x:w.x,y:w.y,key:null};
+}
+function vertexOnWater(vx,vy){
+  let n=0;
+  for(const [dx,dy] of [[-1,-1],[0,-1],[-1,0],[0,0]])if(getWater(vx+dx,vy+dy).river)n++;
+  return n>=3;
+}
+// '' when the spot is fine, otherwise a short reason (shown on the ghost).
+function buildCheck(recipe,t){
+  if(Math.hypot(t.x-(player.x+.5),t.y-(player.y+.5))>BUILD_REACH)return 'Too far';
+  if(recipe.place==='vertex'){
+    if(fenceAt(t.vx,t.vy))return 'Occupied';
+    if(vertexOnWater(t.vx,t.vy))return 'Water';
+    for(const cf of player.campfires)if(Math.hypot(cf.x-t.x,cf.y-t.y)<.6)return 'Blocked';
+    for(const c of containers)if(Math.hypot(c.x-t.x,c.y-t.y)<.6)return 'Blocked';
+  }
+  return '';
+}
+function buildPlace(recipe,t){
+  const why=buildCheck(recipe,t);
+  if(why)return why;
+  if(totalOf(recipe.id)<=0)return 'None left';
+  removeItem(recipe.id,1);
+  placeBuildable(recipe,t);
+  return '';
+}
+function afterBuildPlacement(recipe){
+  if(totalOf(recipe.id)<=0){
+    exitBuildMode();
+    createFloatingText(player.x,player.y-1,`Out of ${recipe.name}`,'#ffd76a');
+  }
+  renderCraftPanel();renderHotbar();renderBuildBar();
+}
+function hitFenceAtScreen(clientX,clientY){
+  const w=screenToWorld(clientX,clientY);
+  let best=null,bd=.6;
+  for(const p of fences){const d=Math.hypot(p.vx-w.x,(p.vy-.35)-w.y);if(d<bd){bd=d;best=p}}
+  return best;
+}
+function pickupFencePost(p){
+  if(Math.hypot(p.vx-(player.x+.5),p.vy-(player.y+.5))>BUILD_REACH){createFloatingText(player.x,player.y-1,'Too far','#f88');return false}
+  if(!addItem('fence',1)){createFloatingText(player.x,player.y-1,'No carry room','#f66');return false}
+  removeFencePost(p);
+  spawnDust(p.vx,p.vy,2);
+  renderCraftPanel();renderHotbar();renderBuildBar();
+  return true;
+}
+function buildPointerDown(e){
+  const recipe=RECIPES.find(r=>r.id===player.placingRecipeId);
+  if(!recipe){exitBuildMode();return}
+  buildClickGuard=true;
+  if(e.shiftKey&&recipe.place==='vertex'){
+    const p=hitFenceAtScreen(e.clientX,e.clientY);
+    if(p)pickupFencePost(p);
+    buildStroke=null;
+    return;
+  }
+  const t=buildTargetAt(recipe,e.clientX,e.clientY);
+  const why=buildPlace(recipe,t);
+  if(why&&why!=='Occupied')createFloatingText(player.x,player.y-1,why,'#f88');
+  buildStroke=recipe.place==='vertex'?{pointerId:e.pointerId,lastKey:t.key}:null;
+  afterBuildPlacement(recipe);
+}
+function buildPointerMove(e){
+  if(!buildStroke||e.pointerId!==buildStroke.pointerId)return;
+  const recipe=RECIPES.find(r=>r.id===player.placingRecipeId);
+  if(!recipe){buildStroke=null;return}
+  const t=buildTargetAt(recipe,e.clientX,e.clientY);
+  if(t.key===buildStroke.lastKey)return;
+  buildStroke.lastKey=t.key;
+  buildPlace(recipe,t); // silent when a spot along the stroke isn't allowed
+  afterBuildPlacement(recipe);
 }
 
 // Finds the nearest placed crate or campfire near a screen point, so the
@@ -2339,25 +2564,10 @@ addEventListener('click',e=>{
   // UI/HUD/screen clicks must never fall through and affect the world.
   if(e.target!==canvas)return;
   if(suppressNextClick){suppressNextClick=false;return}
-  if(player.placingRecipeId){
-    const recipe=RECIPES.find(r=>r.id===player.placingRecipeId);
-    const world=screenToWorld(e.clientX,e.clientY);
-    if(!recipe){
-      player.placingRecipeId=null;
-      return;
-    }
-    if(!canAfford(recipe.cost)){
-      player.placingRecipeId=null;
-      createFloatingText(player.x,player.y-1,'Missing ingredients!','#f66');
-      return;
-    }
-    validateAndConsume(recipe.cost);
-    placeBuildable(recipe,world);
-    player.placingRecipeId=null;
-    renderCraftPanel();
-    renderHotbar();
-    return;
-  }
+  // Build Mode places on pointerdown (so a drag can paint a line); the click that follows it,
+  // and any click while building, must not also harvest or open whatever is under the cursor.
+  if(buildClickGuard){buildClickGuard=false;return}
+  if(player.placingRecipeId)return;
   const hit=hitEntityAtScreen(e.clientX,e.clientY);
   if(hit){interactTarget();return}
   const containerHit=hitContainerAtScreen(e.clientX,e.clientY);
@@ -2369,6 +2579,9 @@ addEventListener('click',e=>{
     }else{
       createFloatingText(player.x,player.y-1,'Move closer to open','#ffd76a');
     }
+  }else{
+    const fp=hitFenceAtScreen(e.clientX,e.clientY);
+    if(fp)pickupFencePost(fp);
   }
 });
 
@@ -2395,21 +2608,14 @@ actionButton.addEventListener('pointerdown',e=>{attack();actionButton.textConten
 attackButton.addEventListener('pointerdown',e=>{attack();attackButton.textContent='HIT';setTimeout(()=>attackButton.textContent='ATTACK',120);e.preventDefault()});
 
 canvas.addEventListener('pointerdown',e=>{
+  if(player.placingRecipeId){
+    if(e.pointerType==='mouse'&&e.button!==0)return; // right click is handled by contextmenu
+    buildPointerDown(e);
+    e.preventDefault();
+    return;
+  }
   if(e.pointerType==='touch'){
     suppressNextClick=true;
-    if(player.placingRecipeId){
-      const recipe=RECIPES.find(r=>r.id===player.placingRecipeId);
-      if(recipe&&validateAndConsume(recipe.cost)){
-        const world=screenToWorld(e.clientX,e.clientY);
-        placeBuildable(recipe,world);
-        renderCraftPanel();
-      } else {
-        createFloatingText(player.x,player.y-1,'Missing ingredients!','#f66');
-      }
-      player.placingRecipeId=null;
-      e.preventDefault();
-      return;
-    }
     const hit=hitEntityAtScreen(e.clientX,e.clientY);
     if(hit){interactTarget();e.preventDefault();return}
     const containerHit=hitContainerAtScreen(e.clientX,e.clientY);
@@ -2421,6 +2627,9 @@ canvas.addEventListener('pointerdown',e=>{
       }else{
         createFloatingText(player.x,player.y-1,'Move closer to open','#ffd76a');
       }
+    }else{
+      const fp=hitFenceAtScreen(e.clientX,e.clientY);
+      if(fp)pickupFencePost(fp);
     }
     e.preventDefault();
   }
@@ -2459,7 +2668,44 @@ for(let i=player.campfires.length-1;i>=0;i--){
   if(!cf.lastCharcoalTime){
     cf.lastCharcoalTime=performance.now();
   }
-}const cols=viewportCols,rows=viewportRows,sx0=Math.floor(player.x-cols/2),sy0=Math.floor(player.y-rows/2);for(let ty=sy0-2;ty<sy0+rows+2;ty++)for(let tx=sx0-2;tx<sx0+cols+2;tx++){generatePebblesForTile(tx,ty);generateBigPebbleForTile(tx,ty);generateTreeEntityForTile(tx,ty);generateBushEntityForTile(tx,ty);generateStickEntityForTile(tx,ty);generateFlintForTile(tx,ty)}player.vx=player.vy=0;const mobileX=touchMove.active?touchMove.x:0,mobileY=touchMove.active?touchMove.y:0;if(keys.w||keys.W||keys.ArrowUp)player.vy-=player.speed;if(keys.s||keys.S||keys.ArrowDown)player.vy+=player.speed;if(keys.a||keys.A||keys.ArrowLeft)player.vx-=player.speed;if(keys.d||keys.D||keys.ArrowRight)player.vx+=player.speed;player.vx+=mobileX*player.speed;player.vy+=mobileY*player.speed;player.moving=player.vx!==0||player.vy!==0;if(player.moving){player.facingAngle=Math.atan2(player.vy,player.vx);player.animPhase=(player.animPhase+dt*.045)%1;footstepTimer+=dt;if(footstepTimer>9){footstepTimer=0;const underTile=getTile(Math.floor(player.x),Math.floor(player.y));if(isBare(underTile.type))spawnDust(player.x,player.y+.3,2)}}const nextX=player.x+player.vx,nextY=player.y+player.vy;const nextWater=getWater(Math.floor(nextX),Math.floor(nextY));if(!nextWater.river){player.x=nextX;player.y=nextY}else{player.vx=player.vy=0}for(const e of entities){if(e.type==='tree'&&e.solid){const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy),min=player.radius+e.radius;if(d<min&&d>.001){const push=min-d+.01,a=Math.atan2(dy,dx);player.x+=Math.cos(a)*push;player.y+=Math.sin(a)*push}}if(e.type==='bush'&&e.harvested&&performance.now()>=e.regrowAt){e.harvested=false;e.regrowAt=0}}frameCounter=(frameCounter+1)%30;if(frameCounter===0)cullFarEntities();for(const e of entities)if(e.type==='zombie'){const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy);if(d<10){if(d>.1){e.vx=dx/d*.08;e.vy=dy/d*.08}e.aware=true}else{e.vx=e.vy=0;e.aware=false}e.x+=e.vx;e.y+=e.vy;if(e.vx||e.vy)e.animPhase=(e.animPhase+dt*.04)%1;else e.animPhase=0;if(e.hitFlash)e.hitFlash=Math.max(0,e.hitFlash-dt/24)}
+}const cols=viewportCols,rows=viewportRows,sx0=Math.floor(player.x-cols/2),sy0=Math.floor(player.y-rows/2);for(let ty=sy0-2;ty<sy0+rows+2;ty++)for(let tx=sx0-2;tx<sx0+cols+2;tx++){generatePebblesForTile(tx,ty);generateBigPebbleForTile(tx,ty);generateTreeEntityForTile(tx,ty);generateBushEntityForTile(tx,ty);generateStickEntityForTile(tx,ty);generateFlintForTile(tx,ty)}player.vx=player.vy=0;const mobileX=touchMove.active?touchMove.x:0,mobileY=touchMove.active?touchMove.y:0;if(keys.w||keys.W||keys.ArrowUp)player.vy-=player.speed;if(keys.s||keys.S||keys.ArrowDown)player.vy+=player.speed;if(keys.a||keys.A||keys.ArrowLeft)player.vx-=player.speed;if(keys.d||keys.D||keys.ArrowRight)player.vx+=player.speed;player.vx+=mobileX*player.speed;player.vy+=mobileY*player.speed;player.moving=player.vx!==0||player.vy!==0;if(player.moving){player.facingAngle=Math.atan2(player.vy,player.vx);player.animPhase=(player.animPhase+dt*.045)%1;footstepTimer+=dt;if(footstepTimer>9){footstepTimer=0;const underTile=getTile(Math.floor(player.x),Math.floor(player.y));if(isBare(underTile.type))spawnDust(player.x,player.y+.3,2)}}const nextX=player.x+player.vx,nextY=player.y+player.vy;const nextWater=getWater(Math.floor(nextX),Math.floor(nextY));if(!nextWater.river){player.x=nextX;player.y=nextY}else{player.vx=player.vy=0}for(const e of entities){if(e.type==='tree'&&e.solid){const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy),min=player.radius+e.radius;if(d<min&&d>.001){const push=min-d+.01,a=Math.atan2(dy,dx);player.x+=Math.cos(a)*push;player.y+=Math.sin(a)*push}}if(e.type==='bush'&&e.harvested&&performance.now()>=e.regrowAt){e.harvested=false;e.regrowAt=0}}resolveFenceCollision(player,player.radius,.5,.84);frameCounter=(frameCounter+1)%30;if(frameCounter===0)cullFarEntities();const daySun=sunAngleFactor(),zombieSpeedMul=1-daySun*ZOMBIE_DAY_SLOW;
+for(const e of entities)if(e.type==='zombie'){
+  let fleeX=0,fleeY=0,fleeing=false;
+  for(const cf of player.campfires){
+    if(cf.fuel<=0)continue;
+    const fx=e.x-cf.x,fy=e.y-cf.y,fd=Math.hypot(fx,fy);
+    if(fd<ZOMBIE_FIRE_AVOID_RADIUS&&fd>.05){fleeX+=fx/fd;fleeY+=fy/fd;fleeing=true}
+  }
+  const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy);
+  if(fleeing){
+    const fm=Math.hypot(fleeX,fleeY)||1;
+    e.vx=(fleeX/fm)*.09*zombieSpeedMul;e.vy=(fleeY/fm)*.09*zombieSpeedMul;
+    e.aware=true;
+  }else if(d<10){
+    if(d>.1){e.vx=dx/d*.08*zombieSpeedMul;e.vy=dy/d*.08*zombieSpeedMul}else{e.vx=e.vy=0}
+    e.aware=true;
+  }else{
+    e.vx=e.vy=0;e.aware=false;
+  }
+  e.x+=e.vx;e.y+=e.vy;
+  resolveFenceCollision(e,.28,.5,.81);
+  if(e.vx||e.vy)e.animPhase=(e.animPhase+dt*.04)%1;else e.animPhase=0;
+  if(e.hitFlash)e.hitFlash=Math.max(0,e.hitFlash-dt/24);
+  if(daySun>.12){
+    e.hp-=daySun*daySun*ZOMBIE_BURN_RATE*(dt/60);
+    e.burnTimer=(e.burnTimer||0)+dt;
+    if(e.burnTimer>36){e.burnTimer=0;if(Math.random()<.7)spawnSmoke(e.x,e.y-.6)}
+  }
+}
+for(let bi=entities.length-1;bi>=0;bi--){
+  const be=entities[bi];
+  if(be.type==='zombie'&&be.hp<=0){
+    createFloatingText(be.x,be.y-1.4,'◆ Zombie burned','#ffb347');
+    spawnDeathBurst(be.x,be.y-.6);
+    entities.splice(bi,1);
+    if(player.target===be)player.target=null;
+  }
+}
 ambientTimer+=dtMs;if(ambientTimer>900){ambientTimer=0;if(Math.random()<.6){const ax=player.x+(Math.random()-.5)*16,ay=player.y+(Math.random()-.5)*12;const atile=getTile(Math.floor(ax),Math.floor(ay));if(isVegetated(atile.type))spawnLeafDrift(ax,ay)}}}
 
 const TREE_SORT_BASE_OFFSET=2.05;
@@ -2495,11 +2741,12 @@ function collectLightOccluders(light){
   for(const crate of containers){
     if(Math.hypot(crate.x-light.x,crate.y-light.y)<=maxD+.55)addLightingOccluder(list,crate.x,crate.y,.50,'crate',OCCLUDER_HEIGHTS.crate);
   }
-  for(const fence of fences){
-    if(Math.hypot(fence.x-light.x,fence.y-light.y)>maxD+.7)continue;
-    for(const k of [-.33,0,.33]){
-      addLightingOccluder(list,fence.x+(fence.o==='h'?k:0),fence.y+(fence.o==='h'?0:k),.2,'fence',OCCLUDER_HEIGHTS.fence);
-    }
+  for(const p of fences){
+    if(Math.hypot(p.vx-light.x,p.vy-light.y)>maxD+1)continue;
+    addLightingOccluder(list,p.vx,p.vy,.16,'fence',OCCLUDER_HEIGHTS.fence);
+    // Rails between posts: a chain of overlapping circles so light can't leak through the gaps.
+    if(fenceAt(p.vx+1,p.vy))for(const k of [.25,.5,.75])addLightingOccluder(list,p.vx+k,p.vy,.13,'fence',OCCLUDER_HEIGHTS.fence);
+    if(fenceAt(p.vx,p.vy+1))for(const k of [.25,.5,.75])addLightingOccluder(list,p.vx,p.vy+k,.13,'fence',OCCLUDER_HEIGHTS.fence);
   }
   if(light.kind!=='player'&&Math.hypot(player.x-light.x,player.y-light.y)<=maxD+.34)
     addLightingOccluder(list,player.x,player.y,.30,'player',OCCLUDER_HEIGHTS.player);
@@ -2729,6 +2976,99 @@ function buildLightmap(cx,cy,cols,rows,shakeX,shakeY){
   ctx.restore();
 }
 
+// ---- Fences: drawing ----
+const FENCE_COL={rail:'#8a6636',railHi:'#b08a55',railLo:'#5b3d1f',post:'#6f4d29',postHi:'#8f6a3d',cap:'#a98450',line:'#2f1d0d'};
+// Origin = the post's base on the ground. An arm spans from the edge of this post to the edge
+// of its neighbour's (26px), so the two never overlap. East/west arms show as two rails; north/
+// south arms run into the screen, so they show as the top of a beam. Posts are kept short
+// enough (20px, tiles are 32) that a clear stretch of that beam shows between two posts.
+function drawFenceArm(dir){
+  const c=FENCE_COL;
+  if(dir==='e'||dir==='w'){
+    const x0=dir==='e'?3:-29;
+    ctx.fillStyle='rgba(0,0,0,.18)';ctx.fillRect(x0,0,26,3);
+    for(const z of [8,14]){
+      ctx.fillStyle=c.rail;ctx.fillRect(x0,-z-1.5,26,3);
+      ctx.fillStyle=c.railHi;ctx.fillRect(x0,-z-1.5,26,1);
+      ctx.fillStyle=c.railLo;ctx.fillRect(x0,-z+.5,26,1);
+    }
+  }else{
+    const y0=dir==='s'?3:-29;
+    ctx.fillStyle='rgba(0,0,0,.2)';ctx.fillRect(-2,y0,4,26);
+    for(const [z,col] of [[8,c.railLo],[14,c.rail]]){
+      ctx.fillStyle=col;ctx.fillRect(-2.5,y0-z,5,26);
+      ctx.fillStyle=c.railHi;ctx.fillRect(-2.5,y0-z,1.5,26);
+    }
+  }
+}
+function drawFencePost(){
+  const c=FENCE_COL;
+  ctx.fillStyle='rgba(0,0,0,.26)';ctx.beginPath();ctx.ellipse(0,2,7,3,0,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle=c.post;ctx.fillRect(-3,-20,6,22);
+  ctx.fillStyle=c.postHi;ctx.fillRect(-3,-20,2,22);
+  ctx.fillStyle=c.railLo;ctx.fillRect(2,-20,1,22);
+  ctx.fillStyle=c.cap;ctx.fillRect(-4,-23,8,4);
+  ctx.strokeStyle=c.line;ctx.lineWidth=1;ctx.strokeRect(-3.5,-19.5,7,21);ctx.strokeRect(-4.5,-22.5,9,4);
+}
+// conn = which sides get an arm. Placed posts only draw their east and south arms (their
+// neighbours draw the other two); the placement ghost draws all four.
+function drawFencePiece(sx,sy,conn,alpha){
+  ctx.save();ctx.translate(sx,sy);
+  if(alpha!=null)ctx.globalAlpha=alpha;
+  if(conn.w)drawFenceArm('w');
+  if(conn.n)drawFenceArm('n');
+  if(conn.e)drawFenceArm('e');
+  if(conn.s)drawFenceArm('s');
+  drawFencePost();
+  ctx.restore();
+}
+// The Build Mode ghost: follows the mouse, green where it can go and red (with the reason)
+// where it can't. Fence ghosts show the rails they'd join up with.
+function renderBuildGhost(cx,cy,cols,rows){
+  const recipe=RECIPES.find(r=>r.id===player.placingRecipeId);
+  if(!recipe||!lastCanvasPointer)return;
+  const t=buildTargetAt(recipe,lastCanvasPointer.x,lastCanvasPointer.y);
+  const why=buildCheck(recipe,t),ok=!why;
+  const gx=Math.floor((t.x-cx+cols/2)*TILE),gy=Math.floor((t.y-cy+rows/2)*TILE);
+  ctx.save();
+  if(recipe.id==='fence'){
+    drawFencePiece(gx,gy,{e:!!fenceAt(t.vx+1,t.vy),w:!!fenceAt(t.vx-1,t.vy),s:!!fenceAt(t.vx,t.vy+1),n:!!fenceAt(t.vx,t.vy-1)},ok?.62:.38);
+  }else if(recipe.id==='crate'){
+    ctx.globalAlpha=ok?.6:.38;ctx.fillStyle='#8a5a2b';ctx.fillRect(gx-13,gy-4,26,16);ctx.fillStyle='#6d4321';ctx.fillRect(gx-13,gy-11,26,8);
+  }else{
+    ctx.globalAlpha=ok?.6:.38;ctx.fillStyle='#6b6b62';
+    for(let i=0;i<6;i++){const a=i/6*Math.PI*2;ctx.beginPath();ctx.ellipse(gx+Math.cos(a)*11,gy+Math.sin(a)*6+4,4,3,0,0,Math.PI*2);ctx.fill()}
+    ctx.fillStyle='#ff9a3c';ctx.beginPath();ctx.moveTo(gx-4,gy+2);ctx.quadraticCurveTo(gx-5,gy-6,gx,gy-12);ctx.quadraticCurveTo(gx+5,gy-6,gx+4,gy+2);ctx.closePath();ctx.fill();
+  }
+  ctx.globalAlpha=1;ctx.strokeStyle=ok?'#7CFC7C':'#ff6a6a';ctx.lineWidth=2;ctx.setLineDash([4,3]);
+  const fenceGhost=recipe.id==='fence';
+  ctx.beginPath();ctx.ellipse(gx,gy+2,fenceGhost?10:17,fenceGhost?5:8,0,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
+  if(!ok){ctx.fillStyle='#ff9a9a';ctx.font='bold 10px monospace';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(why,gx,gy-32)}
+  ctx.restore();
+}
+// /hitbox: draws the exact shapes fence collision uses - posts (red), rails (orange), and the
+// feet circles of the player (green) and zombies (blue) - so what blocks what is visible.
+function renderHitboxDebug(cx,cy,cols,rows){
+  if(!DEBUG_HITBOX)return;
+  const S=(x,y)=>[(x-cx+cols/2)*TILE,(y-cy+rows/2)*TILE];
+  ctx.save();ctx.lineWidth=1.5;
+  for(const p of fences){
+    const [sx,sy]=S(p.vx,p.vy);
+    for(const [nx,ny] of [[p.vx+1,p.vy],[p.vx,p.vy+1]]){
+      if(!fenceAt(nx,ny))continue;
+      const [ex,ey]=S(nx,ny);
+      ctx.globalAlpha=.4;ctx.strokeStyle='#ff9a50';ctx.lineCap='round';ctx.lineWidth=FENCE_ARM_R*2*TILE;
+      ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(ex,ey);ctx.stroke();
+      ctx.globalAlpha=1;ctx.lineWidth=1.5;
+    }
+    ctx.strokeStyle='#ff5050';ctx.beginPath();ctx.arc(sx,sy,FENCE_POST_R*TILE,0,Math.PI*2);ctx.stroke();
+  }
+  const foot=(e,r,ox,oy,col)=>{const [fx,fy]=S(e.x+ox,e.y+oy);ctx.strokeStyle=col;ctx.beginPath();ctx.arc(fx,fy,r*TILE,0,Math.PI*2);ctx.stroke()};
+  foot(player,player.radius,.5,.84,'#50ff90');
+  for(const e of entities)if(e.type==='zombie')foot(e,.28,.5,.81,'#50c8ff');
+  ctx.restore();
+}
+
 function renderLightingDebug(cx,cy,cols,rows,shakeX,shakeY){
   if(!LIGHTING.debug)return;
   ctx.save();
@@ -2879,7 +3219,12 @@ for(const campfire of player.campfires){const csx=Math.floor((campfire.x-cx+cols
   ctx.fillText(`⚡${Math.ceil(campfire.fuel)}${campfire.fuelSlot&&campfire.fuelSlot.count>0?' +'+campfire.fuelSlot.count:''}`,csx,csy+TILE);
 }})}
 for(const crate of containers){const csx=Math.floor((crate.x-cx+cols/2)*TILE),csy=Math.floor((crate.y-cy+rows/2)*TILE);draw.push({y:crate.y,render:()=>{ctx.fillStyle='rgba(0,0,0,.28)';ctx.beginPath();ctx.ellipse(csx,csy+9,15,5,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#8a5a2b';ctx.fillRect(csx-13,csy-4,26,16);ctx.fillStyle='#6d4321';ctx.fillRect(csx-13,csy-11,26,8);ctx.fillStyle='#e0b060';ctx.fillRect(csx-2,csy-3,4,4);ctx.strokeStyle='#3a2410';ctx.lineWidth=1;ctx.strokeRect(csx-13,csy-11,26,23);const filled=crate.slots.filter(Boolean).length;if(filled>0){ctx.fillStyle='#ccc';ctx.font='bold 10px monospace';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(`${filled}/${CRATE_SLOT_COUNT}`,csx,csy+TILE-4)}}})}
-if(player.placingRecipeId){const recipe=RECIPES.find(r=>r.id===player.placingRecipeId);const mx=Math.floor((player.x-cx+cols/2)*TILE),my=Math.floor((player.y-cy+rows/2)*TILE);ctx.strokeStyle='#e8a040';ctx.lineWidth=2;ctx.setLineDash([4,4]);ctx.beginPath();ctx.arc(mx,my,TILE*1.3,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='rgba(232,160,64,.2)';ctx.beginPath();ctx.arc(mx,my,TILE*1.3,0,Math.PI*2);ctx.fill();ctx.fillStyle='#e8a040';ctx.font='bold 12px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(`Click to place ${recipe?recipe.name:''}`,mx,my)}
+for(const fp of fences){const fsx=Math.floor((fp.vx-cx+cols/2)*TILE),fsy=Math.floor((fp.vy-cy+rows/2)*TILE);
+  if(fsx<-90||fsx>W+90||fsy<-90||fsy>H+90)continue;
+  // Sorted by where the post's BASE sits in an entity's coordinate frame (sprites stand ~.84 tile
+  // below their world position), so the player walks in front of / behind a fence correctly.
+  draw.push({y:fp.vy-.84+.02,render:()=>drawFencePiece(fsx,fsy,{e:!!fenceAt(fp.vx+1,fp.vy),s:!!fenceAt(fp.vx,fp.vy+1)},null)});}
+if(player.placingRecipeId)draw.push({y:1e9,render:()=>renderBuildGhost(cx,cy,cols,rows)});
 for(const e of entities){
   if((e.type==='bigPebble'||e.type==='flint'||e.type==='stick'||e.type==='charcoal')&&!e.collected){
     const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy);
@@ -2901,7 +3246,7 @@ for(const e of entities){
 }
 draw.sort((a,b)=>a.y-b.y);for(const o of draw)o.render();renderParticlesPass(cx,cy,cols,rows);for(const ft of floatingTexts){const progress=ft.age/ft.life,alpha=Math.max(0,1-progress),rise=progress*TILE*.8;ctx.save();ctx.globalAlpha=alpha;ctx.fillStyle=ft.color;ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.textBaseline='middle';const sx=Math.floor((ft.x-cx+cols/2)*TILE),sy=Math.floor((ft.y-cy+rows/2)*TILE+rise);ctx.fillText(ft.text,sx,sy);ctx.restore()}const dayC=sampleDayColor(dayClock);
 buildLightmap(cx,cy,cols,rows,shakeX,shakeY);
-renderLightingDebug(cx,cy,cols,rows,shakeX,shakeY);
+renderLightingDebug(cx,cy,cols,rows,shakeX,shakeY);renderHitboxDebug(cx,cy,cols,rows);
 if(weatherState==='rain'){
   ctx.save();
   const rainTime=Date.now()*0.001;
@@ -2925,10 +3270,15 @@ let hudTimer=0;let hudVisible=true;const hudToggle=document.getElementById('hudT
 <div>TIME: ${dayPhaseLabel()}${weatherState==='rain'?' | 🌧 Rain':''}</div>
 <div>TARGET: ${t} | ENTITIES: ${entities.length}</div>
 <div>DEV: / for admin console</div>
-</div>`;renderHotbar()}
+</div>`;renderHotbar();renderBuildBar()}
 let last=performance.now();
 function loop(){const now=performance.now(),raw=Math.min(now-last,100),dt=raw/16.67;last=now;update(dt);render();updateHUD(raw);requestAnimationFrame(loop)}
-function hideCreateWorldScreen(){const el=document.getElementById('createWorldScreen');if(el)el.classList.remove('open')}
+function hideCreateWorldScreen(){
+  const el=document.getElementById('createWorldScreen');if(el)el.classList.remove('open');
+  // The seed box keeps focus when the screen just hides, and it swallows every key it receives -
+  // let go of it explicitly so movement and hotkeys reach the game right away.
+  if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
+}
 function startGame(seedValue){
   if(gameStarted)return;
   SEED=seedValue;
