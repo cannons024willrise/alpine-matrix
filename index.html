@@ -19,6 +19,7 @@ canvas{display:block;image-rendering:pixelated}
 #joystickKnob{position:absolute;left:39px;top:39px;width:36px;height:36px;border-radius:50%;background:rgba(220,240,225,.65);box-shadow:0 0 0 2px rgba(0,0,0,.25)}
 #actionButton{position:absolute;right:max(22px,env(safe-area-inset-right));bottom:max(28px,env(safe-area-inset-bottom));width:82px;height:82px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(0,70,0,.38);color:#d8ffe0;font:700 15px monospace;pointer-events:auto;touch-action:none}
 #attackButton{position:absolute;right:max(118px,calc(env(safe-area-inset-right) + 96px));bottom:max(28px,env(safe-area-inset-bottom));width:82px;height:82px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(90,20,20,.52);color:#ffe0e0;font:700 13px monospace;pointer-events:auto;touch-action:none}
+#buildButton{position:absolute;right:max(110px,calc(env(safe-area-inset-right) + 88px));bottom:max(208px,calc(env(safe-area-inset-bottom) + 162px));width:62px;height:62px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(0,100,0,.45);color:#a8ffa8;font:700 10px monospace;pointer-events:auto;touch-action:none}
 #craftButton{position:absolute;right:max(30px,env(safe-area-inset-right));bottom:max(122px,calc(env(safe-area-inset-bottom) + 94px));width:62px;height:62px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(70,55,0,.45);color:#ffe9a8;font:700 11px monospace;pointer-events:auto;touch-action:none}
 #craftHint{position:fixed;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));font-size:11px;color:#0f0;background:rgba(0,0,0,.6);border:1px solid #0f0;border-radius:4px;padding:6px 10px;z-index:10;text-shadow:1px 1px #000;pointer-events:auto}
 @media (pointer:coarse), (max-width:700px){#mobileControls{display:block}#hud{font-size:11px}#craftHint{display:none}}
@@ -138,11 +139,7 @@ canvas{filter:saturate(1.08) contrast(1.04)}
 @media(max-width:620px){#adminConsole{padding:8px}#adminConsoleInner{width:96vw;max-height:84vh}#adminConsoleOutput{max-height:58vh;min-height:180px}#adminConsoleForm{gap:5px}#adminConsoleClose{padding:9px 8px}#adminConsoleRun{padding:9px 8px}}
 
 /* ---- Build Mode bar ---- */
-#buildBar{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:74px;z-index:12;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;padding:6px 8px;background:rgba(0,0,0,.55);border:2px solid #333;max-width:96vw;pointer-events:auto;touch-action:none}
-#buildBar.show{display:flex}
-#buildBar .bb-label{font:8px/1 'Press Start 2P',monospace;color:#ddd;text-shadow:1px 1px #000;margin-right:2px}
-#buildBar .bb-hint{font:9px monospace;color:#bbb;flex-basis:100%;text-align:center}
-@media (pointer:coarse), (max-width:700px){#buildBar{bottom:126px}#buildBar .bb-hint{display:none}}
+
 
 /* ---- Create World start screen ---- */
 #createWorldScreen{display:none;position:fixed;inset:0;z-index:200;align-items:center;justify-content:center;padding:16px;font-family:monospace;background:radial-gradient(ellipse at 50% 30%,#1c3a22 0%,#0c1810 60%,#060b07 100%)}
@@ -169,7 +166,6 @@ canvas{filter:saturate(1.08) contrast(1.04)}
 <div id="creativeIndicator">✦ CREATIVE MODE</div>
 <div id="craftHint">[C] Inventory | [Click/Right-Click] Full/Half Stack | [Drag] Move Item | [Shift+Click] Container | [`] Creative | [1-7] Slots | [B] Build</div>
 <div id="hotbar"></div>
-<div id="buildBar"></div>
 <div id="cursorItemDisplay"></div>
 
 <div id="adminConsole" aria-hidden="true">
@@ -212,7 +208,7 @@ canvas{filter:saturate(1.08) contrast(1.04)}
     </div>
   </div>
 </div>
-<div id="mobileControls"><div id="joystick"><div id="joystickKnob"></div></div><button id="craftButton" type="button">CRAFT</button><button id="attackButton" type="button">ATTACK</button><button id="actionButton" type="button">ACT</button></div>
+<div id="mobileControls"><div id="joystick"><div id="joystickKnob"></div></div><button id="buildButton" type="button">BUILD</button><button id="craftButton" type="button">CRAFT</button><button id="attackButton" type="button">ATTACK</button><button id="actionButton" type="button">ACT</button></div>
 
 <div id="createWorldScreen">
   <div id="createWorldInner" class="mc-panel">
@@ -580,7 +576,7 @@ const containers=[]; // placed storage crates: {x,y,slots:[{id,count}|null, ...]
 const fences=[]; // placed posts: {vx,vy} (integer lattice coordinates)
 const fenceMap=new Map();
 function fenceAt(vx,vy){return fenceMap.get(vx+','+vy)||null}
-function addFencePost(vx,vy){if(fenceAt(vx,vy))return null;const p={vx,vy};fences.push(p);fenceMap.set(vx+','+vy,p);return p}
+function addFencePost(vx,vy,isGate){if(fenceAt(vx,vy))return null;const p={vx,vy,isGate:isGate||false};fences.push(p);fenceMap.set(vx+','+vy,p);return p}
 function removeFencePost(p){const i=fences.indexOf(p);if(i!==-1)fences.splice(i,1);fenceMap.delete(p.vx+','+p.vy)}
 const FENCE_POST_R=.14,FENCE_ARM_R=.09; // collision half-sizes: a post, and a rail joining two posts
 const BUILD_REACH=6; // how far from the player (in tiles) anything can be placed or picked up
@@ -621,12 +617,6 @@ window.addEventListener('pointerup',e=>{
   setTimeout(()=>{buildClickGuard=false},120);
 });
 window.addEventListener('pointercancel',()=>{buildStroke=null});
-document.getElementById('buildBar').addEventListener('pointerdown',e=>{
-  e.stopPropagation();e.preventDefault();
-  const slot=e.target.closest('.bb-slot');
-  if(!slot)return;
-  if(player.placingRecipeId===slot.dataset.id)exitBuildMode();else enterBuildMode(slot.dataset.id);
-});
 const ARMOR_SLOT='armor';
 const HAND_SLOT_COUNT=2;
 const CARRY_SLOT_COUNT=3;
@@ -800,10 +790,13 @@ function resolveFenceCollision(ent,radius,ox,oy){
   for(let pass=0;pass<2;pass++){
     const bx=Math.floor(gx),by=Math.floor(gy);
     for(let vx=bx-2;vx<=bx+3;vx++)for(let vy=by-2;vy<=by+3;vy++){
-      if(!fenceAt(vx,vy))continue;
-      shove(vx,vy,radius+FENCE_POST_R);
-      if(fenceAt(vx+1,vy)){const c=closestPointOnSegment(gx,gy,vx,vy,vx+1,vy);shove(c.x,c.y,radius+FENCE_ARM_R)}
-      if(fenceAt(vx,vy+1)){const c=closestPointOnSegment(gx,gy,vx,vy,vx,vy+1);shove(c.x,c.y,radius+FENCE_ARM_R)}
+      const fa=fenceAt(vx,vy);
+      if(!fa)continue;
+      const open=(q)=>ent===player&&((fa.isGate)||(q&&q.isGate));
+      if(!(ent===player&&fa.isGate))shove(vx,vy,radius+FENCE_POST_R);
+      const fe=fenceAt(vx+1,vy),fs=fenceAt(vx,vy+1);
+      if(fe&&!open(fe)){const c=closestPointOnSegment(gx,gy,vx,vy,vx+1,vy);shove(c.x,c.y,radius+FENCE_ARM_R)}
+      if(fs&&!open(fs)){const c=closestPointOnSegment(gx,gy,vx,vy,vx,vy+1);shove(c.x,c.y,radius+FENCE_ARM_R)}
     }
   }
   ent.x=gx-ox;ent.y=gy-oy;
@@ -863,6 +856,8 @@ const RECIPES=[
   {id:'campfire',name:'Campfire',stage:'Build',desc:'Gather stones and arrange them in a ring. Burn sticks as fuel to produce heat and charcoal.',cost:{thickStick:3,bigPebble:2},icon:'#e8a040',buildable:true},
   {id:'crate',name:'Storage Crate',stage:'Build',desc:'Lash sticks and woven fiber into a sturdy container for stashing extra materials in the world.',cost:{thickStick:6,stalkFiber:4},icon:'#b97a3d',buildable:true},
   {id:'fence',name:'Fence',stage:'Build',desc:'Lash thick sticks into fence posts (makes 3). Posts snap to tile corners and link up with their neighbours by themselves, so a line of posts becomes a wall along the tile edges. Blocks movement - zombies included.',cost:{thickStick:3,cordage:1},icon:'#8a6636',buildable:true,place:'vertex',yield:3},
+  {id:'fenceGate',name:'Fence Gate',stage:'Build',desc:'A hinged opening. Blocks zombies, you pass through.',cost:{thickStick:4,cordage:2},icon:'#7a5626',buildable:true,place:'vertex'},
+  {id:'tent',name:'Tent',stage:'Build',desc:'A portable shelter.',cost:{stalkFiber:12,thickStick:4,cordage:3},icon:'#d08090',buildable:true},
   {id:'cordage',name:'Cordage',stage:'Process',desc:'Twist plant stalk fiber into two-ply cord for lashing.',cost:{stalkFiber:4},icon:'#5bc46a'},
   {id:'basket',name:'Basket',stage:'Process',desc:'Weave gathered plant stalk fibers into a small rigid basket for carrying and storing materials.',cost:{stalkFiber:6},icon:'#c99a55'},
   {id:'knappedFlint',name:'Knapped Flint Edge',stage:'Process',desc:'Percussion-flake a flint nodule with a hammerstone to raise a sharp edge.',cost:{flint:1,bigPebble:1},icon:'#cfd3d0'},
@@ -874,7 +869,7 @@ const RECIPES=[
   {id:'spear',name:'Spear',stage:'Haft',desc:'Haft a flint point onto a fire-hardened shaft, lashed and bound tight with cordage.',cost:{knappedFlint:1,shaft:1,cordage:2},icon:'#c96'},
   {id:'stoneAxe',name:'Stone Axe (Celt)',stage:'Haft',desc:'Peck and grind a flint blank into an axehead, wedge it into a mortised shaft, and bind tight.',cost:{knappedFlint:2,shaft:1,cordage:2},icon:'#8a8880'}
 ];
-const ITEM_ICON_KIND={stalkFiber:'fiber',thickStick:'stick',bigPebble:'pebble',flint:'flint',charcoal:'charcoal',cordage:'coil',basket:'basket',knappedFlint:'flint',carvedShaft:'stick',shaft:'stick',flintKnife:'tool',spear:'tool',stoneAxe:'tool',armor:'armor',campfire:'flame',crate:'crate',fence:'fence'};
+const ITEM_ICON_KIND={stalkFiber:'fiber',thickStick:'stick',bigPebble:'pebble',flint:'flint',charcoal:'charcoal',cordage:'coil',basket:'basket',knappedFlint:'flint',carvedShaft:'stick',shaft:'stick',flintKnife:'tool',spear:'tool',stoneAxe:'tool',armor:'armor',campfire:'flame',crate:'crate',fence:'fence',fenceGate:'gate',tent:'tent'};
 const ITEM_NAMES={stalkFiber:'Stalk Fibers',thickStick:'Thick Stick',bigPebble:'Pebble',flint:'Flint',charcoal:'Charcoal',basket:'Basket',armor:'Woven Armor'};
 function itemDisplayName(id){const r=RECIPES.find(x=>x.id===id);return r?r.name:(ITEM_NAMES[id]||id)}
 function itemIconSVG(kind,color){
@@ -890,6 +885,8 @@ function itemIconSVG(kind,color){
     case'armor':return`<svg viewBox="0 0 24 24"><path d="M4 4 L20 4 L18 12 L16 20 L8 20 L6 12 Z" fill="#8a8880" stroke="#373737" stroke-width="1.5"/><rect x="8" y="7" width="8" height="3" fill="#c99a55"/></svg>`;
     case'tool':return`<svg viewBox="0 0 24 24"><rect x="10.5" y="10" width="3" height="13" rx="1" fill="#352416" transform="rotate(45 12 16)"/><rect x="11.1" y="10.5" width="1" height="12" rx=".5" fill="#664326" transform="rotate(45 12 16)"/><polygon points="4,4 12,4 14,10 6,12" fill="#cfd3d0"/><polygon points="4,4 12,4 8,8" fill="#eef1ef"/></svg>`;
     case'crate':return`<svg viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="10" rx="1" fill="#b97a3d" stroke="#5b371b" stroke-width="1.2"/><rect x="3" y="7" width="18" height="5" rx="1" fill="#c99a55" stroke="#5b371b" stroke-width="1.2"/><rect x="10.5" y="10.5" width="3" height="3" fill="#5b371b"/></svg>`;
+    case'gate':return`<svg viewBox="0 0 24 24"><rect x="2" y="3" width="4" height="19" fill="#7a5626" stroke="#3d2a12" stroke-width=".8"/><rect x="18" y="3" width="4" height="19" fill="#7a5626" stroke="#3d2a12" stroke-width=".8"/><rect x="2" y="1.5" width="4" height="2.5" fill="#e0b060"/><rect x="18" y="1.5" width="4" height="2.5" fill="#e0b060"/><rect x="6" y="6" width="12" height="2.6" fill="#a77a36" stroke="#3d2a12" stroke-width=".6"/><rect x="6" y="15" width="12" height="2.6" fill="#a77a36" stroke="#3d2a12" stroke-width=".6"/><path d="M6 8.6 L18 15 M6 15 L18 8.6" stroke="#8a6636" stroke-width="1.6" fill="none"/><circle cx="16" cy="12" r="1.3" fill="#e8e8e8" stroke="#333" stroke-width=".5"/></svg>`;
+    case'tent':return`<svg viewBox="0 0 24 24"><polygon points="12,3 22,20 2,20" fill="#d08090" stroke="#6b3040" stroke-width="1.2" stroke-linejoin="round"/><polygon points="12,3 22,20 13,20" fill="#b86678"/><polygon points="12,10 16.5,20 7.5,20" fill="#3a2230"/><line x1="12" y1="3" x2="12" y2="1.5" stroke="#5b371b" stroke-width="1.4"/><line x1="2" y1="20" x2="0.8" y2="22" stroke="#5b371b" stroke-width="1"/><line x1="22" y1="20" x2="23.2" y2="22" stroke="#5b371b" stroke-width="1"/></svg>`;
     case'fence':return`<svg viewBox="0 0 24 24"><rect x="3" y="5" width="3" height="16" fill="#664326"/><rect x="18" y="5" width="3" height="16" fill="#664326"/><rect x="2" y="8" width="20" height="3" fill="#8a6636"/><rect x="2" y="15" width="20" height="3" fill="#8a6636"/></svg>`;
     default:return`<svg viewBox="0 0 24 24"><polygon points="12,3 20,9 16,21 8,21 4,9" fill="${color||'#8a8880'}"/><polygon points="12,3 20,9 12,12" fill="rgba(255,255,255,.35)"/></svg>`;
   }
@@ -1005,8 +1002,8 @@ function craftBuildableOnce(recipe){
 let buildStroke=null,buildClickGuard=false;
 function carriedBuildables(){return RECIPES.filter(r=>r.buildable&&totalOf(r.id)>0)}
 function renderBuildBar(){
+  return;
   const el=document.getElementById('buildBar');
-  if(!el)return;
   const list=carriedBuildables(),active=player.placingRecipeId;
   const sig=(active||'-')+'|'+list.map(r=>r.id+':'+totalOf(r.id)).join(',');
   if(el.dataset.sig===sig)return; // only touch the DOM when something changed, so clicks on it always land
@@ -2007,6 +2004,8 @@ document.getElementById('inventoryClose').addEventListener('click',e=>{
   closeInventoryScreen();
   e.stopPropagation();
 });
+const buildBtn=document.getElementById('buildButton');
+if(buildBtn)buildBtn.addEventListener('pointerdown',e=>{toggleBuildMode();e.preventDefault()});
 document.getElementById('craftButton').addEventListener('pointerdown',e=>{toggleCraftPanel();e.preventDefault()});
 let autoOpenedCrate=null;
 let crateAutoOpenSuppressed=false;
@@ -2454,7 +2453,15 @@ function placeBuildable(recipe,world){
     addCameraShake(.1,.3);
   }else if(recipe.id==='fence'){
     addFencePost(world.vx,world.vy);
-    spawnDust(world.vx,world.vy,2); // no shake or popup per post - painting a line places lots of them
+    spawnDust(world.vx,world.vy,2);
+  }else if(recipe.id==='fenceGate'){
+    addFencePost(world.vx,world.vy,true);
+    createFloatingText(world.x,world.y-1,'Gate','#7a5626');
+    addCameraShake(.1,.3);
+  }else if(recipe.id==='tent'){
+    createEntity('tent',world.x,world.y,{});
+    createFloatingText(world.x,world.y-1,'Tent','#d08090');
+    addCameraShake(.1,.3);
   }
 }
 
@@ -2481,6 +2488,7 @@ function buildCheck(recipe,t){
     for(const cf of player.campfires)if(Math.hypot(cf.x-t.x,cf.y-t.y)<.6)return 'Blocked';
     for(const c of containers)if(Math.hypot(c.x-t.x,c.y-t.y)<.6)return 'Blocked';
   }
+  for(const en of entities)if(en.type==='tent'&&Math.hypot(en.x-t.x,en.y-t.y)<.9)return 'Blocked';
   return '';
 }
 function buildPlace(recipe,t){
@@ -2506,8 +2514,10 @@ function hitFenceAtScreen(clientX,clientY){
 }
 function pickupFencePost(p){
   if(Math.hypot(p.vx-(player.x+.5),p.vy-(player.y+.5))>BUILD_REACH){createFloatingText(player.x,player.y-1,'Too far','#f88');return false}
-  if(!addItem('fence',1)){createFloatingText(player.x,player.y-1,'No carry room','#f66');return false}
+  const pid=p.isGate?'fenceGate':'fence';
+  if(!addItem(pid,1)){createFloatingText(player.x,player.y-1,'No carry room','#f66');return false}
   removeFencePost(p);
+  createFloatingText(p.vx,p.vy-1,p.isGate?'Gate':'Fence','#8f8');
   spawnDust(p.vx,p.vy,2);
   renderCraftPanel();renderHotbar();renderBuildBar();
   return true;
@@ -2608,6 +2618,10 @@ actionButton.addEventListener('pointerdown',e=>{attack();actionButton.textConten
 attackButton.addEventListener('pointerdown',e=>{attack();attackButton.textContent='HIT';setTimeout(()=>attackButton.textContent='ATTACK',120);e.preventDefault()});
 
 canvas.addEventListener('pointerdown',e=>{
+  if(!player.placingRecipeId&&getSelectedHandItem()==='stoneAxe'&&!(e.pointerType==='mouse'&&e.button!==0)){
+    const fp=hitFenceAtScreen(e.clientX,e.clientY);
+    if(fp){suppressNextClick=true;pickupFencePost(fp);e.preventDefault();return}
+  }
   if(player.placingRecipeId){
     if(e.pointerType==='mouse'&&e.button!==0)return; // right click is handled by contextmenu
     buildPointerDown(e);
@@ -3001,8 +3015,9 @@ function drawFenceArm(dir){
     }
   }
 }
-function drawFencePost(){
+function drawFencePost(isGate){
   const c=FENCE_COL;
+  if(isGate){ctx.fillStyle='rgba(0,0,0,.26)';ctx.beginPath();ctx.ellipse(0,2,7,3,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#7a5626';ctx.fillRect(-3,-24,6,26);ctx.fillStyle='#a77a36';ctx.fillRect(-3,-24,2,26);ctx.fillStyle='#e0b060';ctx.fillRect(-4,-27,8,4);ctx.strokeStyle=c.line;ctx.lineWidth=1;ctx.strokeRect(-3.5,-23.5,7,25);return}
   ctx.fillStyle='rgba(0,0,0,.26)';ctx.beginPath();ctx.ellipse(0,2,7,3,0,0,Math.PI*2);ctx.fill();
   ctx.fillStyle=c.post;ctx.fillRect(-3,-20,6,22);
   ctx.fillStyle=c.postHi;ctx.fillRect(-3,-20,2,22);
@@ -3012,14 +3027,14 @@ function drawFencePost(){
 }
 // conn = which sides get an arm. Placed posts only draw their east and south arms (their
 // neighbours draw the other two); the placement ghost draws all four.
-function drawFencePiece(sx,sy,conn,alpha){
+function drawFencePiece(sx,sy,conn,alpha,post){
   ctx.save();ctx.translate(sx,sy);
   if(alpha!=null)ctx.globalAlpha=alpha;
   if(conn.w)drawFenceArm('w');
   if(conn.n)drawFenceArm('n');
   if(conn.e)drawFenceArm('e');
   if(conn.s)drawFenceArm('s');
-  drawFencePost();
+  drawFencePost(post&&post.isGate);
   ctx.restore();
 }
 // The Build Mode ghost: follows the mouse, green where it can go and red (with the reason)
@@ -3136,7 +3151,7 @@ const draw=[];for(const e of entities){const sx=Math.floor((e.x-cx+cols/2)*TILE)
   ctx.strokeStyle='#664326';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(-len*.48,0);ctx.lineTo(-len*.15,-.5);ctx.lineTo(len*.18,-1);ctx.lineTo(len*.47,-1.5);ctx.stroke();
   ctx.strokeStyle='rgba(120,82,46,.65)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-len*.25,-1);ctx.lineTo(len*.32,-2);ctx.stroke();
   ctx.strokeStyle='#432b19';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(len*.15,-.5);ctx.lineTo(len*.27,-6);ctx.stroke();
-  ctx.restore();if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,Math.max(10,e.radius*TILE+6),0,Math.PI*2);ctx.stroke()}}});else if(e.type==='bigPebble')draw.push({y:e.y,render:()=>{if(e.collected)return;const r=Math.floor(e.radius*TILE);ctx.save();ctx.fillStyle=e.tone>.62?'#8a8880':e.tone>.3?'#aaa69d':'#6f6d67';ctx.beginPath();ctx.ellipse(sx,sy,r*1.18,r*.92,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(225,222,214,.6)';ctx.beginPath();ctx.ellipse(sx-r*.28,sy-r*.3,r*.38,r*.22,-.2,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(55,52,48,.65)';ctx.lineWidth=1;ctx.stroke();if(e.clicked){ctx.strokeStyle='#ff0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+7,0,Math.PI*2);ctx.stroke()};ctx.restore()}});else if(e.type==='flint')draw.push({y:e.y,render:()=>{if(e.collected)return;const ang=e.seedVal%360*Math.PI/180;ctx.save();ctx.translate(sx,sy);ctx.rotate(ang);ctx.fillStyle='#cfd3d0';ctx.beginPath();ctx.moveTo(-7,2);ctx.lineTo(-3,-5);ctx.lineTo(3,-7);ctx.lineTo(8,-2);ctx.lineTo(5,4);ctx.lineTo(-2,6);ctx.closePath();ctx.fill();ctx.fillStyle='#eef1ef';ctx.beginPath();ctx.moveTo(-3,-5);ctx.lineTo(3,-7);ctx.lineTo(1,-1);ctx.lineTo(-2,2);ctx.closePath();ctx.fill();ctx.fillStyle='rgba(80,90,90,.55)';ctx.fillRect(-2,1,5,2);ctx.restore();if(e.clicked){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,11,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='charcoal')draw.push({y:e.y,render:()=>{if(e.collected)return;const r=Math.floor(e.radius*TILE);ctx.fillStyle='#4a4a48';ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();ctx.fillStyle='#2a2a28';ctx.beginPath();ctx.arc(sx-r*.35,sy-r*.35,Math.max(1,r*.35),0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(100,100,100,.4)';ctx.beginPath();ctx.arc(sx+r*.25,sy+r*.2,Math.max(1,r*.25),0,Math.PI*2);ctx.fill();if(e.clicked){ctx.strokeStyle='#ddd';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+6,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='pebble')draw.push({y:e.y,render:()=>{const r=Math.floor(e.radius*TILE);ctx.fillStyle=e.tone>.65?'rgba(100,95,85,.8)':e.tone>.35?'rgba(140,135,125,.8)':'rgba(180,175,165,.7)';ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();if(e.light>.5){ctx.fillStyle='rgba(220,215,205,.5)';ctx.beginPath();ctx.arc(sx-r*.3,sy-r*.3,Math.max(1,r*.35),0,Math.PI*2);ctx.fill()}if(e.clicked){ctx.strokeStyle='#ff0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+3,0,Math.PI*2);ctx.stroke()}}})}
+  ctx.restore();if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,Math.max(10,e.radius*TILE+6),0,Math.PI*2);ctx.stroke()}}});else if(e.type==='bigPebble')draw.push({y:e.y,render:()=>{if(e.collected)return;const r=Math.floor(e.radius*TILE);ctx.save();ctx.fillStyle=e.tone>.62?'#8a8880':e.tone>.3?'#aaa69d':'#6f6d67';ctx.beginPath();ctx.ellipse(sx,sy,r*1.18,r*.92,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(225,222,214,.6)';ctx.beginPath();ctx.ellipse(sx-r*.28,sy-r*.3,r*.38,r*.22,-.2,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(55,52,48,.65)';ctx.lineWidth=1;ctx.stroke();if(e.clicked){ctx.strokeStyle='#ff0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+7,0,Math.PI*2);ctx.stroke()};ctx.restore()}});else if(e.type==='flint')draw.push({y:e.y,render:()=>{if(e.collected)return;const ang=e.seedVal%360*Math.PI/180;ctx.save();ctx.translate(sx,sy);ctx.rotate(ang);ctx.fillStyle='#cfd3d0';ctx.beginPath();ctx.moveTo(-7,2);ctx.lineTo(-3,-5);ctx.lineTo(3,-7);ctx.lineTo(8,-2);ctx.lineTo(5,4);ctx.lineTo(-2,6);ctx.closePath();ctx.fill();ctx.fillStyle='#eef1ef';ctx.beginPath();ctx.moveTo(-3,-5);ctx.lineTo(3,-7);ctx.lineTo(1,-1);ctx.lineTo(-2,2);ctx.closePath();ctx.fill();ctx.fillStyle='rgba(80,90,90,.55)';ctx.fillRect(-2,1,5,2);ctx.restore();if(e.clicked){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,11,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='charcoal')draw.push({y:e.y,render:()=>{if(e.collected)return;const r=Math.floor(e.radius*TILE);ctx.fillStyle='#4a4a48';ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();ctx.fillStyle='#2a2a28';ctx.beginPath();ctx.arc(sx-r*.35,sy-r*.35,Math.max(1,r*.35),0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(100,100,100,.4)';ctx.beginPath();ctx.arc(sx+r*.25,sy+r*.2,Math.max(1,r*.25),0,Math.PI*2);ctx.fill();if(e.clicked){ctx.strokeStyle='#ddd';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+6,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='pebble')draw.push({y:e.y,render:()=>{const r=Math.floor(e.radius*TILE);ctx.fillStyle=e.tone>.65?'rgba(100,95,85,.8)':e.tone>.35?'rgba(140,135,125,.8)':'rgba(180,175,165,.7)';ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();if(e.light>.5){ctx.fillStyle='rgba(220,215,205,.5)';ctx.beginPath();ctx.arc(sx-r*.3,sy-r*.3,Math.max(1,r*.35),0,Math.PI*2);ctx.fill()}if(e.clicked){ctx.strokeStyle='#ff0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+3,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='tent')draw.push({y:e.y,render:()=>{ctx.save();ctx.fillStyle='#d08090';ctx.beginPath();ctx.moveTo(sx-16,sy+2);ctx.lineTo(sx,sy-12);ctx.lineTo(sx+16,sy+2);ctx.closePath();ctx.fill();ctx.fillStyle='#c07080';ctx.beginPath();ctx.moveTo(sx,sy-12);ctx.lineTo(sx+14,sy+2);ctx.lineTo(sx+2,sy);ctx.closePath();ctx.fill();ctx.restore()}})}
 const px=Math.floor((player.x-cx+cols/2)*TILE),py=Math.floor((player.y-cy+rows/2)*TILE);draw.push({y:player.y,render:()=>{
   const size=TILE*1.7,drawX=Math.floor(px+TILE/2-size/2),drawY=Math.floor(py+TILE/2-size/2);
   drawSoftShadow(px+TILE/2,py+TILE/2+11,13,5,.2+.28*sunAngleFactor());
@@ -3223,7 +3238,8 @@ for(const fp of fences){const fsx=Math.floor((fp.vx-cx+cols/2)*TILE),fsy=Math.fl
   if(fsx<-90||fsx>W+90||fsy<-90||fsy>H+90)continue;
   // Sorted by where the post's BASE sits in an entity's coordinate frame (sprites stand ~.84 tile
   // below their world position), so the player walks in front of / behind a fence correctly.
-  draw.push({y:fp.vy-.84+.02,render:()=>drawFencePiece(fsx,fsy,{e:!!fenceAt(fp.vx+1,fp.vy),s:!!fenceAt(fp.vx,fp.vy+1)},null)});}
+  const vert=!!fenceAt(fp.vx,fp.vy-1)||!!fenceAt(fp.vx,fp.vy+1);
+  draw.push({y:vert?fp.vy+1000:fp.vy-.84+.02,render:()=>drawFencePiece(fsx,fsy,{e:!!fenceAt(fp.vx+1,fp.vy),s:!!fenceAt(fp.vx,fp.vy+1)},null,fp)});}
 if(player.placingRecipeId)draw.push({y:1e9,render:()=>renderBuildGhost(cx,cy,cols,rows)});
 for(const e of entities){
   if((e.type==='bigPebble'||e.type==='flint'||e.type==='stick'||e.type==='charcoal')&&!e.collected){
