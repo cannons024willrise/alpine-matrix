@@ -20,6 +20,7 @@ canvas{display:block;image-rendering:pixelated}
 #actionButton{position:absolute;right:max(22px,env(safe-area-inset-right));bottom:max(28px,env(safe-area-inset-bottom));width:82px;height:82px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(0,70,0,.38);color:#d8ffe0;font:700 15px monospace;pointer-events:auto;touch-action:none}
 #attackButton{position:absolute;right:max(118px,calc(env(safe-area-inset-right) + 96px));bottom:max(28px,env(safe-area-inset-bottom));width:82px;height:82px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(90,20,20,.52);color:#ffe0e0;font:700 13px monospace;pointer-events:auto;touch-action:none}
 #buildButton{position:absolute;right:max(110px,calc(env(safe-area-inset-right) + 88px));bottom:max(208px,calc(env(safe-area-inset-bottom) + 162px));width:62px;height:62px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(0,100,0,.45);color:#a8ffa8;font:700 10px monospace;pointer-events:auto;touch-action:none}
+#useButton{position:absolute;right:max(30px,env(safe-area-inset-right));bottom:max(196px,calc(env(safe-area-inset-bottom) + 170px));width:62px;height:62px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(120,30,30,.5);color:#ffd0d0;font:700 11px monospace;pointer-events:auto;touch-action:none}
 #craftButton{position:absolute;right:max(30px,env(safe-area-inset-right));bottom:max(122px,calc(env(safe-area-inset-bottom) + 94px));width:62px;height:62px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(70,55,0,.45);color:#ffe9a8;font:700 11px monospace;pointer-events:auto;touch-action:none}
 #craftHint{position:fixed;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));font-size:11px;color:#0f0;background:rgba(0,0,0,.6);border:1px solid #0f0;border-radius:4px;padding:6px 10px;z-index:10;text-shadow:1px 1px #000;pointer-events:auto}
 @media (pointer:coarse), (max-width:700px){#mobileControls{display:block}#hud{font-size:11px}#craftHint{display:none}}
@@ -164,7 +165,7 @@ canvas{filter:saturate(1.08) contrast(1.04)}
 <div id="hud"></div>
 <button id="hudToggle" type="button">◆</button>
 <div id="creativeIndicator">✦ CREATIVE MODE</div>
-<div id="craftHint">[C] Inventory | [Click/Right-Click] Full/Half Stack | [Drag] Move Item | [Shift+Click] Container | [`] Creative | [1-7] Slots | [B] Build</div>
+<div id="craftHint">[C] Inventory | [Click/Right-Click] Full/Half Stack | [Drag] Move Item | [Shift+Click] Container | [`] Creative | [1-7] Slots | [B] Build | [F] Eat/Drink/Heal</div>
 <div id="hotbar"></div>
 <div id="cursorItemDisplay"></div>
 
@@ -208,7 +209,7 @@ canvas{filter:saturate(1.08) contrast(1.04)}
     </div>
   </div>
 </div>
-<div id="mobileControls"><div id="joystick"><div id="joystickKnob"></div></div><button id="buildButton" type="button">BUILD</button><button id="craftButton" type="button">CRAFT</button><button id="attackButton" type="button">ATTACK</button><button id="actionButton" type="button">ACT</button></div>
+<div id="mobileControls"><div id="joystick"><div id="joystickKnob"></div></div><button id="buildButton" type="button">BUILD</button><button id="useButton" type="button">USE</button><button id="craftButton" type="button">CRAFT</button><button id="attackButton" type="button">ATTACK</button><button id="actionButton" type="button">ACT</button></div>
 
 <div id="createWorldScreen">
   <div id="createWorldInner" class="mc-panel">
@@ -628,7 +629,7 @@ const BASKET_CARRY_TOTAL=BASE_CARRY_SLOTS+BASKET_EXTRA_CARRY_SLOTS;
 function hasBasket(){return player.inventory.basket>0||utilitySlots.backpack==='basket'}
 function getCarrySlotCount(){return hasBasket()?BASKET_CARRY_TOTAL:BASE_CARRY_SLOTS}
 function ensureCarrySlots(){const target=getCarrySlotCount();while(hotbarSlots.length<target)hotbarSlots.push(null);}
-const STACK_LIMITS={stalkFiber:8,thickStick:3,bigPebble:3,flint:4,charcoal:3,cordage:4,basket:1,knappedFlint:2,carvedShaft:1,shaft:1,flintKnife:1,spear:1,stoneAxe:1,armor:1,campfire:1,fence:8};
+const STACK_LIMITS={stalkFiber:8,thickStick:3,bigPebble:3,flint:4,charcoal:3,cordage:4,basket:1,knappedFlint:2,carvedShaft:1,shaft:1,flintKnife:1,spear:1,stoneAxe:1,armor:1,campfire:1,fence:8,fenceGate:4,tent:1,berries:6,tourniquet:2};
 let hotbarSlots=Array(BASE_CARRY_SLOTS).fill(null);
 let handSlots=Array(HAND_SLOT_COUNT).fill(null);
 const utilitySlots={armor:'',backpack:''};
@@ -753,7 +754,7 @@ function removeItem(name,amount=1){
   return true;
 }
 
-function harvestBush(e){if(!e||e.type!=='bush'||e.harvested)return;if(!addItem('stalkFiber',e.fiberYield)){createFloatingText(e.x,e.y-0.5,'Carry slots full','#f66');return}e.harvested=true;e.clicked=true;e.regrowAt=performance.now()+15000;spawnHitSpark(e.x,e.y-.4,-Math.PI/2,'#5bc46a');setTimeout(()=>e.clicked=false,200)}
+function harvestBush(e){if(!e||e.type!=='bush'||e.harvested)return;if(!addItem('stalkFiber',e.fiberYield)){createFloatingText(e.x,e.y-0.5,'Carry slots full','#f66');return}if(Math.random()<.5)addItem('berries',Math.random()<.4?2:1);e.harvested=true;e.clicked=true;e.regrowAt=performance.now()+15000;spawnHitSpark(e.x,e.y-.4,-Math.PI/2,'#5bc46a');setTimeout(()=>e.clicked=false,200)}
 function harvestTreeForSticks(e){if(!e||e.type!=='tree'||e.stickHarvested)return;const yield_=e.stickYield||1;if(!addItem('thickStick',yield_)){createFloatingText(e.x,e.y-0.5,'Carry slots full','#f66');return}e.stickHarvested=true;e.clicked=true;createFloatingText(e.x,e.y-1,`◆ Stick ×${yield_}`,'#8f8');spawnHitSpark(e.x,e.y-1,-Math.PI/2,'#8a6636');addCameraShake(.15,.35);setTimeout(()=>e.clicked=false,450)}
 function worldToScreenPoint(x,y){return{x:(x-player.x+viewportCols/2)*TILE+TILE/2,y:(y-player.y+viewportRows/2)*TILE+TILE/2}}
 
@@ -857,7 +858,8 @@ const RECIPES=[
   {id:'crate',name:'Storage Crate',stage:'Build',desc:'Lash sticks and woven fiber into a sturdy container for stashing extra materials in the world.',cost:{thickStick:6,stalkFiber:4},icon:'#b97a3d',buildable:true},
   {id:'fence',name:'Fence',stage:'Build',desc:'Lash thick sticks into fence posts (makes 3). Posts snap to tile corners and link up with their neighbours by themselves, so a line of posts becomes a wall along the tile edges. Blocks movement - zombies included.',cost:{thickStick:3,cordage:1},icon:'#8a6636',buildable:true,place:'vertex',yield:3},
   {id:'fenceGate',name:'Fence Gate',stage:'Build',desc:'A hinged opening. Blocks zombies, you pass through.',cost:{thickStick:4,cordage:2},icon:'#7a5626',buildable:true,place:'vertex'},
-  {id:'tent',name:'Tent',stage:'Build',desc:'A portable shelter.',cost:{stalkFiber:12,thickStick:4,cordage:3},icon:'#d08090',buildable:true},
+  {id:'tent',name:'Tent',stage:'Build',desc:'A portable shelter.',cost:{thickStick:8,cordage:3,stalkFiber:14,bigPebble:4},icon:'#d08090',buildable:true},
+  {id:'tourniquet',name:'Tourniquet',stage:'Process',desc:'A cordage band cinched tight with a stick twisted through it. Stops bleeding. Use with F or the USE button.',cost:{cordage:1,thickStick:1},icon:'#c0392b',yield:1},
   {id:'cordage',name:'Cordage',stage:'Process',desc:'Twist plant stalk fiber into two-ply cord for lashing.',cost:{stalkFiber:4},icon:'#5bc46a'},
   {id:'basket',name:'Basket',stage:'Process',desc:'Weave gathered plant stalk fibers into a small rigid basket for carrying and storing materials.',cost:{stalkFiber:6},icon:'#c99a55'},
   {id:'knappedFlint',name:'Knapped Flint Edge',stage:'Process',desc:'Percussion-flake a flint nodule with a hammerstone to raise a sharp edge.',cost:{flint:1,bigPebble:1},icon:'#cfd3d0'},
@@ -869,8 +871,8 @@ const RECIPES=[
   {id:'spear',name:'Spear',stage:'Haft',desc:'Haft a flint point onto a fire-hardened shaft, lashed and bound tight with cordage.',cost:{knappedFlint:1,shaft:1,cordage:2},icon:'#c96'},
   {id:'stoneAxe',name:'Stone Axe (Celt)',stage:'Haft',desc:'Peck and grind a flint blank into an axehead, wedge it into a mortised shaft, and bind tight.',cost:{knappedFlint:2,shaft:1,cordage:2},icon:'#8a8880'}
 ];
-const ITEM_ICON_KIND={stalkFiber:'fiber',thickStick:'stick',bigPebble:'pebble',flint:'flint',charcoal:'charcoal',cordage:'coil',basket:'basket',knappedFlint:'flint',carvedShaft:'stick',shaft:'stick',flintKnife:'tool',spear:'tool',stoneAxe:'tool',armor:'armor',campfire:'flame',crate:'crate',fence:'fence',fenceGate:'gate',tent:'tent'};
-const ITEM_NAMES={stalkFiber:'Stalk Fibers',thickStick:'Thick Stick',bigPebble:'Pebble',flint:'Flint',charcoal:'Charcoal',basket:'Basket',armor:'Woven Armor'};
+const ITEM_ICON_KIND={stalkFiber:'fiber',thickStick:'stick',bigPebble:'pebble',flint:'flint',charcoal:'charcoal',cordage:'coil',basket:'basket',knappedFlint:'flint',carvedShaft:'stick',shaft:'stick',flintKnife:'tool',spear:'tool',stoneAxe:'tool',armor:'armor',campfire:'flame',crate:'crate',fence:'fence',fenceGate:'gate',tent:'tent',berries:'berries',tourniquet:'tourniquet'};
+const ITEM_NAMES={stalkFiber:'Stalk Fibers',thickStick:'Thick Stick',bigPebble:'Pebble',flint:'Flint',charcoal:'Charcoal',basket:'Basket',armor:'Woven Armor',berries:'Wild Berries'};
 function itemDisplayName(id){const r=RECIPES.find(x=>x.id===id);return r?r.name:(ITEM_NAMES[id]||id)}
 function itemIconSVG(kind,color){
   switch(kind){
@@ -885,6 +887,8 @@ function itemIconSVG(kind,color){
     case'armor':return`<svg viewBox="0 0 24 24"><path d="M4 4 L20 4 L18 12 L16 20 L8 20 L6 12 Z" fill="#8a8880" stroke="#373737" stroke-width="1.5"/><rect x="8" y="7" width="8" height="3" fill="#c99a55"/></svg>`;
     case'tool':return`<svg viewBox="0 0 24 24"><rect x="10.5" y="10" width="3" height="13" rx="1" fill="#352416" transform="rotate(45 12 16)"/><rect x="11.1" y="10.5" width="1" height="12" rx=".5" fill="#664326" transform="rotate(45 12 16)"/><polygon points="4,4 12,4 14,10 6,12" fill="#cfd3d0"/><polygon points="4,4 12,4 8,8" fill="#eef1ef"/></svg>`;
     case'crate':return`<svg viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="10" rx="1" fill="#b97a3d" stroke="#5b371b" stroke-width="1.2"/><rect x="3" y="7" width="18" height="5" rx="1" fill="#c99a55" stroke="#5b371b" stroke-width="1.2"/><rect x="10.5" y="10.5" width="3" height="3" fill="#5b371b"/></svg>`;
+    case'berries':return`<svg viewBox="0 0 24 24"><path d="M12 9 Q12 4 16 3" stroke="#2e6631" stroke-width="1.6" fill="none"/><ellipse cx="17" cy="4.5" rx="3.2" ry="1.7" fill="#3f8f45"/><circle cx="8.5" cy="15" r="4.6" fill="#b3203f" stroke="#5a0f1f" stroke-width=".8"/><circle cx="15.5" cy="14" r="4.6" fill="#c42a4a" stroke="#5a0f1f" stroke-width=".8"/><circle cx="12" cy="18.5" r="4" fill="#9c1a36" stroke="#5a0f1f" stroke-width=".8"/><circle cx="7" cy="13.5" r="1.1" fill="rgba(255,255,255,.55)"/><circle cx="14" cy="12.5" r="1.1" fill="rgba(255,255,255,.55)"/></svg>`;
+    case'tourniquet':return`<svg viewBox="0 0 24 24"><rect x="2" y="9" width="20" height="6" rx="1.5" fill="#c9b58a" stroke="#6b5a3a" stroke-width="1"/><path d="M6 9 V15 M10 9 V15 M14 9 V15 M18 9 V15" stroke="#a8946a" stroke-width="1"/><rect x="10.5" y="2" width="3" height="20" rx="1.2" fill="#664326" stroke="#352416" stroke-width=".8" transform="rotate(35 12 12)"/></svg>`;
     case'gate':return`<svg viewBox="0 0 24 24"><rect x="2" y="3" width="4" height="19" fill="#7a5626" stroke="#3d2a12" stroke-width=".8"/><rect x="18" y="3" width="4" height="19" fill="#7a5626" stroke="#3d2a12" stroke-width=".8"/><rect x="2" y="1.5" width="4" height="2.5" fill="#e0b060"/><rect x="18" y="1.5" width="4" height="2.5" fill="#e0b060"/><rect x="6" y="6" width="12" height="2.6" fill="#a77a36" stroke="#3d2a12" stroke-width=".6"/><rect x="6" y="15" width="12" height="2.6" fill="#a77a36" stroke="#3d2a12" stroke-width=".6"/><path d="M6 8.6 L18 15 M6 15 L18 8.6" stroke="#8a6636" stroke-width="1.6" fill="none"/><circle cx="16" cy="12" r="1.3" fill="#e8e8e8" stroke="#333" stroke-width=".5"/></svg>`;
     case'tent':return`<svg viewBox="0 0 24 24"><polygon points="12,3 22,20 2,20" fill="#d08090" stroke="#6b3040" stroke-width="1.2" stroke-linejoin="round"/><polygon points="12,3 22,20 13,20" fill="#b86678"/><polygon points="12,10 16.5,20 7.5,20" fill="#3a2230"/><line x1="12" y1="3" x2="12" y2="1.5" stroke="#5b371b" stroke-width="1.4"/><line x1="2" y1="20" x2="0.8" y2="22" stroke="#5b371b" stroke-width="1"/><line x1="22" y1="20" x2="23.2" y2="22" stroke="#5b371b" stroke-width="1"/></svg>`;
     case'fence':return`<svg viewBox="0 0 24 24"><rect x="3" y="5" width="3" height="16" fill="#664326"/><rect x="18" y="5" width="3" height="16" fill="#664326"/><rect x="2" y="8" width="20" height="3" fill="#8a6636"/><rect x="2" y="15" width="20" height="3" fill="#8a6636"/></svg>`;
@@ -2004,6 +2008,8 @@ document.getElementById('inventoryClose').addEventListener('click',e=>{
   closeInventoryScreen();
   e.stopPropagation();
 });
+const useBtn=document.getElementById('useButton');
+if(useBtn)useBtn.addEventListener('pointerdown',e=>{useSurvivalItem();e.preventDefault()});
 const buildBtn=document.getElementById('buildButton');
 if(buildBtn)buildBtn.addEventListener('pointerdown',e=>{toggleBuildMode();e.preventDefault()});
 document.getElementById('craftButton').addEventListener('pointerdown',e=>{toggleCraftPanel();e.preventDefault()});
@@ -2113,6 +2119,7 @@ addEventListener('keydown',e=>{
     createFloatingText(player.x,player.y-1,creativeMode?'✦ Creative Mode ON':'Creative Mode OFF',creativeMode?'#ffd76a':'#aaa');
   }
   if((e.key==='b'||e.key==='B')&&!e.repeat)toggleBuildMode();
+  if((e.key==='f'||e.key==='F')&&!e.repeat)useSurvivalItem();
   if(e.key==='Escape'&&player.placingRecipeId)exitBuildMode();
 });
 
@@ -2651,7 +2658,85 @@ canvas.addEventListener('pointerdown',e=>{
 
 function cullFarEntities(){let count=0;for(const e of entities)if(e.type==='pebble'||e.type==='tree'||e.type==='bush'||e.type==='stick'||e.type==='flint'||e.type==='charcoal')count++;const limit=MAX_BIG_PEBBLES+MAX_BUSHES+MAX_STICKS+MAX_FLINT+MAX_CHARCOAL;if(count<=limit)return;const arr=[];for(let i=0;i<entities.length;i++){const e=entities[i];if(!['bigPebble','tree','bush','stick','flint','charcoal'].includes(e.type))continue;const dx=e.x-player.x,dy=e.y-player.y;arr.push({i,d:dx*dx+dy*dy,e})}arr.sort((a,b)=>b.d-a.d);const remove=new Set();for(let i=0;i<Math.max(0,arr.length-limit);i++){const x=arr[i];remove.add(x.i);const k=`${x.e.tileX},${x.e.tileY}`;if(x.e.type==='pebble')pebbleCache.delete(k);else if(x.e.type==='tree')treeEntityCache.delete(k);else if(x.e.type==='bush')bushEntityCache.delete(k);else if(x.e.type==='stick')stickEntityCache.delete(k);else if(x.e.type==='flint')flintEntityCache.delete(k);else if(x.e.type==='charcoal')charcoalEntityCache.delete(k)}for(let i=entities.length-1;i>=0;i--)if(remove.has(i))entities.splice(i,1)}
 
-function update(dt){const dtMs=dt*16.6667;updateDayClock(dtMs);updateParticles(dtMs);
+
+// ---- Survival stats: HP, hunger, thirst, energy, bleeding ----
+player.hunger=100;player.thirst=100;player.energy=100;player.bleeding=false;player.tired=false;
+const vitalsStyle=document.createElement('style');
+vitalsStyle.textContent='#vitals{position:fixed;left:50%;transform:translateX(-50%);bottom:76px;display:flex;gap:8px;z-index:11;pointer-events:none;font:7px/1 "Press Start 2P",monospace;color:#fff;text-shadow:1px 1px #000}@media (pointer:coarse),(max-width:700px){#vitals{bottom:auto;top:max(12px,env(safe-area-inset-top));gap:5px}}';
+document.head.appendChild(vitalsStyle);
+const vitals=document.createElement('div');vitals.id='vitals';document.body.appendChild(vitals);
+let vitalsSig='';
+function renderVitals(){
+  const v=[['HP',player.hp,'#e04545'],['FOOD',player.hunger,'#d9923a'],['H2O',player.thirst,'#4aa8e8'],['NRG',player.energy,'#e8d44a']];
+  const sig=v.map(x=>Math.round(x[1])).join(',')+(player.bleeding?'b':'');
+  if(sig===vitalsSig)return;vitalsSig=sig;
+  vitals.innerHTML=v.map(x=>'<div style="width:56px"><div style="margin-bottom:3px">'+x[0]+'</div><div style="height:7px;background:rgba(0,0,0,.65);border:1px solid #000"><div style="height:100%;width:'+Math.max(0,Math.min(100,x[1]))+'%;background:'+x[2]+'"></div></div></div>').join('')+(player.bleeding?'<div style="color:#ff5050;align-self:center">BLEEDING</div>':'');
+}
+function nearWater(){
+  const cx=Math.round(player.x),cy=Math.round(player.y);
+  for(let dx=-2;dx<=2;dx++)for(let dy=-2;dy<=2;dy++)if(vertexOnWater(cx+dx,cy+dy))return true;
+  return false;
+}
+// true if a fence post or rail sits on the straight line between two points (fences stop zombie attacks)
+function fenceBetween(x1,y1,x2,y2){
+  for(const k of [.15,.3,.45,.6,.75,.9]){
+    const px=x1+(x2-x1)*k,py=y1+(y2-y1)*k,bx=Math.floor(px),by=Math.floor(py);
+    for(let vx=bx-1;vx<=bx+1;vx++)for(let vy=by-1;vy<=by+1;vy++){
+      if(!fenceAt(vx,vy))continue;
+      if(Math.hypot(px-vx,py-vy)<.2)return true;
+      if(fenceAt(vx+1,vy)){const c=closestPointOnSegment(px,py,vx,vy,vx+1,vy);if(Math.hypot(px-c.x,py-c.y)<.14)return true}
+      if(fenceAt(vx,vy+1)){const c=closestPointOnSegment(px,py,vx,vy,vx,vy+1);if(Math.hypot(px-c.x,py-c.y)<.14)return true}
+    }
+  }
+  return false;
+}
+function zombieHitPlayer(dx,dy,d){
+  if(creativeMode||player.hp<=0)return;
+  const dmg=player.armorEquipped?5:10;
+  player.hp=Math.max(0,player.hp-dmg);
+  const n=d>.01?d:1;
+  player.x+=dx/n*.12;player.y+=dy/n*.12; // knockback away from the zombie
+  createFloatingText(player.x,player.y-1,'-'+dmg,'#ff5050');
+  addCameraShake(.15,.25);
+  if(!player.bleeding&&Math.random()<.35){player.bleeding=true;createFloatingText(player.x,player.y-1.5,'Bleeding!','#ff5050')}
+}
+function useSurvivalItem(){
+  if(player.bleeding&&totalOf('tourniquet')>0){
+    removeItem('tourniquet',1);player.bleeding=false;
+    createFloatingText(player.x,player.y-1,'Bleeding stopped','#8f8');
+  }else if(player.thirst<95&&nearWater()){
+    player.thirst=Math.min(100,player.thirst+35);
+    createFloatingText(player.x,player.y-1,'+ Water','#4aa8e8');
+  }else if(totalOf('berries')>0&&player.hunger<98){
+    removeItem('berries',1);player.hunger=Math.min(100,player.hunger+12);player.thirst=Math.min(100,player.thirst+4);
+    createFloatingText(player.x,player.y-1,'+ Food','#d9923a');
+  }else{
+    createFloatingText(player.x,player.y-1,player.bleeding?'Need a tourniquet':'Nothing to use','#ddd');
+    return;
+  }
+  renderHotbar();renderInventoryHotbar();
+}
+function updateSurvival(dt){
+  if(creativeMode){renderVitals();return}
+  if(player.spawnX===undefined){player.spawnX=player.x;player.spawnY=player.y}
+  const s=dt/60;
+  player.hunger=Math.max(0,player.hunger-s*.12);
+  player.thirst=Math.max(0,player.thirst-s*.18);
+  player.energy=Math.max(0,Math.min(100,player.energy+(player.moving?-.06:.05)*s));
+  if(player.energy<=0&&!player.tired){player.tired=true;player.speed*=.6;createFloatingText(player.x,player.y-1,'Exhausted','#e8d44a')}
+  else if(player.energy>15&&player.tired){player.tired=false;player.speed/=.6}
+  if(player.hunger<=0||player.thirst<=0)player.hp-=s*.8;
+  if(player.bleeding)player.hp-=s*1.5;
+  else if(player.hunger>60&&player.thirst>60&&player.hp<100&&player.hp>0)player.hp=Math.min(100,player.hp+s*.5);
+  if(player.hp<=0){
+    createFloatingText(player.x,player.y-1,'You died','#ff5050');
+    player.hp=100;player.hunger=100;player.thirst=100;player.energy=100;player.bleeding=false;
+    if(player.tired){player.tired=false;player.speed/=.6}
+    player.x=player.spawnX;player.y=player.spawnY;
+  }
+  renderVitals();
+}
+function update(dt){const dtMs=dt*16.6667;updateSurvival(dt);updateDayClock(dtMs);updateParticles(dtMs);
 if(weatherTimerMs>0){weatherTimerMs=Math.max(0,weatherTimerMs-dtMs);if(weatherTimerMs<=0)weatherState='clear';}
 if(adminGameRules.doWeatherCycle && weatherTimerMs<=0){
   if(Math.random()<dtMs/90000){weatherState=weatherState==='rain'?'clear':'rain';if(weatherState==='rain')adminRainSeed=Math.random()*100000;}
@@ -2703,6 +2788,7 @@ for(const e of entities)if(e.type==='zombie'){
   }
   e.x+=e.vx;e.y+=e.vy;
   resolveFenceCollision(e,.28,.5,.81);
+  if(d<.85&&!fleeing&&e.hp>0&&!fenceBetween(e.x+.5,e.y+.81,player.x+.5,player.y+.84)){e.atkCd=(e.atkCd===undefined?30:e.atkCd)-dt;if(e.atkCd<=0){e.atkCd=70;zombieHitPlayer(dx,dy,d)}}else e.atkCd=undefined;
   if(e.vx||e.vy)e.animPhase=(e.animPhase+dt*.04)%1;else e.animPhase=0;
   if(e.hitFlash)e.hitFlash=Math.max(0,e.hitFlash-dt/24);
   if(daySun>.12){
