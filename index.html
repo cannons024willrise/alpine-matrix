@@ -20,6 +20,7 @@ canvas{display:block;image-rendering:pixelated}
 #actionButton{position:absolute;right:max(22px,env(safe-area-inset-right));bottom:max(28px,env(safe-area-inset-bottom));width:82px;height:82px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(0,70,0,.38);color:#d8ffe0;font:700 15px monospace;pointer-events:auto;touch-action:none}
 #attackButton{position:absolute;right:max(118px,calc(env(safe-area-inset-right) + 96px));bottom:max(28px,env(safe-area-inset-bottom));width:82px;height:82px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(90,20,20,.52);color:#ffe0e0;font:700 13px monospace;pointer-events:auto;touch-action:none}
 #buildButton{position:absolute;right:max(110px,calc(env(safe-area-inset-right) + 88px));bottom:max(208px,calc(env(safe-area-inset-bottom) + 162px));width:62px;height:62px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(0,100,0,.45);color:#a8ffa8;font:700 10px monospace;pointer-events:auto;touch-action:none}
+#crouchButton{position:absolute;left:max(150px,calc(env(safe-area-inset-left) + 132px));bottom:max(40px,env(safe-area-inset-bottom));width:62px;height:62px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(60,60,60,.5);color:#eee;font:700 9px monospace;pointer-events:auto;touch-action:none}
 #useButton{position:absolute;right:max(30px,env(safe-area-inset-right));bottom:max(196px,calc(env(safe-area-inset-bottom) + 170px));width:62px;height:62px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(120,30,30,.5);color:#ffd0d0;font:700 11px monospace;pointer-events:auto;touch-action:none}
 #craftButton{position:absolute;right:max(30px,env(safe-area-inset-right));bottom:max(122px,calc(env(safe-area-inset-bottom) + 94px));width:62px;height:62px;border:2px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(70,55,0,.45);color:#ffe9a8;font:700 11px monospace;pointer-events:auto;touch-action:none}
 #craftHint{position:fixed;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));font-size:11px;color:#0f0;background:rgba(0,0,0,.6);border:1px solid #0f0;border-radius:4px;padding:6px 10px;z-index:10;text-shadow:1px 1px #000;pointer-events:auto}
@@ -143,6 +144,12 @@ canvas{filter:saturate(1.08) contrast(1.04)}
 
 
 /* ---- Create World start screen ---- */
+#deathScreen{display:none;position:fixed;inset:0;z-index:250;flex-direction:column;align-items:center;justify-content:center;text-align:center;font-family:monospace;background:radial-gradient(ellipse at center,rgba(110,0,0,.55) 0%,rgba(0,0,0,.94) 75%)}
+#deathScreen.open{display:flex;animation:deathFade 1.2s ease-out}
+@keyframes deathFade{from{opacity:0}to{opacity:1}}
+.death-title{font:700 36px 'Press Start 2P',monospace;color:#b00000;text-shadow:3px 3px 0 #000,-1px -1px 0 #500;letter-spacing:2px}
+.death-sub{font:10px/1.8 'Press Start 2P',monospace;color:#ccc;margin:18px 0 26px}
+.death-btn{width:auto;padding:12px 18px}
 #createWorldScreen{display:none;position:fixed;inset:0;z-index:200;align-items:center;justify-content:center;padding:16px;font-family:monospace;background:radial-gradient(ellipse at 50% 30%,#1c3a22 0%,#0c1810 60%,#060b07 100%)}
 #createWorldScreen.open{display:flex}
 #createWorldInner{width:min(420px,94vw);color:#222}
@@ -165,7 +172,7 @@ canvas{filter:saturate(1.08) contrast(1.04)}
 <div id="hud"></div>
 <button id="hudToggle" type="button">◆</button>
 <div id="creativeIndicator">✦ CREATIVE MODE</div>
-<div id="craftHint">[C] Inventory | [Click/Right-Click] Full/Half Stack | [Drag] Move Item | [Shift+Click] Container | [`] Creative | [1-7] Slots | [B] Build | [F] Eat/Drink/Heal</div>
+<div id="craftHint">[C] Inventory | [Click/Right-Click] Full/Half Stack | [Drag] Move Item | [Shift+Click] Container | [`] Creative | [1-7] Slots | [B] Build | [F] Use item (tourniquet/water/berries)</div>
 <div id="hotbar"></div>
 <div id="cursorItemDisplay"></div>
 
@@ -189,7 +196,7 @@ canvas{filter:saturate(1.08) contrast(1.04)}
     <div class="mc-titlebar" id="inventoryTitle">CRAFTING & INVENTORY</div>
     <div class="inv-view">
       <div class="inv-player-card">
-        <div class="inv-model">🧍</div>
+        <div class="inv-model"><svg width="30" height="38" viewBox="0 0 24 30"><circle cx="12" cy="6" r="5" fill="#c8a88a" stroke="#000" stroke-width="1"/><rect x="5" y="12" width="14" height="16" rx="3" fill="#3a6fb0" stroke="#000" stroke-width="1"/></svg></div>
         <div class="inv-status">
           <strong>SURVIVOR</strong><br>
           <span id="armorLabel">Armor: None</span><br>
@@ -209,7 +216,8 @@ canvas{filter:saturate(1.08) contrast(1.04)}
     </div>
   </div>
 </div>
-<div id="mobileControls"><div id="joystick"><div id="joystickKnob"></div></div><button id="buildButton" type="button">BUILD</button><button id="useButton" type="button">USE</button><button id="craftButton" type="button">CRAFT</button><button id="attackButton" type="button">ATTACK</button><button id="actionButton" type="button">ACT</button></div>
+<div id="deathScreen"><div class="death-title">YOU DIED!</div><div class="death-sub" id="deathSub"></div><button id="respawnBtn" class="mc-btn death-btn" type="button">RESPAWN</button></div>
+<div id="mobileControls"><div id="joystick"><div id="joystickKnob"></div></div><button id="buildButton" type="button">BUILD</button><button id="useButton" type="button">USE</button><button id="crouchButton" type="button">CROUCH</button><button id="craftButton" type="button">CRAFT</button><button id="attackButton" type="button">ATTACK</button><button id="actionButton" type="button">ACT</button></div>
 
 <div id="createWorldScreen">
   <div id="createWorldInner" class="mc-panel">
@@ -329,7 +337,7 @@ let cameraShake={intensity:0,duration:0};
 function addCameraShake(intensity,duration){cameraShake.intensity=Math.max(cameraShake.intensity,intensity);cameraShake.duration=Math.max(cameraShake.duration,duration)}
 
 // ==== Day/Night ambient lighting ====
-let DAY_LENGTH_MS=10*60*1000;
+let DAY_LENGTH_MS=20*60*1000;
 let dayClock=0.30;
 const DAY_STOPS=[
  {t:0.00,amb:'#151a3d',warm:0.00,dark:0.68},
@@ -342,7 +350,7 @@ const DAY_STOPS=[
  {t:0.84,amb:'#232a5c',warm:0.08,dark:0.58},
  {t:1.00,amb:'#151a3d',warm:0.00,dark:0.68}
 ];
-function sampleDayColor(t){
+function sampleDayColorBase(t){
   for(let i=0;i<DAY_STOPS.length-1;i++){
     const a=DAY_STOPS[i],b=DAY_STOPS[i+1];
     if(t>=a.t&&t<=b.t){
@@ -352,6 +360,15 @@ function sampleDayColor(t){
   }
   return{amb:DAY_STOPS[0].amb,warm:DAY_STOPS[0].warm,dark:DAY_STOPS[0].dark};
 }
+function colorToRgb(c){if(c[0]==='#')return[parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)];return c.match(/\d+/g).slice(0,3).map(Number)}
+// Alpine weather: each state darkens the light, cools the ambient colour, and cuts warm sunlight.
+function sampleDayColor(t){
+  const c=sampleDayColorBase(warpClock(t));
+  const w=weatherLive;
+  const base=colorToRgb(c.amb),tint=colorToRgb(w.tint),k=w.tintAmt;
+  const m=base.map((v,i)=>Math.round(v+(tint[i]-v)*k));
+  return{amb:`rgb(${m[0]},${m[1]},${m[2]})`,warm:c.warm*w.warm,dark:Math.min(.94,c.dark+w.dark)};
+}
 const adminGameRules={
   doDaylightCycle:true,
   doWeatherCycle:true,
@@ -359,17 +376,106 @@ const adminGameRules={
   keepInventory:false
 };
 let weatherState='clear';
+const WEATHER={
+  clear:{dark:0,warm:1,tint:'#000000',tintAmt:0,fog:0},
+  rain:{dark:.2,warm:.55,tint:'#56697a',tintAmt:.35,fog:.06},
+  storm:{dark:.4,warm:.2,tint:'#2c3642',tintAmt:.55,fog:.14},
+  snow:{dark:.1,warm:.6,tint:'#cfdbe6',tintAmt:.45,fog:.22},
+  fog:{dark:.22,warm:.35,tint:'#a3adb4',tintAmt:.6,fog:.42}
+};
+let weatherLive={dark:0,warm:1,tint:'#000000',tintAmt:0,fog:0};
+let lightningFlash=0;
+// Weighted odds per season. Summer is mostly clear, monsoon is wet and stormy, winter is snowy.
+const SEASON_WEATHER={
+  summer:{clear:75,rain:15,storm:5,fog:5,snow:0},
+  monsoon:{rain:45,storm:35,clear:15,fog:5,snow:0},
+  winter:{snow:60,fog:15,clear:15,storm:5,rain:5}
+};
+// How long each weather lasts, in real minutes.
+const WEATHER_MINUTES={clear:[5,10],fog:[2,4],rain:[2,5],storm:[1,3],snow:[3,6]};
+function rollWeather(){
+  const odds=Object.entries(SEASON_WEATHER[currentSeason()]).map(([k,w])=>{
+    const u=dayClock;
+    const dawn=u>=.2&&u<.3, night=u>=.84||u<.2;
+    if(k==='fog'&&dawn)w*=3;     // valley fog in the early morning
+    if(k==='snow'&&night)w*=2;   // snow more likely after dark
+    return[k,w];
+  });
+  const total=odds.reduce((a,o)=>a+o[1],0);
+  let r=Math.random()*total,pick=odds[0][0];
+  for(const[k,w]of odds){if(r<w){pick=k;break}r-=w}
+  weatherState=pick;
+  const[lo,hi]=WEATHER_MINUTES[pick];
+  weatherTimerMs=(lo+Math.random()*(hi-lo))*60000;
+  adminRainSeed=Math.random()*100000;
+}
 let weatherTimerMs=0;
 let adminMobSpawnTimerMs=0;
-let adminRainSeed=Math.random()*100000;
-
-function updateDayClock(dtMs){
-  if(adminGameRules.doDaylightCycle){
-    dayClock=(dayClock+dtMs/DAY_LENGTH_MS)%1;
+let zombieSpawnMs=0;
+const ZOMBIE_CAP=22,ZOMBIE_CAP_NIGHT=45;
+// Spawns just beyond the edge of the screen, so zombies appear from out of view and come hunting.
+function spawnHuntingZombies(n,room){
+  const halfDiag=Math.hypot(W,H)/TILE/2;
+  for(let i=0;i<Math.min(n,room);i++){
+    for(let tries=0;tries<6;tries++){
+      const a=Math.random()*Math.PI*2,d=halfDiag+2+Math.random()*6;
+      const x=player.x+Math.cos(a)*d,y=player.y+Math.sin(a)*d;
+      if(getWater(Math.floor(x),Math.floor(y)).river)continue;
+      createEntity('zombie',x,y,{});
+      break;
+    }
   }
 }
+function survivorDay(){return worldDay-(player.lifeStartDay||0)+1}
+function showDeathScreen(){
+  player.dead=true;player.hp=0;player.target=null;player.sleeping=false;
+  for(const k in keys)keys[k]=false;
+  const days=survivorDay();
+  document.getElementById('deathSub').textContent=`SURVIVED ${days} DAY${days===1?'':'S'} • ${currentSeason().toUpperCase()}`;
+  document.getElementById('deathScreen').classList.add('open');
+}
+function respawnPlayer(){
+  player.dead=false;
+  player.hp=100;player.hunger=100;player.thirst=100;player.energy=100;player.maxEnergy=100;
+  player.bleeding=false;player.scratchS=0;player.tired=false;player.sleeping=false;player.speed=.15;
+  player.lifeStartDay=worldDay;player.lastDaySlept=worldDay;
+  player.x=player.spawnX;player.y=player.spawnY;player.target=null;
+  document.getElementById('deathScreen').classList.remove('open');
+  createFloatingText(player.x,player.y-1,'New life','#ddd');
+}
+document.getElementById('respawnBtn').addEventListener('click',respawnPlayer);
+let adminRainSeed=Math.random()*100000;
+
+let worldDay=0;
+const SEASON_DAYS=20;
+const SEASONS=['summer','monsoon','winter'];
+// Share of each day spent in darkness, by season. Summer days are long, winter nights are long.
+const SEASON_NIGHT_FRAC={summer:.26,monsoon:.36,winter:.5};
+function currentSeason(){return SEASONS[Math.floor(worldDay/SEASON_DAYS)%SEASONS.length]}
+function seasonDayInfo(){return(worldDay%SEASON_DAYS)+1}
+function updateDayClock(dtMs){
+  if(adminGameRules.doDaylightCycle){
+    const prev=dayClock;
+    dayClock=(dayClock+dtMs/DAY_LENGTH_MS)%1;
+    if(dayClock<prev)worldDay++;
+  }
+}
+// Maps the real clock onto the base day curve, stretching or squeezing the night for the season.
+// Real clock 0 = dawn (base 0.20), dusk starts at base 0.84, and the night runs to base 1.20.
+function warpClock(u){
+  const nf=SEASON_NIGHT_FRAC[currentSeason()],dayPart=1-nf;
+  const t=u<dayPart?0.20+(u/dayPart)*0.64:0.84+((u-dayPart)/nf)*0.36;
+  return t%1;
+}
+// Monsoon fog is almost constant; winter has a light frost haze at night.
+function seasonHaze(){
+  const sn=currentSeason();
+  if(sn==='monsoon')return .12;
+  if(sn==='winter')return warpClock(dayClock)>=0.84||warpClock(dayClock)<0.2?.04:0;
+  return 0;
+}
 function sunAngleFactor(){const c=sampleDayColor(dayClock);return Math.max(0,1-c.dark/0.68)}
-function dayPhaseLabel(){const t=dayClock;if(t<0.20||t>=0.84)return'🌙 Night';if(t<0.30)return'🌅 Dawn';if(t<0.68)return'☀ Day';return'🌇 Dusk'}
+function dayPhaseLabel(){const t=warpClock(dayClock);if(t<0.20||t>=0.84)return'NIGHT';if(t<0.30)return'DAWN';if(t<0.68)return'DAY';return'DUSK'}
 
 // ==== Lightweight particle system (smoke, embers, dust, sparks, drifting leaves) ====
 const particles=[];
@@ -387,6 +493,16 @@ function updateParticles(dtMs){
 }
 function spawnSmoke(x,y){spawnParticle({kind:'smoke',x,y,vx:(Math.random()-.5)*.08,vy:-.32-Math.random()*.14,life:2+Math.random()*1,size:.11+Math.random()*.07,drag:.985})}
 function spawnEmber(x,y){spawnParticle({kind:'ember',x,y,vx:(Math.random()-.5)*.2,vy:-.5-Math.random()*.4,life:.55+Math.random()*.45,drag:.96,gravity:.15})}
+// Minecraft-style underwater bubble: a small translucent sphere that drifts up and wobbles.
+// Hit burst: blood spatter plus a red ring at the point of impact
+function spawnHitBurst(x,y,n=7){
+  for(let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2,sp=.8+Math.random()*1.2;
+    spawnParticle({kind:'gore',x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-.4,life:.35+Math.random()*.25,r:1.5+Math.random()*1.5,drag:.9,gravity:2.5});
+  }
+  spawnParticle({kind:'ring',x,y,vx:0,vy:0,life:.3,r:14,color:'rgba(255,60,60,.9)'});
+}
+function spawnBubble(x,y){spawnParticle({kind:'bubble',x,y,vx:0,vy:-(.42+Math.random()*.22),life:1.3+Math.random()*.9,r:2.2+Math.random()*1.6,phase:Math.random()*Math.PI*2})}
 function spawnDust(x,y,n=3){for(let i=0;i<n;i++)spawnParticle({kind:'dust',x:x+(Math.random()-.5)*.2,y:y+(Math.random()-.5)*.1,vx:(Math.random()-.5)*.15,vy:-.05-Math.random()*.08,life:.35+Math.random()*.25,drag:.9,gravity:.05})}
 function spawnHitSpark(x,y,angle,color){for(let i=0;i<6;i++){const a=angle+(Math.random()-.5)*1.6,sp=.5+Math.random()*.9;spawnParticle({kind:'spark',x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:.16+Math.random()*.12,drag:.88,color:color||'#ffe08a'})}}
 function spawnLeafDrift(x,y){spawnParticle({kind:'leaf',x,y,vx:.05+Math.random()*.06,vy:.02+Math.random()*.03,life:6+Math.random()*4})}
@@ -395,6 +511,27 @@ function renderParticlesPass(cx,cy,cols,rows){
   for(const p of particles){
     const t=p.age/p.life,fadeIn=t<.15?t/.15:1,fadeOut=1-Math.max(0,(t-.7)/.3);
     const sx=(p.x-cx+cols/2)*TILE,sy=(p.y-cy+rows/2)*TILE;
+    if(p.kind==='gore'){
+      ctx.save();ctx.globalAlpha=Math.max(0,1-t);ctx.fillStyle='#a31414';
+      ctx.beginPath();ctx.arc(sx,sy,p.r,0,Math.PI*2);ctx.fill();ctx.restore();
+      continue;
+    }
+    if(p.kind==='ring'){
+      ctx.save();ctx.globalAlpha=Math.max(0,1-t)*.8;ctx.strokeStyle=p.color;ctx.lineWidth=2*(1-t)+.5;
+      ctx.beginPath();ctx.arc(sx,sy,p.r*(.4+t),0,Math.PI*2);ctx.stroke();ctx.restore();
+      continue;
+    }
+    if(p.kind==='bubble'){
+      const wob=Math.sin(p.age*5+p.phase)*1.1,bx=sx+wob,a=Math.min(1,fadeIn)*Math.max(0,1-Math.max(0,(t-.6)/.4));
+      ctx.save();
+      ctx.beginPath();ctx.arc(bx,sy,p.r,0,Math.PI*2);
+      ctx.fillStyle='rgba(170,215,245,'+(.22*a).toFixed(3)+')';ctx.fill();
+      ctx.strokeStyle='rgba(235,250,255,'+(.8*a).toFixed(3)+')';ctx.lineWidth=.9;ctx.stroke();
+      ctx.fillStyle='rgba(255,255,255,'+(.9*a).toFixed(3)+')';
+      ctx.beginPath();ctx.arc(bx-p.r*.35,sy-p.r*.35,p.r*.28,0,Math.PI*2);ctx.fill();
+      ctx.restore();
+      continue;
+    }
     ctx.save();
     if(p.kind==='smoke'){
       ctx.globalAlpha=Math.max(0,Math.min(fadeIn,fadeOut))*.3;
@@ -566,7 +703,7 @@ function buildZombieSVG(phase,moving){
 }
 const ZOMBIE_FRAME_COUNT=8,zombieFrames=[];for(let i=0;i<ZOMBIE_FRAME_COUNT;i++){const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildZombieSVG(i/ZOMBIE_FRAME_COUNT,true));zombieFrames.push(img)}const zombieIdleFrame=new Image();zombieIdleFrame.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildZombieSVG(0,false));function currentZombieSprite(e){if(!e.vx&&!e.vy)return zombieIdleFrame;return zombieFrames[Math.floor(e.animPhase*ZOMBIE_FRAME_COUNT)%ZOMBIE_FRAME_COUNT]}
 
-const player={x:0,y:0,vx:0,vy:0,hp:100,speed:.15,radius:.2,facingAngle:Math.PI/2,animPhase:0,moving:false,inventory:{stalkFiber:0,thickStick:0,flint:0,bigPebble:0,charcoal:0,cordage:0,basket:0,knappedFlint:0,carvedShaft:0,shaft:0,flintKnife:0,stoneAxe:0,spear:0,armor:0,campfire:0},armorEquipped:false,campfires:[],selectedCampfire:0,placingRecipeId:null,lastBuildId:null,target:null};
+const player={x:0,y:0,vx:0,vy:0,hp:100,speed:.15,radius:.2,inWater:false,facingAngle:Math.PI/2,animPhase:0,moving:false,inventory:{stalkFiber:0,thickStick:0,flint:0,bigPebble:0,charcoal:0,cordage:0,basket:0,knappedFlint:0,carvedShaft:0,shaft:0,flintKnife:0,stoneAxe:0,spear:0,armor:0,campfire:0},armorEquipped:false,campfires:[],selectedCampfire:0,placingRecipeId:null,lastBuildId:null,target:null};
 
 // ---- Containers (crates / furnace fuel), creative mode, and the cursor-held item ----
 const CRATE_SLOT_COUNT=20;
@@ -597,7 +734,7 @@ function rebuildPlayerSprites(){
 }
 const PLAYER_FRAME_COUNT=8,playerFrames=[];for(let i=0;i<PLAYER_FRAME_COUNT;i++){const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildPlayerSVG(i/PLAYER_FRAME_COUNT,true));playerFrames.push(img)}const playerIdleFrame=new Image();playerIdleFrame.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildPlayerSVG(0,false));function currentPlayerSprite(){if(!player.moving)return playerIdleFrame;return playerFrames[Math.floor(player.animPhase*PLAYER_FRAME_COUNT)%PLAYER_FRAME_COUNT]}
 
-const keys={};addEventListener('keydown',e=>{if(!gameStarted)return;keys[e.key]=true;if(!e.repeat&&(e.key==='f'||e.key==='F'||e.key===' ')){attack();e.preventDefault()}});addEventListener('keyup',e=>{keys[e.key]=false});
+const keys={};addEventListener('keydown',e=>{if(!gameStarted)return;keys[e.key]=true;if(!e.repeat&&e.key===' '){attack();e.preventDefault()}});addEventListener('keyup',e=>{keys[e.key]=false});
 function screenToWorld(x,y){const r=canvas.getBoundingClientRect();const sx=x-r.left,sy=y-r.top;return{x:sx/TILE+(player.x-viewportCols/2),y:sy/TILE+(player.y-viewportRows/2)}}
 // Build Mode pointer plumbing. The live pointer position drives the placement ghost (mouse
 // only - touch has no hover); the wheel cycles the piece you're holding; right-click leaves.
@@ -819,7 +956,7 @@ function hitEntityAtScreen(clientX,clientY){
   let best=null,bestScore=Infinity,bestPriority=-1;
 
   for(const ent of entities){
-    if(ent.type!=='bigPebble'&&ent.type!=='tree'&&ent.type!=='bush'&&ent.type!=='stick'&&ent.type!=='flint'&&ent.type!=='charcoal')continue;
+    if(ent.type!=='bigPebble'&&ent.type!=='tree'&&ent.type!=='bush'&&ent.type!=='stick'&&ent.type!=='flint'&&ent.type!=='charcoal'&&ent.type!=='dropped')continue;
     if((ent.type==='flint'||ent.type==='bigPebble'||ent.type==='stick'||ent.type==='charcoal')&&ent.collected)continue;
 
     const p=screenPointForEntity(ent);
@@ -834,7 +971,7 @@ function hitEntityAtScreen(clientX,clientY){
       distance=Math.hypot(x-p.x,y-p.y);
     }
 
-    const radius=ent.type==='stick'?46:ent.type==='bigPebble'?34:ent.type==='flint'?34:ent.type==='charcoal'?32:ent.type==='tree'?88:ent.type==='bush'?40:30;
+    const radius=ent.type==='stick'?22:ent.type==='bigPebble'?20:ent.type==='flint'?20:ent.type==='charcoal'?20:ent.type==='tree'?42:ent.type==='bush'?22:16;
     if(distance>radius)continue;
 
     const priority=ent.type==='stick'?3:ent.type==='bigPebble'?2.8:ent.type==='flint'?2.5:ent.type==='charcoal'?2.5:ent.type==='tree'?2.2:ent.type==='bush'?2:0;
@@ -1030,7 +1167,7 @@ function exitBuildMode(){
   player.placingRecipeId=null;buildStroke=null;
   renderBuildBar();
 }
-function toggleBuildMode(){
+function toggleBuildMode(){if(player.dead)return;
   if(player.placingRecipeId){exitBuildMode();return}
   const list=carriedBuildables();
   if(!list.length){createFloatingText(player.x,player.y-1,'Nothing to build - craft a buildable first','#ffd76a');return}
@@ -1611,7 +1748,7 @@ function runAdminCommand(raw){
   if(command==='help'||command==='?'){
     adminLog('/help — show commands');
     adminLog('/time set <day|noon|sunrise|sunset|night|0-24000> | /time query');
-    adminLog('/weather <clear|rain> [seconds]');
+    adminLog('/weather <clear|rain|storm|snow|fog|auto> [seconds]');
     adminLog('/gamerule <doDaylightCycle|doWeatherCycle|doMobSpawning|keepInventory> <true|false>');
     adminLog('/gamemode <survival|creative>');
     adminLog('/give <item> [amount] | /clear [item]');
@@ -1641,18 +1778,19 @@ function runAdminCommand(raw){
 
   if(command==='weather'){
     const value=(args[0]||'clear').toLowerCase();
+    if(value==='auto'){weatherTimerMs=0;adminLog('Weather back on the season schedule.','ok');return}
     if(value==='clear'){
-      weatherState='clear';weatherTimerMs=0;adminLog('Weather cleared.','ok');return;
+      weatherState='clear';weatherTimerMs=Infinity;adminLog('Weather cleared.','ok');return;
     }
-    if(value==='rain'){
-      weatherState='rain';
+    if(['rain','storm','snow','fog'].includes(value)){
+      weatherState=value;
       const seconds=Math.max(0,Number(args[1])||0);
-      weatherTimerMs=seconds>0?seconds*1000:0;
+      weatherTimerMs=seconds>0?seconds*1000:Infinity;
       adminRainSeed=Math.random()*100000;
-      adminLog(seconds>0?`Rain started for ${seconds}s.`:'Rain started.','ok');
+      adminLog(seconds>0?`${value} started for ${seconds}s.`:`${value} started.`,'ok');
       return;
     }
-    adminLog('Usage: /weather <clear|rain> [seconds]','err');
+    adminLog('Usage: /weather <clear|rain|storm|snow|fog|auto> [seconds]','err');
     return;
   }
 
@@ -2008,8 +2146,10 @@ document.getElementById('inventoryClose').addEventListener('click',e=>{
   closeInventoryScreen();
   e.stopPropagation();
 });
+const crBtn=document.getElementById('crouchButton');
+if(crBtn)crBtn.addEventListener('pointerdown',e=>{crouchToggle=!crouchToggle;crBtn.style.background=crouchToggle?'rgba(170,150,40,.6)':'rgba(60,60,60,.5)';e.preventDefault()});
 const useBtn=document.getElementById('useButton');
-if(useBtn)useBtn.addEventListener('pointerdown',e=>{useSurvivalItem();e.preventDefault()});
+if(useBtn)useBtn.addEventListener('pointerdown',e=>{const tent=entities.find(e=>e.type==='tent'&&Math.hypot(e.x-player.x,e.y-player.y)<0.9);if(tent)sleepInTent();else useSurvivalItem();e.preventDefault()});
 const buildBtn=document.getElementById('buildButton');
 if(buildBtn)buildBtn.addEventListener('pointerdown',e=>{toggleBuildMode();e.preventDefault()});
 document.getElementById('craftButton').addEventListener('pointerdown',e=>{toggleCraftPanel();e.preventDefault()});
@@ -2119,7 +2259,8 @@ addEventListener('keydown',e=>{
     createFloatingText(player.x,player.y-1,creativeMode?'✦ Creative Mode ON':'Creative Mode OFF',creativeMode?'#ffd76a':'#aaa');
   }
   if((e.key==='b'||e.key==='B')&&!e.repeat)toggleBuildMode();
-  if((e.key==='f'||e.key==='F')&&!e.repeat)useSurvivalItem();
+  if((e.key==='q'||e.key==='Q')&&!e.repeat)dropFromHand(e.ctrlKey);
+  if((e.key==='f'||e.key==='F')&&!e.repeat){const tent=entities.find(e=>e.type==='tent'&&Math.hypot(e.x-player.x,e.y-player.y)<0.9);if(tent)sleepInTent();else useSurvivalItem();}
   if(e.key==='Escape'&&player.placingRecipeId)exitBuildMode();
 });
 
@@ -2369,16 +2510,45 @@ addEventListener('pointermove',e=>{
   cursorItemDisplay.style.top=(e.clientY-20)+'px';
 });
 
-const COLLECTION_RANGE=2.5;
+const COLLECTION_RANGE=1.2;
+let crouchToggle=false;
+// Line of sight: a straight segment is blocked if it passes through any blocker's radius.
+function losClear(x1,y1,x2,y2,blockers){
+  const steps=Math.max(2,Math.ceil(Math.hypot(x2-x1,y2-y1)/.25));
+  for(const b of blockers)for(let i=1;i<steps;i++){
+    const t=i/steps;
+    if(Math.hypot(x1+(x2-x1)*t-b.x,y1+(y2-y1)*t-b.y)<b.r)return false;
+  }
+  return true;
+}
 const ZOMBIE_FIRE_AVOID_RADIUS=4.5; // a lit campfire keeps zombies out to roughly this far
 const ZOMBIE_DAY_SLOW=.5; // fraction of speed lost at peak daylight
 const ZOMBIE_BURN_RATE=4; // HP/sec lost at peak daylight (scales with sun height squared)
 let attackCooldown=0;
+// Drop from the selected hand slot onto the ground in front of you. Ctrl+Q drops the whole stack.
+function dropFromHand(all){if(player.dead)return;
+  const slot=handSlots[selectedHandSlot];
+  if(!slot||!slot.id||slot.count<=0)return;
+  const n=all?slot.count:1;
+  slot.count-=n;
+  if(slot.count<=0)handSlots[selectedHandSlot]=null;
+  const a=player.facingAngle||0;
+  createEntity('dropped',player.x+Math.cos(a)*.6,player.y+Math.sin(a)*.6,{item:slot.id,count:n});
+  createFloatingText(player.x,player.y-1,'Dropped '+n+' '+(ITEM_NAMES[slot.id]||slot.id),'#ddd');
+  renderHotbar();renderInventoryHotbar();
+}
+// Picks a dropped stack back up, but only when you click it from within reach.
+function pickUpDropped(t){if(player.dead)return;
+  if(!addItem(t.item,t.count)){createFloatingText(t.x,t.y-0.5,'Carry slots full','#f66');return}
+  const i=entities.indexOf(t);if(i!==-1)entities.splice(i,1);
+  if(player.target===t)player.target=null;
+  createFloatingText(t.x,t.y-0.5,'+'+t.count+' '+(ITEM_NAMES[t.item]||t.item),'#8f8');
+}
 function getSelectedHandItem(){
   const s=handSlots[selectedHandSlot];
   return s?s.id:'';
 }
-function attack(){
+function attack(){if(player.dead)return;
   if(attackCooldown>0)return false;
   const weapon=getSelectedHandItem();
   const attackable=new Set(['spear','stoneAxe','flintKnife','shaft','knappedFlint']);
@@ -2403,7 +2573,7 @@ function attack(){
     return false;
   }
   best.hp-=damage;
-  best.hitFlash=.12;
+  best.hitFlash=.12;spawnHitBurst(best.x,best.y-.5);
   best.clicked=true;
   setTimeout(()=>best.clicked=false,120);
   addCameraShake(.12,.18);
@@ -2421,29 +2591,17 @@ function attack(){
   attackCooldown=.22;
   return true;
 }
-function interactTarget(){
+function interactTarget(){if(player.dead)return;
   if(player.target){
     const t=player.target;
+    const reach=t.type==='tree'?1.8:t.type==='bush'?1.3:COLLECTION_RANGE;
+    if(Math.hypot(t.x-player.x,t.y-player.y)>reach){createFloatingText(player.x,player.y-1,'Too far','#f88');return}
+    if(t.type==='dropped'){pickUpDropped(t);return}
     if(t.type==='tree'&&!t.stickHarvested){harvestTreeForSticks(t);return}
     if(t.type==='bush'&&!t.harvested){harvestBush(t);return}
     if(t.type==='stick'&&!t.collected){if(!addItem('thickStick',1)){createFloatingText(t.x,t.y-0.5,'Carry slots full','#f66');return}t.collected=true;createFloatingText(t.x,t.y-0.5,'◆ Stick','#8f8');const stickKey=`${t.tileX},${t.tileY}`;stickEntityCache.delete(stickKey);collectedStickCache.set(stickKey,true);return}
     if(t.type==='flint'&&!t.collected){if(!addItem('flint',1)){createFloatingText(t.x,t.y-0.5,'Carry slots full','#f66');return}t.collected=true;createFloatingText(t.x,t.y-0.5,'◆ Flint','#fff');const flintKey=`${t.tileX},${t.tileY}`;flintEntityCache.delete(flintKey);collectedFlintCache.set(flintKey,true);return}
     if(t.type==='bigPebble'&&!t.collected){if(!addItem('bigPebble',1)){createFloatingText(t.x,t.y-0.5,'Carry slots full','#f66');return}t.collected=true;createFloatingText(t.x,t.y-0.5,'◆ Pebble','#ffd');const pebbleKey=`${t.tileX},${t.tileY}`;bigPebbleCache.delete(pebbleKey);collectedBigPebbleCache.set(pebbleKey,true);return}
-  }else{
-    for(const e of entities){
-      if(e.type==='bigPebble'||e.type==='flint'||e.type==='charcoal'||e.type==='stick'){
-        const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy);
-        if(d<COLLECTION_RANGE&&!e.collected){
-          player.target=e;
-          e.clicked=true;
-          setTimeout(()=>e.clicked=false,200);
-          if(e.type==='bigPebble'){if(!addItem('bigPebble',1)){createFloatingText(e.x,e.y-0.5,'Carry slots full','#f66');return}e.collected=true;createFloatingText(e.x,e.y-0.5,'◆ Pebble','#ffd');const pebbleKey=`${e.tileX},${e.tileY}`;bigPebbleCache.delete(pebbleKey);collectedBigPebbleCache.set(pebbleKey,true);return}
-          if(e.type==='flint'){if(!addItem('flint',1)){createFloatingText(e.x,e.y-0.5,'Carry slots full','#f66');return}e.collected=true;createFloatingText(e.x,e.y-0.5,'◆ Flint','#fff');const flintKey=`${e.tileX},${e.tileY}`;flintEntityCache.delete(flintKey);collectedFlintCache.set(flintKey,true);return}
-          if(e.type==='charcoal'){if(!addItem('charcoal',1)){createFloatingText(e.x,e.y-0.5,'Carry slots full','#f66');return}e.collected=true;createFloatingText(e.x,e.y-0.5,'◆ Charcoal','#d8d8d8');const charcoalKey=`${e.tileX},${e.tileY}`;charcoalEntityCache.delete(charcoalKey);collectedCharcoalCache.set(charcoalKey,true);return}
-          if(e.type==='stick'){if(!addItem('thickStick',1)){createFloatingText(e.x,e.y-0.5,'Carry slots full','#f66');return}e.collected=true;createFloatingText(e.x,e.y-0.5,'◆ Stick','#8f8');const stickKey=`${e.tileX},${e.tileY}`;stickEntityCache.delete(stickKey);collectedStickCache.set(stickKey,true);return}
-        }
-      }
-    }
   }
 }
 
@@ -2660,17 +2818,70 @@ function cullFarEntities(){let count=0;for(const e of entities)if(e.type==='pebb
 
 
 // ---- Survival stats: HP, hunger, thirst, energy, bleeding ----
-player.hunger=100;player.thirst=100;player.energy=100;player.bleeding=false;player.tired=false;
+player.hunger=100;player.thirst=100;player.energy=100;player.maxEnergy=100;player.bleeding=false;player.scratchS=0;player.tired=false;player.lastDaySlept=0;player.lifeStartDay=0;player.sleeping=false;player.sleepStarted=0;
 const vitalsStyle=document.createElement('style');
-vitalsStyle.textContent='#vitals{position:fixed;left:50%;transform:translateX(-50%);bottom:76px;display:flex;gap:8px;z-index:11;pointer-events:none;font:7px/1 "Press Start 2P",monospace;color:#fff;text-shadow:1px 1px #000}@media (pointer:coarse),(max-width:700px){#vitals{bottom:auto;top:max(12px,env(safe-area-inset-top));gap:5px}}';
+vitalsStyle.textContent='#vitals{position:fixed;left:50%;transform:translateX(-50%);bottom:76px;display:flex;flex-direction:column;align-items:center;gap:4px;z-index:11;pointer-events:none;font:7px/1 "Press Start 2P",monospace;color:#fff;text-shadow:1px 1px #000}@media (pointer:coarse),(max-width:700px){#vitals{bottom:auto;top:max(12px,env(safe-area-inset-top));gap:5px}}';
 document.head.appendChild(vitalsStyle);
 const vitals=document.createElement('div');vitals.id='vitals';document.body.appendChild(vitals);
 let vitalsSig='';
+// ---- Minecraft-style HUD: SVG icons (no emoji, which Linux often can't draw) ----
+const HUD_ICON={
+  heart:'M12 21 C12 21 3 14.5 3 8.5 C3 5.4 5.4 3 8.2 3 C9.9 3 11.2 3.9 12 5.2 C12.8 3.9 14.1 3 15.8 3 C18.6 3 21 5.4 21 8.5 C21 14.5 12 21 12 21 Z',
+  food:'M8 9 C5 9 3.5 12 5 14.5 C6.5 17 10 16 11 18 C11.5 19.5 13 20 15 19 C17 18 17 15 16 13 L18 11 L16.5 9.5 L15.5 10.5 C14 8 10 7 8 9 Z',
+  drop:'M12 2 C12 2 5 10 5 14.5 C5 18.6 8.1 22 12 22 C15.9 22 19 18.6 19 14.5 C19 10 12 2 12 2 Z',
+  bolt:'M13 2 L4 14 H11 L10 22 L20 9 H13 Z',
+  blood:'M12 3 C12 3 6 10 6 14 C6 17.3 8.7 20 12 20 C15.3 20 18 17.3 18 14 C18 10 12 3 12 3 Z',
+  slash:'M5 5 L13 19 M11 4 L19 18',
+  wave:'M2 9 Q5 6 8 9 T14 9 T20 9 T24 9 M2 15 Q5 12 8 15 T14 15 T20 15 T24 15',
+  moon:'M15 3 A9 9 0 1 0 21 15 A7 7 0 1 1 15 3 Z',
+  snow:'M12 2 V22 M3.5 7 L20.5 17 M3.5 17 L20.5 7',
+  crouch:'M12 4 A2.5 2.5 0 1 0 12.01 4 Z M7 22 L10 14 L15 14 L17 22'
+};
+const HUD_LINE_ICONS=['slash','wave','snow'];
+function hudPips(id,path,color,pips,mirror){
+  let out='';
+  for(let i=0;i<10;i++){
+    const f=Math.max(0,Math.min(1,pips-i));
+    const gid='hg_'+id+'_'+i;
+    out+=`<svg width="18" height="18" viewBox="0 0 24 24"><defs><linearGradient id="${gid}" x1="0" x2="1" y1="0" y2="0"><stop offset="${f}" stop-color="${color}"/><stop offset="${f}" stop-color="#252525"/></linearGradient></defs><path d="${path}" fill="url(#${gid})" stroke="#000" stroke-width="1.4" stroke-linejoin="round"/></svg>`;
+  }
+  return `<div style="display:flex;gap:1px;${mirror?'flex-direction:row-reverse;':''}">${out}</div>`;
+}
+function hudGroup(label,value,path,color,mirror,id){
+  const v=Math.round(value);
+  const head=`<div style="font:7px/1 'Press Start 2P',monospace;color:#eee;margin-bottom:3px;text-shadow:1px 1px #000;text-align:${mirror?'right':'left'}">${label} ${v}</div>`;
+  return `<div>${head}${hudPips(id,path,color,Math.max(0,Math.min(100,value))/10,mirror)}</div>`;
+}
+function hudBadge(icon,color,label){
+  const line=HUD_LINE_ICONS.includes(icon);
+  const shape=line?`fill="none" stroke="${color}" stroke-width="2.4" stroke-linecap="round"`:`fill="${color}" stroke="#000" stroke-width="1"`;
+  return `<div style="display:flex;align-items:center;gap:5px;background:rgba(0,0,0,.6);border:1px solid #000;box-shadow:inset 1px 1px 0 #444;padding:3px 6px"><svg width="14" height="14" viewBox="0 0 24 24"><path d="${HUD_ICON[icon]}" ${shape}/></svg><span style="font:7px/1 'Press Start 2P',monospace;color:${color};text-shadow:1px 1px #000">${label}</span></div>`;
+}
+function hudStatuses(){
+  const b=[];
+  if(player.bleeding)b.push({icon:'blood',color:'#ff5050',label:'FATAL BLEED'});
+  if(player.scratchS>0)b.push({icon:'slash',color:'#f4a0a0',label:'SCRATCH '+Math.ceil(player.scratchS)+'S'});
+  if(player.hunger<=0)b.push({icon:'food',color:'#e0a050',label:'STARVING'});
+  if(player.thirst<=0)b.push({icon:'drop',color:'#6ab8ff',label:'DEHYDRATED'});
+  if(player.tired)b.push({icon:'bolt',color:'#aaaaaa',label:'EXHAUSTED'});
+  if(player.sleeping)b.push({icon:'moon',color:'#cfe3ff',label:'SLEEPING'});
+  if(player.inWater)b.push({icon:'wave',color:'#7ac8ff',label:'WADING'});
+  if(player.crouching)b.push({icon:'crouch',color:'#dddddd',label:'CROUCHED'});
+  if(player.maxEnergy<99.5)b.push({icon:'bolt',color:'#e6c83a',label:'FATIGUE '+Math.round(player.maxEnergy)+'%'});
+  const w={rain:['drop','#7ab0e0','RAIN'],storm:['bolt','#c0d0ff','STORM'],snow:['snow','#e8f4ff','SNOW'],fog:['wave','#b8c0c6','FOG']}[weatherState];
+  if(w)b.push({icon:w[0],color:w[1],label:w[2]});
+  return b;
+}
 function renderVitals(){
-  const v=[['HP',player.hp,'#e04545'],['FOOD',player.hunger,'#d9923a'],['H2O',player.thirst,'#4aa8e8'],['NRG',player.energy,'#e8d44a']];
-  const sig=v.map(x=>Math.round(x[1])).join(',')+(player.bleeding?'b':'');
+  if(player.sleeping)vitals.style.opacity='0.5';else if(player.inWater&&vitals.style.opacity!=='0.7')vitals.style.opacity='0.7';else if(!player.inWater&&vitals.style.opacity!=='1')vitals.style.opacity='1';
+  const badges=hudStatuses();
+  const energyPct=Math.min(player.energy,player.maxEnergy)/player.maxEnergy*100;
+  const sig=[Math.round(player.hp),Math.round(player.hunger),Math.round(player.thirst),Math.round(energyPct),badges.map(x=>x.label).join('|')].join(',');
   if(sig===vitalsSig)return;vitalsSig=sig;
-  vitals.innerHTML=v.map(x=>'<div style="width:56px"><div style="margin-bottom:3px">'+x[0]+'</div><div style="height:7px;background:rgba(0,0,0,.65);border:1px solid #000"><div style="height:100%;width:'+Math.max(0,Math.min(100,x[1]))+'%;background:'+x[2]+'"></div></div></div>').join('')+(player.bleeding?'<div style="color:#ff5050;align-self:center">BLEEDING</div>':'');
+  vitals.innerHTML=
+    `<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:4px">${badges.map(x=>hudBadge(x.icon,x.color,x.label)).join('')}</div>`+
+    `<div style="display:flex;gap:30px;justify-content:center">${hudGroup('HP',player.hp,HUD_ICON.heart,'#d93a3a',false,'hp')}${hudGroup('FOOD',player.hunger,HUD_ICON.food,'#c8843a',true,'food')}</div>`+
+    `<div style="display:flex;gap:30px;justify-content:center;margin-top:4px">${hudGroup('ENERGY',energyPct,HUD_ICON.bolt,'#e6c83a',false,'nrg')}${hudGroup('WATER',player.thirst,HUD_ICON.drop,'#3a8fd9',true,'h2o')}</div>`;
 }
 function nearWater(){
   const cx=Math.round(player.x),cy=Math.round(player.y);
@@ -2694,13 +2905,22 @@ function zombieHitPlayer(dx,dy,d){
   if(creativeMode||player.hp<=0)return;
   const dmg=player.armorEquipped?5:10;
   player.hp=Math.max(0,player.hp-dmg);
+  spawnHitBurst(player.x+.5,player.y+.5);player.hitFlashT=1;
   const n=d>.01?d:1;
   player.x+=dx/n*.12;player.y+=dy/n*.12; // knockback away from the zombie
   createFloatingText(player.x,player.y-1,'-'+dmg,'#ff5050');
   addCameraShake(.15,.25);
-  if(!player.bleeding&&Math.random()<.35){player.bleeding=true;createFloatingText(player.x,player.y-1.5,'Bleeding!','#ff5050')}
+  const roll=Math.random();
+  if(roll<.12&&!player.bleeding){player.bleeding=true;createFloatingText(player.x,player.y-1.5,'Fatal bleeding!','#ff5050')}
+  else if(roll<.45){player.scratchS=Math.max(player.scratchS,40);createFloatingText(player.x,player.y-1.5,'Scratched','#ffb0b0')}
 }
-function useSurvivalItem(){
+function sleepInTent(){if(player.dead)return;
+  const tent=entities.find(e=>e.type==='tent'&&Math.hypot(e.x-player.x,e.y-player.y)<0.9);
+  if(!tent){createFloatingText(player.x,player.y-1,'No tent','#ddd');return}
+  if(player.sleeping){player.sleeping=false;if(player.tired){player.tired=false;player.speed/=.6}createFloatingText(player.x,player.y-1,'Woke up','#8f8')}
+  else{player.sleeping=true;player.sleepStarted=performance.now();if(player.tired){player.tired=false;player.speed/=.6}createFloatingText(player.x,player.y-1,'Sleeping...','#8f8')}
+}
+function useSurvivalItem(){if(player.dead)return;
   if(player.bleeding&&totalOf('tourniquet')>0){
     removeItem('tourniquet',1);player.bleeding=false;
     createFloatingText(player.x,player.y-1,'Bleeding stopped','#8f8');
@@ -2717,36 +2937,48 @@ function useSurvivalItem(){
   renderHotbar();renderInventoryHotbar();
 }
 function updateSurvival(dt){
+  if(player.hitFlashT>0)player.hitFlashT=Math.max(0,player.hitFlashT-dt/24);
   if(creativeMode){renderVitals();return}
   if(player.spawnX===undefined){player.spawnX=player.x;player.spawnY=player.y}
   const s=dt/60;
+  if(player.scratchS>0)player.scratchS=Math.max(0,player.scratchS-s);
   player.hunger=Math.max(0,player.hunger-s*.12);
   player.thirst=Math.max(0,player.thirst-s*.18);
-  player.energy=Math.max(0,Math.min(100,player.energy+(player.moving?-.06:.05)*s));
+  const speedMul=(player.inWater?0.5:1)*(player.crouching?0.5:1)*(player.tired?0.6:1)*(player.scratchS>0?0.85:1);player.speed=.15*speedMul;
+  let energyDrain=player.moving?0.06:0;if(player.inWater)energyDrain=player.moving?0.28:0.2;if(player.scratchS>0)energyDrain+=0.05;player.energy=Math.max(0,Math.min(player.scratchS>0?Math.min(60,player.maxEnergy):player.maxEnergy,player.energy-energyDrain*s));
+  if(worldDay>player.lastDaySlept){player.maxEnergy=Math.max(20,player.maxEnergy*0.8);player.lastDaySlept=worldDay;if(player.maxEnergy<=25)createFloatingText(player.x,player.y-1,'Fatigue limit','#e8d44a')}
+  if(player.sleeping){player.energy=Math.min(player.maxEnergy,player.energy+s*.8);player.hunger=Math.max(0,player.hunger-s*.04);player.thirst=Math.max(0,player.thirst-s*.06);if(player.energy>=player.maxEnergy){player.sleeping=false;createFloatingText(player.x,player.y-1,'Rested!','#8f8')}}
   if(player.energy<=0&&!player.tired){player.tired=true;player.speed*=.6;createFloatingText(player.x,player.y-1,'Exhausted','#e8d44a')}
-  else if(player.energy>15&&player.tired){player.tired=false;player.speed/=.6}
+  else if(player.energy>Math.min(15,player.maxEnergy*.15)&&player.tired){player.tired=false;player.speed/=.6}
   if(player.hunger<=0||player.thirst<=0)player.hp-=s*.8;
+  if(player.scratchS>0&&player.hp>25)player.hp=Math.max(25,player.hp-s*.4);
   if(player.bleeding)player.hp-=s*1.5;
-  else if(player.hunger>60&&player.thirst>60&&player.hp<100&&player.hp>0)player.hp=Math.min(100,player.hp+s*.5);
-  if(player.hp<=0){
-    createFloatingText(player.x,player.y-1,'You died','#ff5050');
-    player.hp=100;player.hunger=100;player.thirst=100;player.energy=100;player.bleeding=false;
-    if(player.tired){player.tired=false;player.speed/=.6}
-    player.x=player.spawnX;player.y=player.spawnY;
-  }
+  else if(player.hunger>60&&player.thirst>60&&player.hp<100&&player.hp>0&&!(player.scratchS>0))player.hp=Math.min(100,player.hp+s*.5);
+  if(player.hp<=0&&!player.dead)showDeathScreen();
   renderVitals();
 }
-function update(dt){const dtMs=dt*16.6667;updateSurvival(dt);updateDayClock(dtMs);updateParticles(dtMs);
-if(weatherTimerMs>0){weatherTimerMs=Math.max(0,weatherTimerMs-dtMs);if(weatherTimerMs<=0)weatherState='clear';}
-if(adminGameRules.doWeatherCycle && weatherTimerMs<=0){
-  if(Math.random()<dtMs/90000){weatherState=weatherState==='rain'?'clear':'rain';if(weatherState==='rain')adminRainSeed=Math.random()*100000;}
+function update(dt){if(player.dead)return;const dtMs=dt*16.6667;player.inWater=vertexOnWater(Math.round(player.x),Math.round(player.y));player.crouching=!!(keys.Shift||crouchToggle)&&!player.inWater;player.crouchAmt=(player.crouchAmt||0)+((player.crouching?1:0)-(player.crouchAmt||0))*Math.min(1,dt*.12);updateSurvival(dt);updateDayClock(dtMs);updateParticles(dtMs);
+// Infinity means an admin set the weather manually; it stays until changed.
+if(weatherTimerMs!==Infinity&&adminGameRules.doWeatherCycle){
+  weatherTimerMs-=dtMs;
+  if(weatherTimerMs<=0)rollWeather();
 }
+{const wt=WEATHER[weatherState]||WEATHER.clear,lk=Math.min(1,dtMs/3500);
+  weatherLive.dark+=(wt.dark-weatherLive.dark)*lk;weatherLive.warm+=(wt.warm-weatherLive.warm)*lk;
+  weatherLive.tintAmt+=(wt.tintAmt-weatherLive.tintAmt)*lk;weatherLive.fog+=((wt.fog+seasonHaze())-weatherLive.fog)*lk;
+  weatherLive.tint=wt.tint;
+  if(weatherState==='storm'&&Math.random()<dtMs/3000)lightningFlash=1;
+  lightningFlash=Math.max(0,lightningFlash-dtMs/260);}
 if(adminGameRules.doMobSpawning){
-  adminMobSpawnTimerMs+=dtMs;
-  if(adminMobSpawnTimerMs>=60000){
-    adminMobSpawnTimerMs=0;
-    const zombieCount=entities.filter(e=>e.type==='zombie').length;
-    if(zombieCount<8)devSpawn('zombie',1);
+  zombieSpawnMs+=dtMs;
+  const u=warpClock(dayClock),night=u>=.84||u<.2;
+  const interval=(night?600:2400)*(currentSeason()==='monsoon'?.8:1);
+  if(zombieSpawnMs>=interval){
+    zombieSpawnMs=0;
+    // hunters that wander far off get cleared so the world stays populated near the player
+    for(let i=entities.length-1;i>=0;i--){const z=entities[i];if(z.type==='zombie'&&Math.hypot(z.x-player.x,z.y-player.y)>60)entities.splice(i,1)}
+    const count=entities.filter(e=>e.type==='zombie').length;
+    const cap=night?ZOMBIE_CAP_NIGHT:ZOMBIE_CAP;if(count<cap)spawnHuntingZombies(night?3+Math.floor(Math.random()*3):1,cap-count);
   }
 }
 attackCooldown=Math.max(0,attackCooldown-dt/60);cameraShake.duration=Math.max(0,cameraShake.duration-dt);if(cameraShake.duration<=0)cameraShake.intensity=0;for(let i=floatingTexts.length-1;i>=0;i--){floatingTexts[i].age+=dt;if(floatingTexts[i].age>floatingTexts[i].life)floatingTexts.splice(i,1)}
@@ -2767,7 +2999,21 @@ for(let i=player.campfires.length-1;i>=0;i--){
   if(!cf.lastCharcoalTime){
     cf.lastCharcoalTime=performance.now();
   }
-}const cols=viewportCols,rows=viewportRows,sx0=Math.floor(player.x-cols/2),sy0=Math.floor(player.y-rows/2);for(let ty=sy0-2;ty<sy0+rows+2;ty++)for(let tx=sx0-2;tx<sx0+cols+2;tx++){generatePebblesForTile(tx,ty);generateBigPebbleForTile(tx,ty);generateTreeEntityForTile(tx,ty);generateBushEntityForTile(tx,ty);generateStickEntityForTile(tx,ty);generateFlintForTile(tx,ty)}player.vx=player.vy=0;const mobileX=touchMove.active?touchMove.x:0,mobileY=touchMove.active?touchMove.y:0;if(keys.w||keys.W||keys.ArrowUp)player.vy-=player.speed;if(keys.s||keys.S||keys.ArrowDown)player.vy+=player.speed;if(keys.a||keys.A||keys.ArrowLeft)player.vx-=player.speed;if(keys.d||keys.D||keys.ArrowRight)player.vx+=player.speed;player.vx+=mobileX*player.speed;player.vy+=mobileY*player.speed;player.moving=player.vx!==0||player.vy!==0;if(player.moving){player.facingAngle=Math.atan2(player.vy,player.vx);player.animPhase=(player.animPhase+dt*.045)%1;footstepTimer+=dt;if(footstepTimer>9){footstepTimer=0;const underTile=getTile(Math.floor(player.x),Math.floor(player.y));if(isBare(underTile.type))spawnDust(player.x,player.y+.3,2)}}const nextX=player.x+player.vx,nextY=player.y+player.vy;const nextWater=getWater(Math.floor(nextX),Math.floor(nextY));if(!nextWater.river){player.x=nextX;player.y=nextY}else{player.vx=player.vy=0}for(const e of entities){if(e.type==='tree'&&e.solid){const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy),min=player.radius+e.radius;if(d<min&&d>.001){const push=min-d+.01,a=Math.atan2(dy,dx);player.x+=Math.cos(a)*push;player.y+=Math.sin(a)*push}}if(e.type==='bush'&&e.harvested&&performance.now()>=e.regrowAt){e.harvested=false;e.regrowAt=0}}resolveFenceCollision(player,player.radius,.5,.84);frameCounter=(frameCounter+1)%30;if(frameCounter===0)cullFarEntities();const daySun=sunAngleFactor(),zombieSpeedMul=1-daySun*ZOMBIE_DAY_SLOW;
+}const cols=viewportCols,rows=viewportRows,sx0=Math.floor(player.x-cols/2),sy0=Math.floor(player.y-rows/2);for(let ty=sy0-2;ty<sy0+rows+2;ty++)for(let tx=sx0-2;tx<sx0+cols+2;tx++){generatePebblesForTile(tx,ty);generateBigPebbleForTile(tx,ty);generateTreeEntityForTile(tx,ty);generateBushEntityForTile(tx,ty);generateStickEntityForTile(tx,ty);generateFlintForTile(tx,ty)}player.vx=player.vy=0;const mobileX=touchMove.active?touchMove.x:0,mobileY=touchMove.active?touchMove.y:0;if(keys.w||keys.W||keys.ArrowUp)player.vy-=player.speed;if(keys.s||keys.S||keys.ArrowDown)player.vy+=player.speed;if(keys.a||keys.A||keys.ArrowLeft)player.vx-=player.speed;if(keys.d||keys.D||keys.ArrowRight)player.vx+=player.speed;player.vx+=mobileX*player.speed;player.vy+=mobileY*player.speed;player.moving=player.vx!==0||player.vy!==0;if(player.moving){player.facingAngle=Math.atan2(player.vy,player.vx);player.animPhase=(player.animPhase+dt*.045)%1;footstepTimer+=dt;if(footstepTimer>9){footstepTimer=0;const underTile=getTile(Math.floor(player.x),Math.floor(player.y));if(isBare(underTile.type))spawnDust(player.x,player.y+.3,2)}}const nextX=player.x+player.vx,nextY=player.y+player.vy;const nextWater=getWater(Math.floor(nextX),Math.floor(nextY));if(!nextWater.river){player.x=nextX;player.y=nextY}else{player.x=nextX;player.y=nextY;player.inWater=true}for(const e of entities){if(e.type==='tree'&&e.solid){const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy),min=player.radius+e.radius;if(d<min&&d>.001){const push=min-d+.01,a=Math.atan2(dy,dx);player.x+=Math.cos(a)*push;player.y+=Math.sin(a)*push}}if(e.type==='bush'&&e.harvested&&performance.now()>=e.regrowAt){e.harvested=false;e.regrowAt=0}}
+  if(player.inWater&&Math.random()<(player.moving?.14:.035)){const ang=Math.random()*Math.PI*2,rad=Math.sqrt(Math.random())*.45;spawnBubble(player.x+Math.cos(ang)*rad,player.y+.05+Math.sin(ang)*rad*.6)}
+  resolveFenceCollision(player,player.radius,.5,.84);frameCounter=(frameCounter+1)%30;if(frameCounter===0)cullFarEntities();const daySun=sunAngleFactor();
+const directSun=weatherState==='clear'?daySun:0;
+const zombieBuff=(directSun>.12?1:1.25)*(player.inWater?1.15:1);
+const zombieSpeedMul=(1-directSun*ZOMBIE_DAY_SLOW)*zombieBuff;
+const zombieDetect=(directSun>.12?10:12.5)*(player.crouching?.5:1);
+// things that break line of sight: trees and the tent always, bushes only while the player crouches
+const blockers=[];
+for(const b of entities){
+  if(Math.hypot(b.x-player.x,b.y-player.y)>14)continue;
+  if(b.type==='tree'&&b.solid)blockers.push({x:b.x,y:b.y,r:(b.radius||.3)*.9});
+  else if(b.type==='tent')blockers.push({x:b.x,y:b.y,r:.4});
+  else if(b.type==='bush'&&player.crouching)blockers.push({x:b.x,y:b.y,r:.45});
+}
 for(const e of entities)if(e.type==='zombie'){
   let fleeX=0,fleeY=0,fleeing=false;
   for(const cf of player.campfires){
@@ -2776,26 +3022,38 @@ for(const e of entities)if(e.type==='zombie'){
     if(fd<ZOMBIE_FIRE_AVOID_RADIUS&&fd>.05){fleeX+=fx/fd;fleeY+=fy/fd;fleeing=true}
   }
   const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy);
+  const sees=d<zombieDetect&&losClear(e.x,e.y,player.x,player.y,blockers);
+  const near=d<zombieDetect*.5;
   if(fleeing){
     const fm=Math.hypot(fleeX,fleeY)||1;
     e.vx=(fleeX/fm)*.09*zombieSpeedMul;e.vy=(fleeY/fm)*.09*zombieSpeedMul;
     e.aware=true;
-  }else if(d<10){
-    if(d>.1){e.vx=dx/d*.08*zombieSpeedMul;e.vy=dy/d*.08*zombieSpeedMul}else{e.vx=e.vy=0}
+  }else if(sees){
+    if(d>.1){e.vx=dx/d*.08*zombieSpeedMul;e.vy=dy/d*.08*zombieSpeedMul}else{const a=Math.random()*Math.PI*2;e.vx=Math.cos(a)*.03;e.vy=Math.sin(a)*.03}
     e.aware=true;
+  }else if(near){
+    // close but no line of sight: confused, sniffing around at random instead of homing in
+    e.confT=(e.confT||0)-dt;
+    if(e.confT<=0){e.confA=Math.random()*Math.PI*2;e.confT=18+Math.random()*24}
+    e.vx=Math.cos(e.confA)*.05*zombieSpeedMul;e.vy=Math.sin(e.confA)*.05*zombieSpeedMul;
+    if(getWater(Math.floor(e.x+e.vx*8),Math.floor(e.y+e.vy*8)).river){e.confA+=Math.PI*(.5+Math.random());e.confT=18+Math.random()*24;e.vx=Math.cos(e.confA)*.05*zombieSpeedMul;e.vy=Math.sin(e.confA)*.05*zombieSpeedMul}
+    e.aware=false;
   }else{
-    e.vx=e.vy=0;e.aware=false;
+    // unaware: amble in a random direction, changing course now and then, and turn away from water
+    e.wanderT=(e.wanderT||0)-dt;
+    if(e.wanderT<=0){e.wanderA=Math.random()*Math.PI*2;e.wanderT=120+Math.random()*180}
+    e.vx=Math.cos(e.wanderA)*.03*zombieSpeedMul;e.vy=Math.sin(e.wanderA)*.03*zombieSpeedMul;
+    if(getWater(Math.floor(e.x+e.vx*8),Math.floor(e.y+e.vy*8)).river){e.wanderA+=Math.PI*(.5+Math.random());e.wanderT=120+Math.random()*180;e.vx=Math.cos(e.wanderA)*.03*zombieSpeedMul;e.vy=Math.sin(e.wanderA)*.03*zombieSpeedMul}
+    e.aware=false;
   }
   e.x+=e.vx;e.y+=e.vy;
   resolveFenceCollision(e,.28,.5,.81);
+  if(e.lastX!==undefined&&Math.hypot(e.x-e.lastX,e.y-e.lastY)<.004&&d>.85){e.stuckT=(e.stuckT||0)+dt}else e.stuckT=0;
+  e.lastX=e.x;e.lastY=e.y;
+  if(e.stuckT>20){e.stuckT=0;const a=Math.random()*Math.PI*2;e.wanderA=a;e.wanderT=120+Math.random()*120;e.confA=a;e.confT=18+Math.random()*24;e.vx=Math.cos(a)*.04*zombieSpeedMul;e.vy=Math.sin(a)*.04*zombieSpeedMul}
   if(d<.85&&!fleeing&&e.hp>0&&!fenceBetween(e.x+.5,e.y+.81,player.x+.5,player.y+.84)){e.atkCd=(e.atkCd===undefined?30:e.atkCd)-dt;if(e.atkCd<=0){e.atkCd=70;zombieHitPlayer(dx,dy,d)}}else e.atkCd=undefined;
   if(e.vx||e.vy)e.animPhase=(e.animPhase+dt*.04)%1;else e.animPhase=0;
   if(e.hitFlash)e.hitFlash=Math.max(0,e.hitFlash-dt/24);
-  if(daySun>.12){
-    e.hp-=daySun*daySun*ZOMBIE_BURN_RATE*(dt/60);
-    e.burnTimer=(e.burnTimer||0)+dt;
-    if(e.burnTimer>36){e.burnTimer=0;if(Math.random()<.7)spawnSmoke(e.x,e.y-.6)}
-  }
 }
 for(let bi=entities.length-1;bi>=0;bi--){
   const be=entities[bi];
@@ -3183,6 +3441,53 @@ function renderLightingDebug(cx,cy,cols,rows,shakeX,shakeY){
   ctx.restore();
 }
 
+// How much of the normal view you can see through the weather: 1 is full sight, thick fog drops toward 0.18.
+function weatherVisibility(){return Math.max(.18,1-weatherLive.fog*1.9)}
+// Visible radius in tiles from the player. Anything farther is hidden.
+function visibleTiles(){
+  // Half the screen diagonal in tiles covers every corner. With no fog nothing is culled at all.
+  const v=weatherVisibility(),half=Math.hypot(W,H)*.5/TILE;
+  return v>=.99?half+4:half*v;
+}
+function drawWeatherOverlay(){
+  if(player.hitFlashT>0.02){
+    const g=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.3,W/2,H/2,Math.hypot(W,H)*.6);
+    g.addColorStop(0,'rgba(180,0,0,0)');g.addColorStop(1,'rgba(180,0,0,'+(player.hitFlashT*.55).toFixed(3)+')');
+    ctx.save();ctx.fillStyle=g;ctx.fillRect(0,0,W,H);ctx.restore();
+  }
+  if(weatherLive.fog>0.01){
+    // fog thickens with distance: clear around the player, dense toward the edges of the view
+    const a=Math.min(.95,weatherLive.fog*1.8),vis=Math.min(W,H)*.5*weatherVisibility();
+    const g=ctx.createRadialGradient(W/2,H/2,vis*.5,W/2,H/2,vis*1.7);
+    g.addColorStop(0,'rgba(176,186,192,0)');
+    g.addColorStop(1,'rgba(176,186,192,'+a.toFixed(3)+')');
+    ctx.save();ctx.fillStyle=g;ctx.fillRect(0,0,W,H);ctx.restore();
+  }
+  if(weatherState==='rain'||weatherState==='storm'){
+    const storm=weatherState==='storm',t=Date.now()*.001;
+    const n=storm?Math.min(420,Math.floor(W*H/5000)):Math.min(260,Math.max(90,Math.floor(W*H/9000)));
+    const speed=storm?900:520,drop=storm?16:13,slant=storm?-7:-4;
+    ctx.save();ctx.strokeStyle=storm?'rgba(205,225,245,.5)':'rgba(190,220,255,.34)';ctx.lineWidth=storm?1.4:1;
+    ctx.beginPath();
+    for(let i=0;i<n;i++){
+      const rx=((i*97.13+adminRainSeed+t*(speed*.55))%(W+80))-40;
+      const ry=((i*53.71+adminRainSeed*.37+t*speed)%(H+80))-40;
+      ctx.moveTo(rx,ry);ctx.lineTo(rx+slant,ry+drop);
+    }
+    ctx.stroke();ctx.restore();
+  }
+  if(weatherState==='snow'){
+    const t=Date.now()*.001,n=Math.min(200,Math.max(70,Math.floor(W*H/12000)));
+    ctx.save();ctx.fillStyle='rgba(245,250,255,.9)';
+    for(let i=0;i<n;i++){
+      const fx=((i*71.31+adminRainSeed+Math.sin(t*.6+i)*18+t*22)%(W+40))-20;
+      const fy=((i*43.17+adminRainSeed*.23+t*70)%(H+40))-20;
+      ctx.beginPath();ctx.arc(fx,fy,1+(i%3)*.5,0,Math.PI*2);ctx.fill();
+    }
+    ctx.restore();
+  }
+  if(lightningFlash>0.01){ctx.save();ctx.fillStyle='rgba(225,235,255,'+(lightningFlash*.45).toFixed(3)+')';ctx.fillRect(0,0,W,H);ctx.restore()}
+}
 function render(){ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);const shakeX=cameraShake.intensity>0?((Math.random()-.5)*cameraShake.intensity*TILE):0,shakeY=cameraShake.intensity>0?((Math.random()-.5)*cameraShake.intensity*TILE):0;ctx.translate(shakeX,shakeY);const cx=player.x,cy=player.y,cols=viewportCols,rows=viewportRows,sx0=Math.floor(cx-cols/2),sy0=Math.floor(cy-rows/2),time=Date.now()*.003;for(let ty=sy0;ty<sy0+rows;ty++)for(let tx=sx0;tx<sx0+cols;tx++){const tile=getTile(tx,ty);if(!tile.bgCanvas)buildTileBackground(tx,ty,tile);const sx=Math.floor((tx-cx+cols/2)*TILE),sy=Math.floor((ty-cy+rows/2)*TILE);ctx.drawImage(tile.bgCanvas,sx,sy);if(tile.type==='grass'&&tile.grassPattern){const sway=Math.sin(time+tx*.3+ty*.3)*3;for(const b of tile.grassPattern){const gx=Math.floor(sx+b.x*(TILE-2)),gy=Math.floor(sy+b.y*(TILE-8)+4),bend=Math.floor(sway+b.offsetSway);ctx.fillStyle=b.light?'#5bc46a':'#3a7a42';ctx.fillRect(gx+bend,gy-2,2,2)}}const water=getWater(tx,ty);if(water.river){
   // River base: darker base color
   ctx.fillStyle='#1e5a8f';ctx.fillRect(sx,sy,TILE,TILE);
@@ -3232,13 +3537,36 @@ function render(){ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';c
     ctx.fillStyle='rgba(230,240,235,0.5)';ctx.beginPath();ctx.arc(px,py,1,0,Math.PI*2);ctx.fill();
   }
 }}
-const draw=[];for(const e of entities){const sx=Math.floor((e.x-cx+cols/2)*TILE),sy=Math.floor((e.y-cy+rows/2)*TILE);if(e.type==='zombie')draw.push({y:e.y,render:()=>{const gx=sx+TILE/2,gy=sy+TILE/2;drawSoftShadow(gx-6,gy+10,13,5,.22+.28*sunAngleFactor());if(e.aware){ctx.save();ctx.strokeStyle='#f00';ctx.globalAlpha=.22+Math.sin(Date.now()*.004)*.06;ctx.lineWidth=2;ctx.beginPath();ctx.arc(gx,gy,10,0,Math.PI*2);ctx.stroke();ctx.restore()}const sp=currentZombieSprite(e),size=TILE*1.7;ctx.save();const hue=Math.floor(((e.colorSeed||0)-.5)*70);if(hue)ctx.filter=`hue-rotate(${hue}deg) saturate(${1+((e.colorSeed||0)-.5)*.4})`;if(sp.complete&&sp.naturalWidth){ctx.drawImage(sp,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2),size,size)}else{ctx.fillStyle=e.aware?'#f00':'#600';ctx.fillRect(sx+4,sy+4,TILE-8,TILE-8)}ctx.restore();if(e.hitFlash>0){ctx.save();ctx.globalCompositeOperation='screen';ctx.globalAlpha=Math.min(1,e.hitFlash*4);if(sp.complete&&sp.naturalWidth)ctx.drawImage(sp,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2),size,size);ctx.restore()}}});else if(e.type==='tree')draw.push({y:treeSortY(e),render:()=>{drawCastShadow(sx,sy+10,24,9,.30);const sp=getTreeSprite(e.seedVal),size=TILE*6.5;ctx.drawImage(sp.canvas,Math.floor(sx-size/2),Math.floor(sy-size/2),size,size);if(e.clicked){ctx.save();ctx.strokeStyle='#0f0';ctx.globalAlpha=.9;ctx.lineWidth=3;ctx.beginPath();ctx.arc(sx,sy,Math.max(18,e.radius*TILE+10),0,Math.PI*2);ctx.stroke();ctx.restore()}}});else if(e.type==='bush')draw.push({y:e.y,render:()=>{drawCastShadow(sx+TILE/2,sy+TILE/2+7,13,6,.22);const sp=e.harvested?getBareBushSprite(e.seedVal):getBushSprite(e.seedVal),size=TILE*2;ctx.globalAlpha=e.harvested?.9:1;ctx.drawImage(sp.canvas,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2-4),size,size);ctx.globalAlpha=1;if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,e.radius*TILE+5,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='stick')draw.push({y:e.y,render:()=>{if(e.collected)return;const len=e.length*TILE;ctx.save();ctx.translate(sx,sy);ctx.rotate(e.angle);ctx.lineCap='round';
+const draw=[];const visT=visibleTiles();for(const e of entities){if(e.type==='zombie'&&Math.hypot(e.x-player.x,e.y-player.y)>visT)continue;const sx=Math.floor((e.x-cx+cols/2)*TILE),sy=Math.floor((e.y-cy+rows/2)*TILE);if(e.type==='zombie')draw.push({y:e.y,render:()=>{const gx=sx+TILE/2,gy=sy+TILE/2;drawSoftShadow(gx-6,gy+10,13,5,.22+.28*sunAngleFactor());if(e.aware){ctx.save();ctx.strokeStyle='#f00';ctx.globalAlpha=.22+Math.sin(Date.now()*.004)*.06;ctx.lineWidth=2;ctx.beginPath();ctx.arc(gx,gy,10,0,Math.PI*2);ctx.stroke();ctx.restore()}const sp=currentZombieSprite(e),size=TILE*1.7;ctx.save();const hue=Math.floor(((e.colorSeed||0)-.5)*70);if(hue)ctx.filter=`hue-rotate(${hue}deg) saturate(${1+((e.colorSeed||0)-.5)*.4})`;if(sp.complete&&sp.naturalWidth){ctx.drawImage(sp,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2),size,size)}else{ctx.fillStyle=e.aware?'#f00':'#600';ctx.fillRect(sx+4,sy+4,TILE-8,TILE-8)}ctx.restore();if(e.hitFlash>0){ctx.save();ctx.globalCompositeOperation='screen';ctx.globalAlpha=Math.min(1,e.hitFlash*4);if(sp.complete&&sp.naturalWidth)ctx.drawImage(sp,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2),size,size);ctx.restore()}}});else if(e.type==='tree')draw.push({y:treeSortY(e),render:()=>{drawCastShadow(sx,sy+10,24,9,.30);const sp=getTreeSprite(e.seedVal),size=TILE*6.5;ctx.drawImage(sp.canvas,Math.floor(sx-size/2),Math.floor(sy-size/2),size,size);if(e.clicked){ctx.save();ctx.strokeStyle='#0f0';ctx.globalAlpha=.9;ctx.lineWidth=3;ctx.beginPath();ctx.arc(sx,sy,Math.max(18,e.radius*TILE+10),0,Math.PI*2);ctx.stroke();ctx.restore()}}});else if(e.type==='bush')draw.push({y:e.y,render:()=>{drawCastShadow(sx+TILE/2,sy+TILE/2+7,13,6,.22);const sp=e.harvested?getBareBushSprite(e.seedVal):getBushSprite(e.seedVal),size=TILE*2;ctx.globalAlpha=e.harvested?.9:1;ctx.drawImage(sp.canvas,Math.floor(sx+TILE/2-size/2),Math.floor(sy+TILE/2-size/2-4),size,size);ctx.globalAlpha=1;if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,e.radius*TILE+5,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='stick')draw.push({y:e.y,render:()=>{if(e.collected)return;const len=e.length*TILE;ctx.save();ctx.translate(sx,sy);ctx.rotate(e.angle);ctx.lineCap='round';
   ctx.strokeStyle='#352416';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(-len*.5,1);ctx.lineTo(-len*.18,.5);ctx.lineTo(len*.2,-.5);ctx.lineTo(len*.5,-1);ctx.stroke();
   ctx.strokeStyle='#664326';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(-len*.48,0);ctx.lineTo(-len*.15,-.5);ctx.lineTo(len*.18,-1);ctx.lineTo(len*.47,-1.5);ctx.stroke();
   ctx.strokeStyle='rgba(120,82,46,.65)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-len*.25,-1);ctx.lineTo(len*.32,-2);ctx.stroke();
   ctx.strokeStyle='#432b19';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(len*.15,-.5);ctx.lineTo(len*.27,-6);ctx.stroke();
-  ctx.restore();if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,Math.max(10,e.radius*TILE+6),0,Math.PI*2);ctx.stroke()}}});else if(e.type==='bigPebble')draw.push({y:e.y,render:()=>{if(e.collected)return;const r=Math.floor(e.radius*TILE);ctx.save();ctx.fillStyle=e.tone>.62?'#8a8880':e.tone>.3?'#aaa69d':'#6f6d67';ctx.beginPath();ctx.ellipse(sx,sy,r*1.18,r*.92,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(225,222,214,.6)';ctx.beginPath();ctx.ellipse(sx-r*.28,sy-r*.3,r*.38,r*.22,-.2,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(55,52,48,.65)';ctx.lineWidth=1;ctx.stroke();if(e.clicked){ctx.strokeStyle='#ff0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+7,0,Math.PI*2);ctx.stroke()};ctx.restore()}});else if(e.type==='flint')draw.push({y:e.y,render:()=>{if(e.collected)return;const ang=e.seedVal%360*Math.PI/180;ctx.save();ctx.translate(sx,sy);ctx.rotate(ang);ctx.fillStyle='#cfd3d0';ctx.beginPath();ctx.moveTo(-7,2);ctx.lineTo(-3,-5);ctx.lineTo(3,-7);ctx.lineTo(8,-2);ctx.lineTo(5,4);ctx.lineTo(-2,6);ctx.closePath();ctx.fill();ctx.fillStyle='#eef1ef';ctx.beginPath();ctx.moveTo(-3,-5);ctx.lineTo(3,-7);ctx.lineTo(1,-1);ctx.lineTo(-2,2);ctx.closePath();ctx.fill();ctx.fillStyle='rgba(80,90,90,.55)';ctx.fillRect(-2,1,5,2);ctx.restore();if(e.clicked){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,11,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='charcoal')draw.push({y:e.y,render:()=>{if(e.collected)return;const r=Math.floor(e.radius*TILE);ctx.fillStyle='#4a4a48';ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();ctx.fillStyle='#2a2a28';ctx.beginPath();ctx.arc(sx-r*.35,sy-r*.35,Math.max(1,r*.35),0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(100,100,100,.4)';ctx.beginPath();ctx.arc(sx+r*.25,sy+r*.2,Math.max(1,r*.25),0,Math.PI*2);ctx.fill();if(e.clicked){ctx.strokeStyle='#ddd';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+6,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='pebble')draw.push({y:e.y,render:()=>{const r=Math.floor(e.radius*TILE);ctx.fillStyle=e.tone>.65?'rgba(100,95,85,.8)':e.tone>.35?'rgba(140,135,125,.8)':'rgba(180,175,165,.7)';ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();if(e.light>.5){ctx.fillStyle='rgba(220,215,205,.5)';ctx.beginPath();ctx.arc(sx-r*.3,sy-r*.3,Math.max(1,r*.35),0,Math.PI*2);ctx.fill()}if(e.clicked){ctx.strokeStyle='#ff0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+3,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='tent')draw.push({y:e.y,render:()=>{ctx.save();ctx.fillStyle='#d08090';ctx.beginPath();ctx.moveTo(sx-16,sy+2);ctx.lineTo(sx,sy-12);ctx.lineTo(sx+16,sy+2);ctx.closePath();ctx.fill();ctx.fillStyle='#c07080';ctx.beginPath();ctx.moveTo(sx,sy-12);ctx.lineTo(sx+14,sy+2);ctx.lineTo(sx+2,sy);ctx.closePath();ctx.fill();ctx.restore()}})}
-const px=Math.floor((player.x-cx+cols/2)*TILE),py=Math.floor((player.y-cy+rows/2)*TILE);draw.push({y:player.y,render:()=>{
+  ctx.restore();if(e.clicked){ctx.strokeStyle='#0f0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,Math.max(10,e.radius*TILE+6),0,Math.PI*2);ctx.stroke()}}});else if(e.type==='bigPebble')draw.push({y:e.y,render:()=>{if(e.collected)return;const r=Math.floor(e.radius*TILE);ctx.save();ctx.fillStyle=e.tone>.62?'#8a8880':e.tone>.3?'#aaa69d':'#6f6d67';ctx.beginPath();ctx.ellipse(sx,sy,r*1.18,r*.92,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(225,222,214,.6)';ctx.beginPath();ctx.ellipse(sx-r*.28,sy-r*.3,r*.38,r*.22,-.2,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(55,52,48,.65)';ctx.lineWidth=1;ctx.stroke();if(e.clicked){ctx.strokeStyle='#ff0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+7,0,Math.PI*2);ctx.stroke()};ctx.restore()}});else if(e.type==='flint')draw.push({y:e.y,render:()=>{if(e.collected)return;const ang=e.seedVal%360*Math.PI/180;ctx.save();ctx.translate(sx,sy);ctx.rotate(ang);ctx.fillStyle='#cfd3d0';ctx.beginPath();ctx.moveTo(-7,2);ctx.lineTo(-3,-5);ctx.lineTo(3,-7);ctx.lineTo(8,-2);ctx.lineTo(5,4);ctx.lineTo(-2,6);ctx.closePath();ctx.fill();ctx.fillStyle='#eef1ef';ctx.beginPath();ctx.moveTo(-3,-5);ctx.lineTo(3,-7);ctx.lineTo(1,-1);ctx.lineTo(-2,2);ctx.closePath();ctx.fill();ctx.fillStyle='rgba(80,90,90,.55)';ctx.fillRect(-2,1,5,2);ctx.restore();if(e.clicked){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,11,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='charcoal')draw.push({y:e.y,render:()=>{if(e.collected)return;const r=Math.floor(e.radius*TILE);ctx.fillStyle='#4a4a48';ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();ctx.fillStyle='#2a2a28';ctx.beginPath();ctx.arc(sx-r*.35,sy-r*.35,Math.max(1,r*.35),0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(100,100,100,.4)';ctx.beginPath();ctx.arc(sx+r*.25,sy+r*.2,Math.max(1,r*.25),0,Math.PI*2);ctx.fill();if(e.clicked){ctx.strokeStyle='#ddd';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+6,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='pebble')draw.push({y:e.y,render:()=>{const r=Math.floor(e.radius*TILE);ctx.fillStyle=e.tone>.65?'rgba(100,95,85,.8)':e.tone>.35?'rgba(140,135,125,.8)':'rgba(180,175,165,.7)';ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();if(e.light>.5){ctx.fillStyle='rgba(220,215,205,.5)';ctx.beginPath();ctx.arc(sx-r*.3,sy-r*.3,Math.max(1,r*.35),0,Math.PI*2);ctx.fill()}if(e.clicked){ctx.strokeStyle='#ff0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy,r+3,0,Math.PI*2);ctx.stroke()}}});else if(e.type==='dropped')draw.push({y:e.y,render:()=>{
+  const col=(RECIPES.find(r=>r.id===e.item)||{}).icon||'#b8b8b8';
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,.3)';ctx.beginPath();ctx.ellipse(sx,sy+5,7,2.5,0,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle=col;ctx.strokeStyle='#000';ctx.lineWidth=1;
+  ctx.fillRect(sx-6,sy-6,12,12);ctx.strokeRect(sx-6.5,sy-6.5,13,13);
+  ctx.font="8px 'Press Start 2P',monospace";ctx.textAlign='center';
+  const label=(e.count>1?e.count+' ':'')+(ITEM_NAMES[e.item]||e.item);
+  ctx.fillStyle='#000';ctx.fillText(label,sx+1,sy-9);ctx.fillStyle='#fff';ctx.fillText(label,sx,sy-10);
+  ctx.restore();
+}});else if(e.type==='tent')draw.push({y:e.y,render:()=>{ctx.save();ctx.fillStyle='#d08090';ctx.beginPath();ctx.moveTo(sx-16,sy+2);ctx.lineTo(sx,sy-12);ctx.lineTo(sx+16,sy+2);ctx.closePath();ctx.fill();ctx.fillStyle='#c07080';ctx.beginPath();ctx.moveTo(sx,sy-12);ctx.lineTo(sx+14,sy+2);ctx.lineTo(sx+2,sy);ctx.closePath();ctx.fill();ctx.restore()}})}
+const px=Math.floor((player.x-cx+cols/2)*TILE),py=Math.floor((player.y-cy+rows/2)*TILE);
+draw.push({y:player.y+.001,render:()=>{
+  if(!player.inWater)return;
+  const wl=py+TILE/2+4; // waterline, roughly waist height on the sprite
+  ctx.save();
+  ctx.strokeStyle='rgba(200,235,255,.7)';ctx.lineWidth=1;
+  const wob=Math.sin(performance.now()/260)*1.2;
+  ctx.beginPath();ctx.ellipse(px+TILE/2,wl+1+wob*.2,12+wob*.3,3,0,0,Math.PI*2);ctx.stroke();
+  ctx.restore();
+}});
+draw.push({y:player.y,render:()=>{
+  if(player.inWater){ctx.save();ctx.beginPath();ctx.rect(0,0,W,py+TILE/2+4);ctx.clip();ctx.translate(0,Math.sin(performance.now()/300)*1.2)}
+  const cr=player.crouchAmt||0;
+  ctx.save();{const pivX=px+TILE/2,pivY=py+TILE/2+11;ctx.translate(pivX,pivY);ctx.scale(1+.1*cr,1-.34*cr);if(player.moving&&cr>.2)ctx.rotate(Math.sin(player.animPhase*Math.PI*2)*.05*cr);ctx.translate(-pivX,-pivY)}
   const size=TILE*1.7,drawX=Math.floor(px+TILE/2-size/2),drawY=Math.floor(py+TILE/2-size/2);
   drawSoftShadow(px+TILE/2,py+TILE/2+11,13,5,.2+.28*sunAngleFactor());
   // Basket/Backpack visual: render it behind the survivor when equipped.
@@ -3299,6 +3627,8 @@ const px=Math.floor((player.x-cx+cols/2)*TILE),py=Math.floor((player.y-cy+rows/2
     }
     ctx.restore();
   }
+  ctx.restore();
+  if(player.inWater)ctx.restore();
 }});
 for(const campfire of player.campfires){const csx=Math.floor((campfire.x-cx+cols/2)*TILE),csy=Math.floor((campfire.y-cy+rows/2)*TILE);draw.push({y:campfire.y,render:()=>{
   const flick=.7+Math.sin(time*9+campfire.fuel*3)*.18+Math.sin(time*17+campfire.x)*.1;
@@ -3317,7 +3647,7 @@ for(const campfire of player.campfires){const csx=Math.floor((campfire.x-cx+cols
   if(Math.random()<.05)spawnSmoke(campfire.x,campfire.y-.5);
   if(Math.random()<.1)spawnEmber(campfire.x,campfire.y-.3);
   ctx.fillStyle='#ccc';ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.textBaseline='bottom';
-  ctx.fillText(`⚡${Math.ceil(campfire.fuel)}${campfire.fuelSlot&&campfire.fuelSlot.count>0?' +'+campfire.fuelSlot.count:''}`,csx,csy+TILE);
+  ctx.fillText(`FUEL ${Math.ceil(campfire.fuel)}${campfire.fuelSlot&&campfire.fuelSlot.count>0?' +'+campfire.fuelSlot.count:''}`,csx,csy+TILE);
 }})}
 for(const crate of containers){const csx=Math.floor((crate.x-cx+cols/2)*TILE),csy=Math.floor((crate.y-cy+rows/2)*TILE);draw.push({y:crate.y,render:()=>{ctx.fillStyle='rgba(0,0,0,.28)';ctx.beginPath();ctx.ellipse(csx,csy+9,15,5,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#8a5a2b';ctx.fillRect(csx-13,csy-4,26,16);ctx.fillStyle='#6d4321';ctx.fillRect(csx-13,csy-11,26,8);ctx.fillStyle='#e0b060';ctx.fillRect(csx-2,csy-3,4,4);ctx.strokeStyle='#3a2410';ctx.lineWidth=1;ctx.strokeRect(csx-13,csy-11,26,23);const filled=crate.slots.filter(Boolean).length;if(filled>0){ctx.fillStyle='#ccc';ctx.font='bold 10px monospace';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(`${filled}/${CRATE_SLOT_COUNT}`,csx,csy+TILE-4)}}})}
 for(const fp of fences){const fsx=Math.floor((fp.vx-cx+cols/2)*TILE),fsy=Math.floor((fp.vy-cy+rows/2)*TILE);
@@ -3349,19 +3679,7 @@ for(const e of entities){
 draw.sort((a,b)=>a.y-b.y);for(const o of draw)o.render();renderParticlesPass(cx,cy,cols,rows);for(const ft of floatingTexts){const progress=ft.age/ft.life,alpha=Math.max(0,1-progress),rise=progress*TILE*.8;ctx.save();ctx.globalAlpha=alpha;ctx.fillStyle=ft.color;ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.textBaseline='middle';const sx=Math.floor((ft.x-cx+cols/2)*TILE),sy=Math.floor((ft.y-cy+rows/2)*TILE+rise);ctx.fillText(ft.text,sx,sy);ctx.restore()}const dayC=sampleDayColor(dayClock);
 buildLightmap(cx,cy,cols,rows,shakeX,shakeY);
 renderLightingDebug(cx,cy,cols,rows,shakeX,shakeY);renderHitboxDebug(cx,cy,cols,rows);
-if(weatherState==='rain'){
-  ctx.save();
-  const rainTime=Date.now()*0.001;
-  ctx.fillStyle='rgba(90,120,150,.08)';ctx.fillRect(0,0,W,H);
-  ctx.strokeStyle='rgba(190,220,255,.34)';ctx.lineWidth=1;
-  const drops=Math.min(260,Math.max(90,Math.floor(W*H/9000)));
-  for(let i=0;i<drops;i++){
-    const rx=((i*97.13+adminRainSeed+rainTime*280)%(W+80))-40;
-    const ry=((i*53.71+adminRainSeed*0.37+rainTime*520)%(H+80))-40;
-    ctx.beginPath();ctx.moveTo(rx,ry);ctx.lineTo(rx-5,ry+13);ctx.stroke();
-  }
-  ctx.restore();
-}
+drawWeatherOverlay();
 if(vignetteCanvas)ctx.drawImage(vignetteCanvas,0,0);ctx.translate(-shakeX,-shakeY)}
 
 let hudTimer=0;let hudVisible=true;const hudToggle=document.getElementById('hudToggle');function toggleHud(){hudVisible=!hudVisible;if(hudVisible){hud.classList.remove('hidden')}else{hud.classList.add('hidden')}}hudToggle.addEventListener('click',toggleHud);addEventListener('keydown',e=>{if(e.key==='h'||e.key==='H')toggleHud()});function updateHUD(ms=0){hudTimer+=ms;if(hudTimer<100)return;hudTimer=0;let z=0,b=0;for(const e of entities){if(e.type==='zombie')z++;if(e.type==='bush'&&!e.harvested)b++}const t=player.target?player.target.type:'—';const pos=`${Math.round(player.x)}, ${Math.round(player.y)}`;const soilDef=SOIL_DEFS[getTile(Math.floor(player.x),Math.floor(player.y)).type];const soilName=soilDef?soilDef.name:'—';hud.innerHTML=`<div style="background:rgba(0,0,0,.75);padding:14px;border:2px solid #0f0;border-radius:4px;font-size:13px;line-height:1.8;font-family:monospace;font-weight:bold">
@@ -3369,7 +3687,7 @@ let hudTimer=0;let hudVisible=true;const hudToggle=document.getElementById('hudT
 <div>POS: ${pos} | HP: ${player.hp + (player.armorEquipped?50:0)}</div>
 <div>SOIL: ${soilName}</div>
 <div>SEED: ${SEED}</div>
-<div>TIME: ${dayPhaseLabel()}${weatherState==='rain'?' | 🌧 Rain':''}</div>
+<div>SURVIVOR DAY ${survivorDay()} | ${currentSeason().toUpperCase()} day ${seasonDayInfo()}/${SEASON_DAYS} | ${dayPhaseLabel()}${({rain:' | RAIN',storm:' | STORM',snow:' | SNOW',fog:' | FOG'})[weatherState]||''}</div>
 <div>TARGET: ${t} | ENTITIES: ${entities.length}</div>
 <div>DEV: / for admin console</div>
 </div>`;renderHotbar();renderBuildBar()}
